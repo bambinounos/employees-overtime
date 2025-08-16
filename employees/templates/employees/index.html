@@ -1,0 +1,13 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Home" %} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">{% trans "Welcome to the Salary Management System" %}</h1>
+    <p class="lead">{% trans "This system allows you to manage employee salaries, work logs, and overtime." %}</p>
+    <hr class="my-4">
+    <p>{% trans "Use the navigation bar to get started." %}</p>
+</div>
+{% endblock %}

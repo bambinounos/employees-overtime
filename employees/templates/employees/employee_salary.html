@@ -1,0 +1,31 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Salary for" %} {{ employee.name }} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<h1>{% trans "Salary for" %} {{ employee.name }}</h1>
+
+<form method="get" class="form-inline mb-4">
+    <div class="form-group mr-2">
+        <label for="year" class="mr-2">{% trans "Year" %}:</label>
+        <input type="number" name="year" id="year" value="{{ year }}" class="form-control">
+    </div>
+    <div class="form-group mr-2">
+        <label for="month" class="mr-2">{% trans "Month" %}:</label>
+        <input type="number" name="month" id="month" value="{{ month }}" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">{% trans "Calculate" %}</button>
+</form>
+
+{% if salary is not None %}
+    <div class="alert alert-info">
+        {% trans "Total salary for" %} {{ year }}-{{ month }}: <strong>${{ salary|floatformat:2 }}</strong>
+    </div>
+{% else %}
+    <div class="alert alert-warning">
+        {% trans "Could not calculate salary. Please make sure the employee has a base salary and work logs for the selected period." %}
+    </div>
+{% endif %}
+
+{% endblock %}
