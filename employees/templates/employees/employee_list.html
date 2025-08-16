@@ -1,0 +1,31 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Employees" %} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<h1>{% trans "Employee List" %}</h1>
+<table class="table">
+    <thead>
+        <tr>
+            <th>{% trans "Name" %}</th>
+            <th>{% trans "Email" %}</th>
+            <th>{% trans "Hire Date" %}</th>
+            <th>{% trans "Actions" %}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for employee in employees %}
+        <tr>
+            <td>{{ employee.name }}</td>
+            <td>{{ employee.email }}</td>
+            <td>{{ employee.hire_date }}</td>
+            <td>
+                <a href="{% url 'employee_calendar' employee.id %}" class="btn btn-primary btn-sm">{% trans "Calendar" %}</a>
+                <a href="{% url 'employee_salary' employee.id %}" class="btn btn-info btn-sm">{% trans "Salary" %}</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

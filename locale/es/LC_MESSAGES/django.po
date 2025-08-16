@@ -1,0 +1,98 @@
+# Spanish translations for salary_management project.
+# This file is distributed under the same license as the salary_management project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: salary_management 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-03-22 10:00+0000\n"
+"PO-Revision-Date: 2024-03-22 10:00+0000\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: SPANISH <LL@li.org>\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Salary Management"
+msgstr "Gestión de Salarios"
+
+msgid "Employees"
+msgstr "Empleados"
+
+msgid "Logout"
+msgstr "Cerrar Sesión"
+
+msgid "Login"
+msgstr "Iniciar Sesión"
+
+msgid "Home"
+msgstr "Inicio"
+
+msgid "Welcome to the Salary Management System"
+msgstr "Bienvenido al Sistema de Gestión de Salarios"
+
+msgid "This system allows you to manage employee salaries, work logs, and overtime."
+msgstr "Este sistema le permite gestionar los salarios de los empleados, los registros de trabajo y las horas extras."
+
+msgid "Use the navigation bar to get started."
+msgstr "Utilice la barra de navegación para empezar."
+
+msgid "Employee List"
+msgstr "Lista de Empleados"
+
+msgid "Name"
+msgstr "Nombre"
+
+msgid "Email"
+msgstr "Correo Electrónico"
+
+msgid "Hire Date"
+msgstr "Fecha de Contratación"
+
+msgid "Actions"
+msgstr "Acciones"
+
+msgid "Calendar"
+msgstr "Calendario"
+
+msgid "Salary"
+msgstr "Salario"
+
+msgid "Calendar for"
+msgstr "Calendario de"
+
+msgid "Work Log"
+msgstr "Registro de Trabajo"
+
+msgid "Hours Worked"
+msgstr "Horas Trabajadas"
+
+msgid "Overtime Hours"
+msgstr "Horas Extras"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "Save changes"
+msgstr "Guardar cambios"
+
+msgid "Salary for"
+msgstr "Salario de"
+
+msgid "Year"
+msgstr "Año"
+
+msgid "Month"
+msgstr "Mes"
+
+msgid "Calculate"
+msgstr "Calcular"
+
+msgid "Total salary for"
+msgstr "Salario total para"
+
+msgid "Could not calculate salary. Please make sure the employee has a base salary and work logs for the selected period."
+msgstr "No se pudo calcular el salario. Asegúrese de que el empleado tenga un salario base y registros de trabajo para el período seleccionado."

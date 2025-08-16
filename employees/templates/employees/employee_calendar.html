@@ -1,0 +1,110 @@
+{% extends 'employees/base.html' %}
+{% load calendar i18n %}
+
+{% block title %}{% trans "Calendar for" %} {{ employee.name }} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<h1>{% trans "Calendar for" %} {{ employee.name }}</h1>
+
+{% calendar_assets %}
+<div id="calendar"></div>
+
+<div class="modal fade" id="workLogModal" tabindex="-1" role="dialog" aria-labelledby="workLogModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="workLogModalLabel">{% trans "Work Log" %}</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="workLogForm">
+                    <input type="hidden" id="workLogId" name="id">
+                    <input type="hidden" id="workLogDate" name="date">
+                    <input type="hidden" id="workLogEmployee" name="employee" value="{{ employee.id }}">
+                    <div class="form-group">
+                        <label for="hoursWorked">{% trans "Hours Worked" %}</label>
+                        <input type="number" class="form-control" id="hoursWorked" name="hours_worked" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="overtimeHours">{% trans "Overtime Hours" %}</label>
+                        <input type="number" class="form-control" id="overtimeHours" name="overtime_hours" step="0.01" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Close" %}</button>
+                <button type="button" class="btn btn-primary" id="saveWorkLog">{% trans "Save changes" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    new Calendar('#calendar', {
+        language: 'es',
+        dataSource: {{ events|safe }},
+        dayClick: function(e) {
+            $('#workLogModal').modal('show');
+            $('#workLogDate').val(e.date.toISOString().slice(0, 10));
+
+            // Reset form
+            $('#workLogId').val('');
+            $('#hoursWorked').val('');
+            $('#overtimeHours').val('');
+
+            // Check if there is an event for this day
+            var clickedEvent = e.events[0];
+            if (clickedEvent) {
+                // If so, populate the form with the event data
+                $('#workLogId').val(clickedEvent.id);
+                // The name property is in the format "Worked: Xh, Overtime: Yh"
+                var parts = clickedEvent.name.split(',');
+                var hoursWorked = parts[0].split(':')[1].trim().replace('h', '');
+                var overtimeHours = parts[1].split(':')[1].trim().replace('h', '');
+                $('#hoursWorked').val(hoursWorked);
+                $('#overtimeHours').val(overtimeHours);
+            }
+        }
+    });
+
+    $('#saveWorkLog').on('click', function() {
+        var workLogId = $('#workLogId').val();
+        var url = '/api/worklogs/';
+        var method = 'POST';
+
+        if (workLogId) {
+            url += workLogId + '/';
+            method = 'PUT';
+        }
+
+        var data = {
+            employee: $('#workLogEmployee').val(),
+            date: $('#workLogDate').val(),
+            hours_worked: $('#hoursWorked').val(),
+            overtime_hours: $('#overtimeHours').val(),
+        };
+
+        $.ajax({
+            url: url,
+            type: method,
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            beforeSend: function(xhr) {
+                xhr.setRequestHeader("X-CSRFToken", "{{ csrf_token }}");
+            },
+            success: function(response) {
+                $('#workLogModal').modal('hide');
+                location.reload();
+            },
+            error: function(error) {
+                console.error('Error saving work log:', error);
+            }
+        });
+    });
+});
+</script>
+
+{% endblock %}
