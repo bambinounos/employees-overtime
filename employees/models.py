@@ -13,27 +13,97 @@ class Employee(models.Model):
     def __str__(self):
         return self.name
 
+    def calculate_performance_bonus(self, year, month):
+        """
+        Calculates the total performance bonus for a given employee, year, and month.
+        It also creates EmployeePerformanceRecord entries for each KPI.
+        """
+        total_bonus = Decimal('0.00')
+        all_bonus_rules = BonusRule.objects.all().select_related('kpi')
+
+        # Use the last day of the month for the record date
+        import calendar
+        last_day = calendar.monthrange(year, month)[1]
+        record_date = date(year, month, last_day)
+
+        for rule in all_bonus_rules:
+            kpi = rule.kpi
+            target_met = False
+            actual_value = 0
+
+            # --- Evaluate KPI based on its measurement type ---
+
+            if kpi.measurement_type == 'percentage':
+                # e.g., "Productividad General"
+                tasks = Task.objects.filter(assigned_to=self, kpi=kpi, due_date__year=year, due_date__month=month)
+                total_tasks = tasks.count()
+                if total_tasks > 0:
+                    completed_tasks = tasks.filter(completed_at__isnull=False, list__name__iexact="Hecho").count()
+                    actual_value = (completed_tasks / total_tasks) * 100
+                    if actual_value >= kpi.target_value:
+                        target_met = True
+
+            elif kpi.measurement_type == 'count_lt':
+                # e.g., "Calidad Administrativa" (fewer than X errors)
+                entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
+                actual_value = sum(entry.value for entry in entries)
+                if actual_value < kpi.target_value:
+                    target_met = True
+
+            elif kpi.measurement_type == 'count_gt':
+                # e.g., "Gestión Comercial Pública" (more than X offers)
+                entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
+                actual_value = sum(entry.value for entry in entries)
+                if actual_value >= kpi.target_value:
+                    target_met = True
+
+            # --- Award bonus and save record ---
+
+            bonus_awarded = rule.bonus_amount if target_met else Decimal('0.00')
+            if target_met:
+                total_bonus += rule.bonus_amount
+
+            EmployeePerformanceRecord.objects.update_or_create(
+                employee=self,
+                kpi=kpi,
+                date=record_date,
+                defaults={
+                    'actual_value': actual_value,
+                    'target_met': target_met,
+                    'bonus_awarded': bonus_awarded
+                }
+            )
+
+        return total_bonus
+
     def calculate_salary(self, year, month):
-        """Calculates the salary for a given month and year."""
+        """
+        Calculates the final salary for a given month and year, including base pay,
+        overtime, and performance bonus.
+        """
         try:
             base_salary = self.salary.base_amount
         except Salary.DoesNotExist:
             return 0
 
+        # 1. Calculate pay from worked hours and overtime
         work_logs = WorkLog.objects.filter(employee=self, date__year=year, date__month=month)
-
         total_hours_worked = sum(log.hours_worked for log in work_logs)
         total_overtime_hours = sum(log.overtime_hours for log in work_logs)
 
-        # Assuming 22 working days in a month and 8 hours per day
-        monthly_hours = 22 * 8
+        # Using 160 as the standard monthly hours, per user request
+        monthly_hours = 160
         hourly_rate = base_salary / Decimal(monthly_hours)
         overtime_rate = hourly_rate * Decimal(1.5)
 
-        regular_pay = total_hours_worked * hourly_rate
+        work_pay = total_hours_worked * hourly_rate
         overtime_pay = total_overtime_hours * overtime_rate
 
-        total_salary = regular_pay + overtime_pay
+        # 2. Calculate performance bonus
+        performance_bonus = self.calculate_performance_bonus(year, month)
+
+        # 3. Calculate final total salary
+        total_salary = work_pay + overtime_pay + performance_bonus
 
         return total_salary
 
@@ -58,3 +128,123 @@ class WorkLog(models.Model):
 
     def __str__(self):
         return f"{self.employee.name} on {self.date}"
+
+# --- Trello-like & Performance Management Models ---
+
+class KPI(models.Model):
+    """Key Performance Indicator."""
+    name = models.CharField(max_length=255, help_text="E.g., Productividad General")
+    description = models.TextField(blank=True, help_text="E.g., Porcentaje de tareas completadas a tiempo.")
+
+    MEASUREMENT_CHOICES = [
+        ('percentage', 'Percentage'),
+        ('count_lt', 'Count (Less Than)'),
+        ('count_gt', 'Count (Greater Than)'),
+    ]
+    measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_CHOICES)
+    target_value = models.DecimalField(max_digits=10, decimal_places=2, help_text="E.g., 95 for percentage, 3 for count.")
+    is_warning_kpi = models.BooleanField(default=False, help_text="Check if this KPI represents a disciplinary warning that should trigger an email.")
+
+    def __str__(self):
+        return self.name
+
+class BonusRule(models.Model):
+    """Rule that links a KPI to a bonus amount."""
+    kpi = models.ForeignKey(KPI, on_delete=models.CASCADE)
+    bonus_amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount of the bonus if the KPI target is met.")
+    description = models.CharField(max_length=255, help_text="E.g., 'Completar >= 95% de las tareas'")
+
+    def __str__(self):
+        return f"{self.kpi.name} - ${self.bonus_amount}"
+
+class TaskBoard(models.Model):
+    """A board for an employee's tasks."""
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+
+class TaskList(models.Model):
+    """A list (column) on a task board."""
+    board = models.ForeignKey(TaskBoard, related_name='lists', on_delete=models.CASCADE)
+    name = models.CharField(max_length=255, help_text="E.g., Pendiente, En Progreso, Hecho")
+    order = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return self.name
+
+class Task(models.Model):
+    """A task (card) on a task list."""
+    list = models.ForeignKey(TaskList, related_name='tasks', on_delete=models.CASCADE)
+    assigned_to = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    kpi = models.ForeignKey(KPI, on_delete=models.SET_NULL, null=True, blank=True, help_text="The KPI this task contributes to.")
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    order = models.PositiveIntegerField()
+    due_date = models.DateField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return self.title
+
+class Checklist(models.Model):
+    """A checklist within a task."""
+    task = models.ForeignKey(Task, related_name='checklists', on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.title
+
+class ChecklistItem(models.Model):
+    """An item in a checklist."""
+    checklist = models.ForeignKey(Checklist, related_name='items', on_delete=models.CASCADE)
+    text = models.CharField(max_length=255)
+    is_completed = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.text
+
+class Comment(models.Model):
+    """A comment on a task."""
+    task = models.ForeignKey(Task, related_name='comments', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Comment by {self.user.username} on {self.task.title}"
+
+class EmployeePerformanceRecord(models.Model):
+    """A record of an employee's performance for a specific KPI in a given month."""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    kpi = models.ForeignKey(KPI, on_delete=models.CASCADE)
+    date = models.DateField(help_text="The month and year this record applies to (e.g., 2024-08-31).")
+    actual_value = models.DecimalField(max_digits=10, decimal_places=2, help_text="The measured performance value.")
+    target_met = models.BooleanField(default=False, help_text="Was the KPI target met for this period?")
+    bonus_awarded = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        unique_together = ('employee', 'kpi', 'date')
+
+    def __str__(self):
+        return f"{self.employee.name} - {self.kpi.name} - {self.date.strftime('%Y-%m')}"
+
+class ManualKpiEntry(models.Model):
+    """Represents a single, manually logged data point for a KPI."""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    kpi = models.ForeignKey(KPI, on_delete=models.CASCADE, help_text="The KPI this entry is for, e.g., 'Calidad Administrativa'.")
+    date = models.DateField(default=date.today, help_text="Date the event occurred.")
+    value = models.DecimalField(max_digits=10, decimal_places=2, default=1, help_text="The value of the entry, e.g., '1' for one error.")
+    notes = models.TextField(blank=True, help_text="Additional context or comments.")
+
+    def __str__(self):
+        return f"Entry for {self.employee.name} regarding {self.kpi.name} on {self.date}"

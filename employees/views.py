@@ -1,5 +1,7 @@
+import csv
+from django.http import HttpResponse
 from django.shortcuts import render
-from .models import Employee, WorkLog
+from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord
 from django.contrib.auth.decorators import login_required
 from datetime import date
 
@@ -13,28 +15,6 @@ def employee_list(request):
     employees = Employee.objects.all()
     context = {'employees': employees}
     return render(request, 'employees/employee_list.html', context)
-
-@login_required
-def employee_calendar(request, employee_id):
-    """Renders the calendar for a specific employee."""
-    employee = Employee.objects.get(pk=employee_id)
-    work_logs = WorkLog.objects.filter(employee=employee)
-
-    events = []
-    for log in work_logs:
-        event = {
-            'id': log.id,
-            'startDate': log.date.strftime('%Y-%m-%d'),
-            'endDate': log.date.strftime('%Y-%m-%d'),
-            'name': f"Worked: {log.hours_worked}h, Overtime: {log.overtime_hours}h"
-        }
-        events.append(event)
-
-    context = {
-        'employee': employee,
-        'events': events,
-    }
-    return render(request, 'employees/employee_calendar.html', context)
 
 @login_required
 def employee_salary(request, employee_id):
@@ -54,3 +34,68 @@ def employee_salary(request, employee_id):
         'salary': salary,
     }
     return render(request, 'employees/employee_salary.html', context)
+
+@login_required
+def task_board(request):
+    """Renders the task board for the logged-in employee."""
+    try:
+        employee = request.user.employee
+        # Get or create a board for the employee to ensure one always exists.
+        board, created = TaskBoard.objects.get_or_create(
+            employee=employee,
+            defaults={'name': f"Tablero de {employee.name}"}
+        )
+        # If the board is newly created, add some default lists.
+        if created:
+            from .models import TaskList
+            TaskList.objects.create(board=board, name="Pendiente", order=1)
+            TaskList.objects.create(board=board, name="En Progreso", order=2)
+            TaskList.objects.create(board=board, name="Hecho", order=3)
+
+    except Employee.DoesNotExist:
+        # Handle case where the user is not linked to an employee profile
+        board = None
+
+    context = {
+        'board': board,
+    }
+    return render(request, 'employees/task_board.html', context)
+
+@login_required
+def performance_report(request):
+    """
+    Renders the performance report page or handles CSV export.
+    """
+    all_employees = Employee.objects.all()
+    selected_employee_id = request.GET.get('employee_id')
+
+    records = None
+    if selected_employee_id:
+        records = EmployeePerformanceRecord.objects.filter(
+            employee_id=selected_employee_id
+        ).order_by('-date', 'kpi__name').select_related('employee', 'kpi')
+
+        # Check if a CSV export is requested
+        if request.GET.get('format') == 'csv':
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="performance_report_{selected_employee_id}.csv"'
+
+            writer = csv.writer(response)
+            writer.writerow(['Period', 'KPI', 'Result', 'Target Met', 'Bonus Awarded'])
+            for record in records:
+                writer.writerow([
+                    record.date.strftime('%Y-%m'),
+                    record.kpi.name,
+                    record.actual_value,
+                    'Yes' if record.target_met else 'No',
+                    record.bonus_awarded
+                ])
+            return response
+
+    # If not exporting, render the HTML page as usual
+    context = {
+        'all_employees': all_employees,
+        'selected_employee_id': int(selected_employee_id) if selected_employee_id else None,
+        'records': records,
+    }
+    return render(request, 'employees/performance_report.html', context)

@@ -1,0 +1,60 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Performance Report" %}{% endblock %}
+
+{% block content %}
+<h1>{% trans "Performance Report" %}</h1>
+
+<form method="get" class="form-inline mb-4">
+    <div class="form-group mr-2">
+        <label for="employee" class="mr-2">{% trans "Select Employee" %}:</label>
+        <select name="employee_id" id="employee" class="form-control" onchange="this.form.submit()">
+            <option value="">---</option>
+            {% for emp in all_employees %}
+                <option value="{{ emp.id }}" {% if emp.id == selected_employee_id %}selected{% endif %}>
+                    {{ emp.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+{% if records %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{% trans "Report for" %} {{ records.first.employee.name }}</h2>
+        <a href="?employee_id={{ selected_employee_id }}&format=csv" class="btn btn-success">{% trans "Export to CSV" %}</a>
+    </div>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>{% trans "Period" %}</th>
+                <th>{% trans "KPI" %}</th>
+                <th>{% trans "Result" %}</th>
+                <th>{% trans "Target Met" %}</th>
+                <th>{% trans "Bonus Awarded" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in records %}
+            <tr>
+                <td>{{ record.date|date:"Y-m" }}</td>
+                <td>{{ record.kpi.name }}</td>
+                <td>{{ record.actual_value|floatformat:2 }}</td>
+                <td>
+                    {% if record.target_met %}
+                        <span style="color: green;">✓ {% trans "Yes" %}</span>
+                    {% else %}
+                        <span style="color: red;">✗ {% trans "No" %}</span>
+                    {% endif %}
+                </td>
+                <td>${{ record.bonus_awarded|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% elif selected_employee_id %}
+    <p>{% trans "No performance records found for the selected employee." %}</p>
+{% endif %}
+
+{% endblock %}

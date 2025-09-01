@@ -21,7 +21,6 @@
             <td>{{ employee.email }}</td>
             <td>{{ employee.hire_date }}</td>
             <td>
-                <a href="{% url 'employee_calendar' employee.id %}" class="btn btn-primary btn-sm">{% trans "Calendar" %}</a>
                 <a href="{% url 'employee_salary' employee.id %}" class="btn btn-info btn-sm">{% trans "Salary" %}</a>
             </td>
         </tr>
