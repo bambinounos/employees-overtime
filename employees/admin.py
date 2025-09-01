@@ -1,5 +1,9 @@
 from django.contrib import admin
-from .models import Employee, Salary, WorkLog
+from .models import (
+    Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard,
+    TaskList, Task, Checklist, ChecklistItem, Comment, EmployeePerformanceRecord,
+    ManualKpiEntry
+)
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -17,3 +21,59 @@ class WorkLogAdmin(admin.ModelAdmin):
     list_display = ('employee', 'date', 'hours_worked', 'overtime_hours')
     list_filter = ('date', 'employee')
     search_fields = ('employee__name',)
+
+# --- Performance Management Admin ---
+
+@admin.register(KPI)
+class KPIAdmin(admin.ModelAdmin):
+    list_display = ('name', 'measurement_type', 'target_value')
+    list_filter = ('measurement_type',)
+    search_fields = ('name', 'description')
+
+@admin.register(BonusRule)
+class BonusRuleAdmin(admin.ModelAdmin):
+    list_display = ('kpi', 'bonus_amount', 'description')
+    list_filter = ('kpi',)
+
+class TaskListInline(admin.TabularInline):
+    model = TaskList
+    extra = 1
+
+@admin.register(TaskBoard)
+class TaskBoardAdmin(admin.ModelAdmin):
+    list_display = ('name', 'employee')
+    inlines = [TaskListInline]
+
+class ChecklistItemInline(admin.TabularInline):
+    model = ChecklistItem
+    extra = 1
+
+class ChecklistInline(admin.StackedInline):
+    model = Checklist
+    extra = 1
+    inlines = [ChecklistItemInline]
+
+class CommentInline(admin.TabularInline):
+    model = Comment
+    extra = 0
+    readonly_fields = ('user', 'created_at')
+
+@admin.register(Task)
+class TaskAdmin(admin.ModelAdmin):
+    list_display = ('title', 'assigned_to', 'list', 'due_date', 'completed_at')
+    list_filter = ('list', 'assigned_to', 'due_date', 'kpi')
+    search_fields = ('title', 'description')
+    inlines = [ChecklistInline, CommentInline]
+
+@admin.register(EmployeePerformanceRecord)
+class EmployeePerformanceRecordAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'kpi', 'date', 'actual_value', 'target_met', 'bonus_awarded')
+    list_filter = ('date', 'employee', 'kpi', 'target_met')
+    readonly_fields = ('bonus_awarded',)
+
+@admin.register(ManualKpiEntry)
+class ManualKpiEntryAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'kpi', 'date', 'value')
+    list_filter = ('date', 'employee', 'kpi')
+    search_fields = ('employee__name', 'kpi__name', 'notes')
+    autocomplete_fields = ['employee', 'kpi']

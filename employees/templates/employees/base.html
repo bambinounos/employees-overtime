@@ -15,6 +15,12 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'employee_list' %}">{% trans "Employees" %}</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'task_board' %}">{% trans "Task Board" %}</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'performance_report' %}">{% trans "Reports" %}</a>
+                </li>
             </ul>
             <ul class="navbar-nav">
                 {% if user.is_authenticated %}

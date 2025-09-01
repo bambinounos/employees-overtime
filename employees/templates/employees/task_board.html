@@ -1,0 +1,95 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Task Board" %}{% endblock %}
+
+{% block content %}
+<style>
+    .task-board {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 1rem;
+    }
+    .task-list {
+        flex: 0 0 272px;
+        margin: 0 8px;
+        background-color: #f4f5f7;
+        border-radius: 3px;
+        padding: 8px;
+    }
+    .task-list-header {
+        font-weight: bold;
+        margin-bottom: 12px;
+    }
+    .task-card {
+        background-color: #ffffff;
+        border-radius: 3px;
+        box-shadow: 0 1px 0 rgba(9,30,66,.25);
+        padding: 8px;
+        margin-bottom: 8px;
+        cursor: pointer;
+    }
+    .task-card:hover {
+        background-color: #f4f5f7;
+    }
+</style>
+
+<h1>{% trans "My Task Board" %}</h1>
+
+<div class="task-board">
+    {% for list in board.lists.all %}
+    <div class="task-list">
+        <div class="task-list-header">{{ list.name }}</div>
+        <div class="list-cards" data-list-id="{{ list.id }}">
+            {% for task in list.tasks.all %}
+            <div class="task-card" data-task-id="{{ task.id }}">
+                {{ task.title }}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const lists = document.querySelectorAll('.list-cards');
+    lists.forEach(list => {
+        new Sortable(list, {
+            group: 'shared', // set both lists to same group
+            animation: 150,
+            onEnd: function (evt) {
+                const taskEl = evt.item;
+                const taskId = taskEl.dataset.taskId;
+                const toListEl = evt.to;
+                const toListId = toListEl.dataset.listId;
+                const newIndex = evt.newDraggableIndex;
+
+                // Call the API to update the task's list and order
+                const url = `/api/tasks/${taskId}/move/`;
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({
+                        list_id: toListId,
+                        order: newIndex
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error moving task:', data.error);
+                        // Optional: move the card back to its original position on error
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
