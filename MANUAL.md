@@ -185,3 +185,24 @@ La aplicación ofrece vistas para consultar información clave:
 *   **Lista de Empleados:** Un resumen de todos los empleados.
 *   **Informe de Desempeño:** Muestra el rendimiento de un empleado frente a sus KPIs para un mes y año seleccionados.
 *   **Cálculo de Salario:** Proporciona un desglose detallado del salario de un empleado para un mes y año.
+
+### 2.7. Servidor de Calendarios (CalDAV)
+
+El sistema incluye un servidor WebDAV/CalDAV para exponer los calendarios de los empleados. Esto permite a los usuarios suscribirse a sus calendarios de trabajo utilizando clientes de calendario compatibles (como Thunderbird, Outlook o calendarios de móviles).
+
+*   **Cómo Iniciar el Servidor:**
+    1.  Asegúrese de tener el entorno virtual activado (`source venv/bin/activate`).
+    2.  Ejecute el siguiente script desde el directorio raíz del proyecto:
+        ```bash
+        python3 run_wsgidav.py
+        ```
+    3.  El servidor se iniciará en el puerto `8080`. Verá un mensaje como: `WsgiDAV server running on http://0.0.0.0:8080/`.
+
+*   **Cómo Usarlo:**
+    1.  Abra su cliente de calendario preferido.
+    2.  Busque la opción para añadir un "Calendario en red" o "Calendario CalDAV".
+    3.  Cuando se le solicite la URL, introduzca la dirección del servidor seguida de su nombre de usuario. Por ejemplo, si su nombre de usuario es `jdoe` y está accediendo desde el mismo servidor, la URL sería:
+        ```
+        http://localhost:8080/jdoe
+        ```
+    4.  El servidor está configurado para **acceso anónimo**, por lo que no necesitará introducir un nombre de usuario o contraseña en su cliente de calendario. Su cliente podrá ver y suscribirse a los eventos del calendario del empleado especificado en la URL.
