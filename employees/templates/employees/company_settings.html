@@ -1,0 +1,46 @@
+{% extends "employees/base.html" %}
+
+{% block title %}Configuración de la Empresa{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Configuración de la Empresa</h2>
+    <p>Ajusta los parámetros globales para el cálculo de salarios.</p>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-success" role="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h4>Base para el Cálculo de Salario</h4>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="calculation_basis" class="form-label">Frecuencia de Cálculo</label>
+                    <select class="form-select" id="calculation_basis" name="calculation_basis">
+                        <option value="monthly" {% if settings.calculation_basis == 'monthly' %}selected{% endif %}>Mensual</option>
+                        <option value="weekly" {% if settings.calculation_basis == 'weekly' %}selected{% endif %}>Semanal</option>
+                        <option value="daily" {% if settings.calculation_basis == 'daily' %}selected{% endif %}>Diario</option>
+                    </select>
+                    <div class="form-text">Selecciona la base de tiempo para el cálculo de las horas estándar.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="base_hours" class="form-label">Horas Base</label>
+                    <input type="number" step="0.01" class="form-control" id="base_hours" name="base_hours" value="{{ settings.base_hours|stringformat:".2f" }}">
+                    <div class="form-text">Número de horas para la frecuencia seleccionada (p. ej., 160 para mensual, 40 para semanal).</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

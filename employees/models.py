@@ -91,9 +91,30 @@ class Employee(models.Model):
         total_hours_worked = sum(log.hours_worked for log in work_logs)
         total_overtime_hours = sum(log.overtime_hours for log in work_logs)
 
-        # Using 160 as the standard monthly hours, per user request
-        monthly_hours = 160
-        hourly_rate = base_salary / Decimal(monthly_hours)
+        # Load company settings to determine the basis for salary calculation
+        settings = CompanySettings.load()
+        monthly_hours = Decimal('0.00')
+
+        if settings.calculation_basis == 'monthly':
+            monthly_hours = settings.base_hours
+        elif settings.calculation_basis == 'weekly':
+            # Approximate monthly hours by multiplying by the average number of weeks in a month
+            monthly_hours = settings.base_hours * Decimal('4.333')
+        elif settings.calculation_basis == 'daily':
+            # Calculate the number of working days (Mon-Fri) in the given month and year
+            import calendar
+            cal = calendar.Calendar()
+            work_days = 0
+            for day in cal.itermonthdays2(year, month):
+                if day[0] != 0 and day[1] < 5: # day[1] is the weekday (0=Mon, 6=Sun)
+                    work_days += 1
+            monthly_hours = settings.base_hours * Decimal(work_days)
+
+        if monthly_hours <= 0:
+             # Fallback to a default if hours are not set, to avoid division by zero
+            monthly_hours = Decimal('160')
+
+        hourly_rate = base_salary / monthly_hours
         overtime_rate = hourly_rate * Decimal(1.5)
 
         work_pay = total_hours_worked * hourly_rate
@@ -250,3 +271,39 @@ class ManualKpiEntry(models.Model):
 
     def __str__(self):
         return f"Entry for {self.employee.name} regarding {self.kpi.name} on {self.date}"
+
+class CompanySettings(models.Model):
+    """Singleton model to store company-wide settings."""
+    name = models.CharField(max_length=255, default="Default Settings", unique=True)
+
+    CALCULATION_BASIS_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('weekly', 'Weekly'),
+        ('daily', 'Daily'),
+    ]
+    calculation_basis = models.CharField(
+        max_length=10,
+        choices=CALCULATION_BASIS_CHOICES,
+        default='monthly',
+        help_text="The basis for salary calculation (e.g., monthly, weekly, or daily hours)."
+    )
+    base_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=160.00,
+        help_text="The number of base hours corresponding to the selected calculation basis."
+    )
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        # Enforce a single instance of settings
+        self.pk = 1
+        super(CompanySettings, self).save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        # Convenience method to get the single settings object
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj

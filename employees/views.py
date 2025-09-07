@@ -1,9 +1,12 @@
 import csv
 from django.http import HttpResponse
-from django.shortcuts import render
-from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord
+from django.shortcuts import render, redirect
+from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings
 from django.contrib.auth.decorators import login_required
 from datetime import date
+from decimal import Decimal
+from django.contrib import messages
+import calendar
 
 def index(request):
     """Renders the home page."""
@@ -99,3 +102,25 @@ def performance_report(request):
         'records': records,
     }
     return render(request, 'employees/performance_report.html', context)
+
+
+@login_required
+def company_settings(request):
+    """
+    View to manage company-wide settings.
+    """
+    settings = CompanySettings.load()
+
+    if request.method == 'POST':
+        settings.calculation_basis = request.POST.get('calculation_basis', settings.calculation_basis)
+        base_hours = request.POST.get('base_hours')
+        if base_hours:
+            settings.base_hours = Decimal(base_hours)
+        settings.save()
+        messages.success(request, 'Configuración guardada exitosamente.')
+        return redirect('company_settings')
+
+    context = {
+        'settings': settings,
+    }
+    return render(request, 'employees/company_settings.html', context)
