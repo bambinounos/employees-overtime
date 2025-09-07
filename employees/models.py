@@ -181,6 +181,7 @@ class Task(models.Model):
     """A task (card) on a task list."""
     list = models.ForeignKey(TaskList, related_name='tasks', on_delete=models.CASCADE)
     assigned_to = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks', null=True)
     kpi = models.ForeignKey(KPI, on_delete=models.SET_NULL, null=True, blank=True, help_text="The KPI this task contributes to.")
 
     title = models.CharField(max_length=255)
@@ -188,6 +189,7 @@ class Task(models.Model):
     order = models.PositiveIntegerField()
     due_date = models.DateField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by_manager = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
