@@ -9,6 +9,7 @@ from .models import (
 )
 from decimal import Decimal
 from datetime import date, datetime
+from django.utils import timezone
 
 class PerformanceAndSalaryTest(TestCase):
     def setUp(self):
@@ -31,7 +32,7 @@ class PerformanceAndSalaryTest(TestCase):
         # --- Simulate performance for a month (e.g., August 2024) ---
         # 1. Task Performance: 9 out of 10 tasks completed = 90%
         for i in range(9):
-            Task.objects.create(list=self.list_done, assigned_to=self.employee, kpi=self.kpi_tasks, title=f"Task {i}", order=i, due_date=date(2024, 8, 15), completed_at=datetime.now())
+            Task.objects.create(list=self.list_done, assigned_to=self.employee, kpi=self.kpi_tasks, title=f"Task {i}", order=i, due_date=date(2024, 8, 15), completed_at=timezone.now())
         Task.objects.create(list=self.list_todo, assigned_to=self.employee, kpi=self.kpi_tasks, title="Task 10", order=10, due_date=date(2024, 8, 15))
 
         # 2. Manual Entry Performance: 2 errors logged (target is < 3)
