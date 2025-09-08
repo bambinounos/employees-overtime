@@ -178,6 +178,18 @@ El salario final de un empleado se calcula mensualmente y se compone de tres par
 
 El detalle del salario se puede consultar en la sección de informes de la aplicación.
 
+#### 2.5.1. Configuración de Horas Base y Horas Extra
+Para que el cálculo de las horas extra sea preciso, el sistema necesita saber cuál es la jornada laboral estándar. Esta configuración se gestiona desde la página de **Configuración de la Empresa**.
+
+1.  **Acceda a la página:** Navegue a la sección de "Configuración de la Empresa" desde el menú principal.
+2.  **Ajuste los parámetros:**
+    *   **Frecuencia de Cálculo:** Defina si las horas base se contarán de forma `Mensual`, `Semanal` o `Diaria`.
+    *   **Horas Base:** Ingrese el número total de horas que corresponden a la frecuencia seleccionada.
+        *   **Ejemplo para base mensual:** Si la jornada es de 8 horas diarias de lunes a viernes, las horas base mensuales serían aproximadamente `160`.
+        *   **Ejemplo para base semanal:** Si la jornada es de 40 horas semanales, elija `Semanal` e ingrese `40`.
+
+El sistema utilizará estos valores para calcular la tarifa por hora de cada empleado y, a partir de ahí, determinar el valor de las horas extra.
+
 ### 2.6. Informes
 
 La aplicación ofrece vistas para consultar información clave:
