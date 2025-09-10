@@ -115,8 +115,13 @@ class Employee(models.Model):
 
             elif kpi.measurement_type == 'count_gt':
                 # e.g., "Gestión Comercial Pública" (more than X offers)
-                entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
-                actual_value = sum(entry.value for entry in entries)
+                # Automated based on completed tasks with this KPI
+                actual_value = Task.objects.filter(
+                    assigned_to=self,
+                    kpi=kpi,
+                    completed_at__year=year,
+                    completed_at__month=month
+                ).count()
                 if actual_value >= kpi.target_value:
                     target_met = True
 
