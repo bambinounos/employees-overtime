@@ -1,7 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
+from django.db.models import F, Avg, Sum
+from django.db.models.functions import Coalesce
 
 class Employee(models.Model):
     """Represents an employee in the company."""
@@ -12,6 +14,67 @@ class Employee(models.Model):
 
     def __str__(self):
         return self.name
+
+    def calculate_ipac(self, year, month):
+        """
+        Calculates the Quality-Adjusted Productivity Index (IPAC) for a given month.
+        IPAC = (Completed Tasks * On-time Factor * Quality Factor) / Avg. Execution Time (in hours)
+        """
+        # 1. Get all tasks completed in the given month and year
+        completed_tasks = Task.objects.filter(
+            assigned_to=self,
+            completed_at__year=year,
+            completed_at__month=month
+        )
+        num_completed_tasks = completed_tasks.count()
+
+        if num_completed_tasks == 0:
+            return Decimal('0.00')
+
+        # 2. On-time Factor (considers tasks with a due date)
+        tasks_with_due_date = completed_tasks.exclude(due_date__isnull=True)
+        num_tasks_with_due_date = tasks_with_due_date.count()
+        if num_tasks_with_due_date > 0:
+            on_time_count = tasks_with_due_date.filter(completed_at__date__lte=F('due_date')).count()
+            on_time_factor = Decimal(on_time_count) / Decimal(num_tasks_with_due_date)
+        else:
+            on_time_factor = Decimal('1.0') # Assume 100% if no due dates are set
+
+        # 3. Quality Factor (based on manually logged errors)
+        # This assumes that any KPI measured as 'count_lt' (less is better) is an error-tracking KPI.
+        error_kpis = KPI.objects.filter(measurement_type='count_lt')
+        num_errors = ManualKpiEntry.objects.filter(
+            employee=self,
+            kpi__in=error_kpis,
+            date__year=year,
+            date__month=month
+        ).aggregate(total_errors=Coalesce(Sum('value'), Decimal('0')))['total_errors']
+
+        error_rate = Decimal(num_errors) / Decimal(num_completed_tasks)
+        quality_factor = max(Decimal('0.0'), Decimal('1.0') - error_rate)
+
+        # 4. Average Execution Time (in hours)
+        avg_duration = completed_tasks.aggregate(
+            avg_duration=Avg(F('completed_at') - F('created_at'))
+        )['avg_duration']
+
+        if not avg_duration:
+            avg_duration = timedelta(hours=1) # Fallback to 1 hour to prevent errors
+
+        avg_execution_hours = Decimal(avg_duration.total_seconds()) / Decimal('3600')
+
+        # Prevent division by zero or extremely small denominators
+        MIN_AVG_HOURS = Decimal('0.01') # ~36 seconds
+        if avg_execution_hours < MIN_AVG_HOURS:
+            avg_execution_hours = MIN_AVG_HOURS
+
+        # 5. Final IPAC Calculation
+        # The formula provided is: (Tareas Completadas × Puntualidad % × (100% - % Errores)) / Tiempo Promedio
+        # To make the scale reasonable, we use factors (0-1) and the raw number of tasks.
+        numerator = Decimal(num_completed_tasks) * on_time_factor * quality_factor
+        ipac_score = numerator / avg_execution_hours
+
+        return ipac_score.quantize(Decimal('0.01'))
 
     def calculate_performance_bonus(self, year, month):
         """
@@ -54,6 +117,13 @@ class Employee(models.Model):
                 # e.g., "Gestión Comercial Pública" (more than X offers)
                 entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
                 actual_value = sum(entry.value for entry in entries)
+                if actual_value >= kpi.target_value:
+                    target_met = True
+
+            elif kpi.measurement_type == 'composite_ipac':
+                # This KPI is calculated by its own complex method
+                actual_value = self.calculate_ipac(year, month)
+                # For composite KPIs, higher is better
                 if actual_value >= kpi.target_value:
                     target_met = True
 
@@ -161,6 +231,7 @@ class KPI(models.Model):
         ('percentage', 'Percentage'),
         ('count_lt', 'Count (Less Than)'),
         ('count_gt', 'Count (Greater Than)'),
+        ('composite_ipac', 'Composite IPAC'),
     ]
     measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_CHOICES)
     target_value = models.DecimalField(max_digits=10, decimal_places=2, help_text="E.g., 95 for percentage, 3 for count.")
