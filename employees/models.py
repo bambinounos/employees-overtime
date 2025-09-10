@@ -267,7 +267,7 @@ class TaskList(models.Model):
         ordering = ['order']
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.board.employee.name})"
 
 class Task(models.Model):
     """A task (card) on a task list."""

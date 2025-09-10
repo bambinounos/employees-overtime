@@ -1,13 +1,28 @@
 from rest_framework import serializers
-from .models import WorkLog, Task, TaskList, TaskBoard
+from .models import Employee, WorkLog, Task, TaskList, TaskBoard
+
 
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = [
-            'id', 'title', 'description', 'order', 'due_date', 'list',
+            'id', 'title', 'description', 'order', 'due_date', 'list', 'assigned_to',
             'is_recurring', 'recurrence_frequency', 'recurrence_end_date'
         ]
+
+    def validate(self, data):
+        """
+        Check that the selected list belongs to the assigned employee.
+        """
+        task_list = data.get('list')
+        assigned_to = data.get('assigned_to')
+
+        if task_list and assigned_to:
+            if task_list.board.employee != assigned_to:
+                raise serializers.ValidationError(
+                    {'list': 'The selected list does not belong to the assigned employee.'}
+                )
+        return data
 
 class TaskListSerializer(serializers.ModelSerializer):
     tasks = TaskSerializer(many=True, read_only=True)
