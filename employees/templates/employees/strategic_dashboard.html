@@ -1,0 +1,182 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Strategic Dashboard" %}{% endblock %}
+
+{% block content %}
+<style>
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .kpi-card {
+        background-color: #ffffff;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #333;
+    }
+    .kpi-label {
+        font-size: 1rem;
+        color: #666;
+        margin-top: 0.5rem;
+    }
+    .section-title {
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: #444;
+    }
+    .ranking-table, .warnings-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 2rem;
+    }
+    .ranking-table th, .ranking-table td,
+    .warnings-table th, .warnings-table td {
+        padding: 12px 15px;
+        border: 1px solid #ddd;
+        text-align: left;
+    }
+    .ranking-table th, .warnings-table th {
+        background-color: #f4f5f7;
+        font-weight: 600;
+    }
+    .chart-container {
+        background-color: #ffffff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+</style>
+
+<h1 class="mb-4">{% trans "Strategic Dashboard" %} <span class="text-muted fs-5">({{ period_name }})</span></h1>
+
+<!-- KPIs Section -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.tasks_completed|floatformat:0 }}</div>
+        <div class="kpi-label">{% trans "Tasks Completed" %}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.on_time_percentage|floatformat:2 }}%</div>
+        <div class="kpi-label">{% trans "On-Time Delivery" %}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.avg_ipac|floatformat:2 }}</div>
+        <div class="kpi-label">{% trans "Average IPAC" %}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">${{ kpis.total_bonus|floatformat:2 }}</div>
+        <div class="kpi-label">{% trans "Total Bonuses Awarded" %}</div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Employee Ranking Section -->
+    <div class="col-lg-6">
+        <h2 class="section-title">{% trans "Top 5 Employee Ranking (IPAC)" %}</h2>
+        {% if ranking_records %}
+            <table class="ranking-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>{% trans "Employee" %}</th>
+                        <th>{% trans "IPAC Score" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in ranking_records %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ record.employee.name }}</td>
+                        <td>{{ record.actual_value|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>{% trans "No ranking data available for this period." %}</p>
+        {% endif %}
+    </div>
+
+    <!-- Warnings Section -->
+    <div class="col-lg-6">
+        <h2 class="section-title">{% trans "Performance Warnings" %}</h2>
+        {% if warning_records %}
+            <table class="warnings-table">
+                <thead>
+                    <tr>
+                        <th>{% trans "Employee" %}</th>
+                        <th>{% trans "Warning KPI" %}</th>
+                        <th>{% trans "Result" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in warning_records %}
+                    <tr>
+                        <td>{{ record.employee.name }}</td>
+                        <td>{{ record.kpi.name }}</td>
+                        <td>{{ record.actual_value|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>{% trans "No performance warnings for this period." %}</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Trend Chart Section -->
+<div class="mt-4">
+    <h2 class="section-title">{% trans "Performance Trend" %}</h2>
+    <div class="chart-container">
+        {% if trend_data.values %}
+            <canvas id="trendChart"></canvas>
+        {% else %}
+            <p>{% trans "Not enough data to display trend chart." %}</p>
+        {% endif %}
+    </div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    {% if trend_data.values %}
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    const trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ trend_data.labels|safe }},
+            datasets: [{
+                label: '{{ trend_data.kpi_name }}',
+                data: {{ trend_data.values|safe }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    {% endif %}
+});
+</script>
+
+{% endblock %}
