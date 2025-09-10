@@ -51,10 +51,19 @@ class TaskViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            task.list_id = new_list_id
+            from .models import TaskList
+            from datetime import datetime
+
+            new_list = TaskList.objects.get(id=new_list_id)
+            task.list = new_list
             task.order = new_order
+
+            if new_list.name.lower() == 'hecho':
+                task.completed_at = datetime.now()
+
             task.save()
-            # Here you might want to re-order other tasks in the list
             return Response({'status': 'task moved'})
+        except TaskList.DoesNotExist:
+            return Response({'error': 'List not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

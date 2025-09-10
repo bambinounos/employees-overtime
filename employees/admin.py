@@ -60,10 +60,29 @@ class CommentInline(admin.TabularInline):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ('title', 'assigned_to', 'list', 'due_date', 'completed_at')
-    list_filter = ('list', 'assigned_to', 'due_date', 'kpi')
+    list_display = ('title', 'assigned_to', 'list', 'due_date', 'completed_at', 'is_recurring')
+    list_filter = ('list', 'assigned_to', 'due_date', 'kpi', 'is_recurring')
     search_fields = ('title', 'description')
     inlines = [ChecklistInline, CommentInline]
+
+    fieldsets = (
+        (None, {
+            'fields': ('title', 'description', 'list', 'assigned_to', 'kpi')
+        }),
+        ('Dates', {
+            'fields': ('due_date',)
+        }),
+        ('Recurrence', {
+            'classes': ('collapse',),
+            'fields': ('is_recurring', 'recurrence_frequency', 'recurrence_end_date'),
+        }),
+    )
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        # Add other fields that are not explicitly in fieldsets, like 'order'
+        # This is a simple implementation, a more robust one would avoid hardcoding
+        return fieldsets
 
 @admin.register(EmployeePerformanceRecord)
 class EmployeePerformanceRecordAdmin(admin.ModelAdmin):
