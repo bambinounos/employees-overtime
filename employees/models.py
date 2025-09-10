@@ -200,6 +200,12 @@ class TaskList(models.Model):
 
 class Task(models.Model):
     """A task (card) on a task list."""
+    RECURRENCE_CHOICES = [
+        ('daily', 'Daily'),
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+
     list = models.ForeignKey(TaskList, related_name='tasks', on_delete=models.CASCADE)
     assigned_to = models.ForeignKey(Employee, on_delete=models.CASCADE)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks', null=True)
@@ -212,6 +218,15 @@ class Task(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by_manager = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Recurrence fields
+    is_recurring = models.BooleanField(default=False)
+    recurrence_frequency = models.CharField(max_length=10, choices=RECURRENCE_CHOICES, null=True, blank=True)
+    recurrence_end_date = models.DateField(null=True, blank=True)
+
+    # For tracking the chain of recurring tasks
+    parent_task = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
+
 
     class Meta:
         ordering = ['order']

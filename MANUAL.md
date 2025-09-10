@@ -218,3 +218,59 @@ El sistema incluye un servidor WebDAV/CalDAV para exponer los calendarios de los
         http://localhost:8080/jdoe
         ```
     4.  El servidor está configurado para **acceso anónimo**, por lo que no necesitará introducir un nombre de usuario o contraseña en su cliente de calendario. Su cliente podrá ver y suscribirse a los eventos del calendario del empleado especificado en la URL.
+
+## 3. Actualización de la Aplicación
+
+Para actualizar una instalación existente a la última versión, siga estos pasos.
+
+### 3.1. Prerrequisitos
+
+*   Asegúrese de tener acceso al servidor donde está instalada la aplicación.
+*   Confirme que tiene permisos para ejecutar comandos como `git` y `python3`.
+
+### 3.2. Pasos para Actualizar
+
+1.  **Navegue al Directorio del Proyecto:**
+    Abra una terminal y vaya al directorio donde clonó el repositorio.
+    ```bash
+    cd <NOMBRE_DEL_DIRECTORIO>
+    ```
+
+2.  **Active el Entorno Virtual:**
+    Es crucial activar el entorno virtual para usar las dependencias correctas.
+    ```bash
+    source venv/bin/activate
+    ```
+
+3.  **Descargue los Últimos Cambios:**
+    Obtenga la versión más reciente del código desde el repositorio de `git`.
+    ```bash
+    git pull origin main  # O la rama que corresponda (ej. master)
+    ```
+
+4.  **Instale o Actualice las Dependencias:**
+    Si se han añadido nuevas librerías, instálelas. Es una buena práctica ejecutar siempre este comando.
+    ```bash
+    pip install -r requirements.txt
+    ```
+    *Nota: Si el proyecto no cuenta con un archivo `requirements.txt`, deberá instalar manualmente cualquier nueva dependencia que se haya añadido.*
+
+5.  **Aplique las Migraciones de la Base de Datos:**
+    Este es un paso crítico para actualizar el esquema de la base de datos con los últimos cambios.
+    ```bash
+    python3 manage.py migrate
+    ```
+
+6.  **Recopile los Archivos Estáticos (si aplica):**
+    Si se han realizado cambios en los archivos CSS, JavaScript o imágenes, es importante recopilarlos.
+    ```bash
+    python3 manage.py collectstatic
+    ```
+
+7.  **Reinicie el Servidor de Aplicaciones:**
+    Si está usando un servidor como Gunicorn o Apache, reinícielo para que los cambios surtan efecto.
+    ```bash
+    # Ejemplo para Gunicorn con systemd
+    sudo systemctl restart gunicorn
+    ```
+    Si está usando el servidor de desarrollo de Django, simplemente deténgalo (`Ctrl+C`) y vuelva a iniciarlo.

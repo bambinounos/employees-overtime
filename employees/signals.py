@@ -2,7 +2,55 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import ManualKpiEntry
+from .models import ManualKpiEntry, Task, TaskList
+from datetime import date
+from dateutil.relativedelta import relativedelta
+
+@receiver(post_save, sender=Task)
+def handle_recurring_task(sender, instance, created, **kwargs):
+    """
+    Creates the next task in a recurring series when one is marked as complete.
+    """
+    if created or not instance.is_recurring or not instance.completed_at:
+        return
+
+    # Check if a child task has already been generated for this instance
+    if instance.children.exists():
+        return
+
+    next_due_date = None
+    if not instance.due_date:
+        return
+
+    if instance.recurrence_frequency == 'daily':
+        next_due_date = instance.due_date + relativedelta(days=1)
+    elif instance.recurrence_frequency == 'monthly':
+        next_due_date = instance.due_date + relativedelta(months=1)
+    elif instance.recurrence_frequency == 'yearly':
+        next_due_date = instance.due_date + relativedelta(years=1)
+
+    if not next_due_date or (instance.recurrence_end_date and next_due_date > instance.recurrence_end_date):
+        return
+
+    try:
+        todo_list = TaskList.objects.get(board=instance.list.board, name__iexact="Pendiente")
+    except TaskList.DoesNotExist:
+        return
+
+    Task.objects.create(
+        parent_task=instance,
+        list=todo_list,
+        assigned_to=instance.assigned_to,
+        created_by=instance.created_by,
+        kpi=instance.kpi,
+        title=instance.title,
+        description=instance.description,
+        order=instance.order,
+        due_date=next_due_date,
+        is_recurring=True,
+        recurrence_frequency=instance.recurrence_frequency,
+        recurrence_end_date=instance.recurrence_end_date
+    )
 
 @receiver(post_save, sender=ManualKpiEntry)
 def send_warning_notification(sender, instance, created, **kwargs):

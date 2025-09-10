@@ -4,7 +4,10 @@ from .models import WorkLog, Task, TaskList, TaskBoard
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'order', 'due_date', 'list']
+        fields = [
+            'id', 'title', 'description', 'order', 'due_date', 'list',
+            'is_recurring', 'recurrence_frequency', 'recurrence_end_date'
+        ]
 
 class TaskListSerializer(serializers.ModelSerializer):
     tasks = TaskSerializer(many=True, read_only=True)
