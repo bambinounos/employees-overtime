@@ -9,6 +9,7 @@ urlpatterns = [
     path('employees/', views.employee_list, name='employee_list'),
     path('employees/<int:employee_id>/salary/', views.employee_salary, name='employee_salary'),
     path('board/', views.task_board, name='task_board'),
+    path('dashboard/', views.strategic_dashboard, name='strategic_dashboard'),
     path('reports/', views.performance_report, name='performance_report'),
     path('ranking/', views.employee_ranking, name='employee_ranking'),
     path('settings/', views.company_settings, name='company_settings'),

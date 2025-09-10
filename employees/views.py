@@ -127,6 +127,101 @@ def company_settings(request):
     return render(request, 'employees/company_settings.html', context)
 
 
+from django.db.models import Avg, Sum, Count, F
+from django.db.models.functions import Coalesce
+from .models import Task
+import json
+from datetime import timedelta
+
+@login_required
+def strategic_dashboard(request):
+    """
+    Renders the main strategic dashboard, showing KPIs, rankings, and trends.
+    """
+    today = date.today()
+    # Use the last day of the previous month as the primary period for reporting
+    first_day_of_current_month = today.replace(day=1)
+    last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+    year, month = last_day_of_previous_month.year, last_day_of_previous_month.month
+    period_name = last_day_of_previous_month.strftime('%B %Y')
+
+    # --- 1. KPIs ---
+    kpis = {
+        'tasks_completed': 0,
+        'on_time_percentage': 100,
+        'avg_ipac': 0,
+        'total_bonus': 0
+    }
+
+    # Calculate overall task completion
+    completed_tasks_query = EmployeePerformanceRecord.objects.filter(date__year=year, date__month=month)
+    kpis['tasks_completed'] = completed_tasks_query.filter(kpi__measurement_type='count_gt').aggregate(total=Sum('actual_value'))['total'] or 0
+
+    # Calculate on-time percentage from relevant tasks
+    tasks_with_due_date = Task.objects.filter(due_date__isnull=False, created_at__year=year, created_at__month=month)
+    total_due = tasks_with_due_date.count()
+    if total_due > 0:
+        on_time_count = tasks_with_due_date.filter(completed_at__isnull=False, completed_at__date__lte=F('due_date')).count()
+        kpis['on_time_percentage'] = (on_time_count / total_due) * 100 if total_due > 0 else 100
+
+    # Calculate average IPAC score and total bonus from performance records
+    ipac_kpi = KPI.objects.filter(measurement_type='composite_ipac').first()
+    if ipac_kpi:
+        ipac_records = EmployeePerformanceRecord.objects.filter(kpi=ipac_kpi, date__year=year, date__month=month)
+        kpis['avg_ipac'] = ipac_records.aggregate(avg_val=Avg('actual_value'))['avg_val'] or 0
+
+    kpis['total_bonus'] = EmployeePerformanceRecord.objects.filter(date__year=year, date__month=month).aggregate(total=Sum('bonus_awarded'))['total'] or 0
+
+    # --- 2. Employee Ranking ---
+    ranking_records = None
+    if ipac_kpi:
+        ranking_records = EmployeePerformanceRecord.objects.filter(
+            kpi=ipac_kpi,
+            date__year=year,
+            date__month=month
+        ).select_related('employee').order_by('-actual_value')[:5] # Top 5 employees
+
+    # --- 3. Warning KPIs ---
+    warning_kpis = KPI.objects.filter(is_warning_kpi=True)
+    warning_records = EmployeePerformanceRecord.objects.filter(
+        kpi__in=warning_kpis,
+        target_met=False,
+        date__year=year,
+        date__month=month
+    ).select_related('employee', 'kpi').order_by('employee__name')
+
+    # --- 4. Trend Data (for chart) ---
+    # Get IPAC trend for the last 6 months
+    trend_data = {}
+    if ipac_kpi:
+        six_months_ago = (first_day_of_current_month - timedelta(days=6*30)).replace(day=1)
+
+        trend_records = EmployeePerformanceRecord.objects.filter(
+            kpi=ipac_kpi,
+            date__gte=six_months_ago
+        ).values('date__year', 'date__month').annotate(
+            avg_value=Avg('actual_value')
+        ).order_by('date__year', 'date__month')
+
+        trend_labels = [date(year=r['date__year'], month=r['date__month'], day=1).strftime('%b %Y') for r in trend_records]
+        trend_values = [float(r['avg_value']) for r in trend_records]
+
+        trend_data = {
+            'labels': json.dumps(trend_labels),
+            'values': json.dumps(trend_values),
+            'kpi_name': ipac_kpi.name
+        }
+
+    context = {
+        'period_name': period_name,
+        'kpis': kpis,
+        'ranking_records': ranking_records,
+        'warning_records': warning_records,
+        'trend_data': trend_data,
+    }
+    return render(request, 'employees/strategic_dashboard.html', context)
+
+
 @login_required
 def employee_ranking(request):
     """
