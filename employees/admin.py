@@ -78,6 +78,13 @@ class TaskAdmin(admin.ModelAdmin):
         }),
     )
 
+    def render_change_form(self, request, context, *args, **kwargs):
+        # This is a fix for a UI bug where the 'assigned_to' dropdown shows
+        # duplicate employees. The root cause is unclear from the current codebase,
+        # but ensuring the queryset is distinct solves the immediate problem.
+        context['adminform'].form.fields['assigned_to'].queryset = Employee.objects.distinct()
+        return super().render_change_form(request, context, *args, **kwargs)
+
     def get_fieldsets(self, request, obj=None):
         fieldsets = super().get_fieldsets(request, obj)
         # Add other fields that are not explicitly in fieldsets, like 'order'
