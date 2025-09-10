@@ -1,8 +1,10 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from .models import WorkLog, TaskBoard, Task
+from .models import WorkLog, TaskBoard, Task, EmployeePerformanceRecord, Employee
 from .serializers import WorkLogSerializer, TaskBoardSerializer, TaskSerializer
+from datetime import date, timedelta
+from collections import defaultdict
 
 class WorkLogViewSet(viewsets.ModelViewSet):
     queryset = WorkLog.objects.all()
@@ -67,3 +69,34 @@ class TaskViewSet(viewsets.ModelViewSet):
             return Response({'error': 'List not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def kpi_history_api(request, employee_id):
+    """
+    API endpoint to retrieve the last 12 months of KPI performance data for a specific employee.
+    """
+    try:
+        employee = Employee.objects.get(pk=employee_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Calculate the date 12 months ago from the first day of the current month
+    today = date.today()
+    twelve_months_ago = (today.replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=365)
+
+
+    records = EmployeePerformanceRecord.objects.filter(
+        employee=employee,
+        date__gte=twelve_months_ago
+    ).order_by('date').select_related('kpi')
+
+    # Group data by KPI name
+    kpi_data = defaultdict(lambda: {'labels': [], 'data': []})
+    for record in records:
+        kpi_name = record.kpi.name
+        # Format date as 'YYYY-Mon' (e.g., '2023-Sep')
+        month_label = record.date.strftime('%Y-%b')
+        kpi_data[kpi_name]['labels'].append(month_label)
+        kpi_data[kpi_name]['data'].append(record.actual_value)
+
+    return Response(kpi_data)
