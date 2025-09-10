@@ -1,12 +1,13 @@
 import csv
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
-from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings
+from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI
 from django.contrib.auth.decorators import login_required
 from datetime import date
 from decimal import Decimal
 from django.contrib import messages
 import calendar
+from django.db.models import Max
 
 def index(request):
     """Renders the home page."""
@@ -124,3 +125,52 @@ def company_settings(request):
         'settings': settings,
     }
     return render(request, 'employees/company_settings.html', context)
+
+
+@login_required
+def employee_ranking(request):
+    """
+    Renders the employee ranking page based on a selected KPI.
+    """
+    all_kpis = KPI.objects.all()
+    selected_kpi_id = request.GET.get('kpi_id')
+    ranking_records = None
+    selected_kpi = None
+    period = None
+
+    if selected_kpi_id:
+        try:
+            selected_kpi = KPI.objects.get(pk=selected_kpi_id)
+
+            # Find the most recent date for which there are records for this KPI
+            latest_date_info = EmployeePerformanceRecord.objects.filter(
+                kpi=selected_kpi
+            ).aggregate(max_date=Max('date'))
+
+            latest_date = latest_date_info.get('max_date')
+
+            if latest_date:
+                period = latest_date.strftime('%B %Y')
+                records_query = EmployeePerformanceRecord.objects.filter(
+                    kpi=selected_kpi,
+                    date=latest_date
+                ).select_related('employee').order_by('-actual_value')
+
+                # Adjust sorting for KPIs where lower is better
+                if selected_kpi.measurement_type == 'count_lt':
+                    records_query = records_query.order_by('actual_value')
+
+                ranking_records = records_query
+
+        except KPI.DoesNotExist:
+            messages.error(request, "Selected KPI not found.")
+            return redirect('employee_ranking')
+
+    context = {
+        'all_kpis': all_kpis,
+        'selected_kpi_id': int(selected_kpi_id) if selected_kpi_id else None,
+        'selected_kpi': selected_kpi,
+        'ranking_records': ranking_records,
+        'period': period,
+    }
+    return render(request, 'employees/employee_ranking.html', context)

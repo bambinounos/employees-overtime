@@ -57,4 +57,91 @@
     <p>{% trans "No performance records found for the selected employee." %}</p>
 {% endif %}
 
+{% if selected_employee_id %}
+<hr class="mt-5">
+<h2>{% trans "KPI Trend Charts" %}</h2>
+<div id="charts-container" class="mt-4">
+    {% if not records %}
+        <p>{% trans "No data available to display charts." %}</p>
+    {% else %}
+        <p>{% trans "Loading charts..." %}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block javascript %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chartsContainer = document.getElementById('charts-container');
+    const selectedEmployeeId = {{ selected_employee_id|default:"null" }};
+
+    if (selectedEmployeeId && chartsContainer) {
+        const apiUrl = `/api/employees/${selectedEmployeeId}/kpi-history/`;
+
+        fetch(apiUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(kpiData => {
+                chartsContainer.innerHTML = ''; // Clear the 'Loading...' message
+
+                if (Object.keys(kpiData).length === 0) {
+                    chartsContainer.innerHTML = '<p>{% trans "No performance data available for charts." %}</p>';
+                    return;
+                }
+
+                for (const kpiName in kpiData) {
+                    if (kpiData.hasOwnProperty(kpiName)) {
+                        const chartData = kpiData[kpiName];
+
+                        // Create a container and canvas for each chart
+                        const chartWrapper = document.createElement('div');
+                        chartWrapper.className = 'mb-4';
+
+                        const chartTitle = document.createElement('h4');
+                        chartTitle.innerText = kpiName;
+
+                        const canvas = document.createElement('canvas');
+                        chartWrapper.appendChild(chartTitle);
+                        chartWrapper.appendChild(canvas);
+                        chartsContainer.appendChild(chartWrapper);
+
+                        // Render the chart
+                        new Chart(canvas, {
+                            type: 'line',
+                            data: {
+                                labels: chartData.labels,
+                                datasets: [{
+                                    label: kpiName,
+                                    data: chartData.data,
+                                    borderColor: 'rgba(75, 192, 192, 1)',
+                                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                    fill: true,
+                                    tension: 0.1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                scales: {
+                                    y: {
+                                        beginAtZero: false
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching or parsing data:', error);
+                chartsContainer.innerHTML = '<p>{% trans "Could not load chart data." %}</p>';
+            });
+    }
+});
+</script>
 {% endblock %}
