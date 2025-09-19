@@ -41,27 +41,52 @@ def employee_salary(request, employee_id):
 
 @login_required
 def task_board(request):
-    """Renders the task board for the logged-in employee."""
-    try:
-        employee = request.user.employee
-        # Get or create a board for the employee to ensure one always exists.
+    """
+    Renders the task board.
+    - For superusers, it allows selecting and viewing any employee's board.
+    - For regular users, it shows their own task board.
+    """
+    user = request.user
+    board = None
+    all_employees = None
+    selected_employee_id = None
+
+    def _ensure_board_and_lists(employee):
+        """Helper function to get/create board and default lists."""
+        from .models import TaskList
         board, created = TaskBoard.objects.get_or_create(
             employee=employee,
             defaults={'name': f"Tablero de {employee.name}"}
         )
-        # If the board is newly created, add some default lists.
         if created:
-            from .models import TaskList
             TaskList.objects.create(board=board, name="Pendiente", order=1)
             TaskList.objects.create(board=board, name="En Progreso", order=2)
             TaskList.objects.create(board=board, name="Hecho", order=3)
+        return board
 
-    except Employee.DoesNotExist:
-        # Handle case where the user is not linked to an employee profile
-        board = None
+    if user.is_superuser:
+        all_employees = Employee.objects.all()
+        employee_id_str = request.GET.get('employee_id')
+
+        if employee_id_str:
+            try:
+                selected_employee_id = int(employee_id_str)
+                employee = Employee.objects.get(pk=selected_employee_id)
+                board = _ensure_board_and_lists(employee)
+            except (ValueError, Employee.DoesNotExist):
+                messages.error(request, "Empleado no válido seleccionado.")
+    else:
+        # Regular user, show their own board
+        try:
+            employee = user.employee
+            board = _ensure_board_and_lists(employee)
+        except Employee.DoesNotExist:
+            board = None # User not linked to an employee profile
 
     context = {
         'board': board,
+        'all_employees': all_employees,
+        'selected_employee_id': selected_employee_id,
     }
     return render(request, 'employees/task_board.html', context)
 
