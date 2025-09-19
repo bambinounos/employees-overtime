@@ -32,6 +32,20 @@
     .task-card:hover {
         background-color: #f4f5f7;
     }
+    .task-due-date {
+        font-size: 0.8em;
+        color: #5e6c84;
+    }
+    .task-status {
+        font-size: 0.8em;
+        font-weight: bold;
+        padding: 2px 4px;
+        border-radius: 3px;
+        color: white;
+    }
+    .status-pending { background-color: #0079bf; }
+    .status-completed { background-color: #61bd4f; }
+    .status-unfulfilled { background-color: #eb5a46; }
 </style>
 
 <h1>{% trans "My Task Board" %}</h1>
@@ -44,6 +58,18 @@
             {% for task in list.tasks.all %}
             <div class="task-card" data-task-id="{{ task.id }}">
                 {{ task.title }}
+                <div class="task-due-date">
+                    {% if task.due_date %}
+                        {{ task.due_date|date:"Y-m-d H:i" }}
+                    {% endif %}
+                </div>
+                <span class="task-status status-{{ task.status }}">{{ task.get_status_display }}</span>
+                {% if user.is_superuser %}
+                <div>
+                    <button class="complete-btn" data-task-id="{{ task.id }}">{% trans "Complete" %}</button>
+                    <button class="unfulfilled-btn" data-task-id="{{ task.id }}">{% trans "Unfulfilled" %}</button>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -57,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const lists = document.querySelectorAll('.list-cards');
     lists.forEach(list => {
         new Sortable(list, {
-            group: 'shared', // set both lists to same group
+            group: 'shared',
             animation: 150,
             onEnd: function (evt) {
                 const taskEl = evt.item;
@@ -66,7 +92,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 const toListId = toListEl.dataset.listId;
                 const newIndex = evt.newDraggableIndex;
 
-                // Call the API to update the task's list and order
                 const url = `/api/tasks/${taskId}/move/`;
                 fetch(url, {
                     method: 'POST',
@@ -83,11 +108,38 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(data => {
                     if (data.error) {
                         console.error('Error moving task:', data.error);
-                        // Optional: move the card back to its original position on error
                     }
                 })
                 .catch(error => console.error('Error:', error));
             }
+        });
+    });
+
+    document.querySelectorAll('.complete-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const taskId = this.dataset.taskId;
+            const url = `/api/tasks/${taskId}/mark_as_complete/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            }).then(() => location.reload());
+        });
+    });
+
+    document.querySelectorAll('.unfulfilled-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const taskId = this.dataset.taskId;
+            const url = `/api/tasks/${taskId}/mark_as_unfulfilled/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            }).then(() => location.reload());
         });
     });
 });

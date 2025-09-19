@@ -62,6 +62,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
             if new_list.name.lower() == 'hecho':
                 task.completed_at = datetime.now()
+                task.status = 'completed'
 
             task.save()
             return Response({'status': 'task moved'})
@@ -69,6 +70,28 @@ class TaskViewSet(viewsets.ModelViewSet):
             return Response({'error': 'List not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], permission_classes=[])
+    def mark_as_complete(self, request, pk=None):
+        """Mark a task as complete."""
+        if not request.user.is_superuser:
+            return Response({"error": "Only administrators can perform this action."}, status=status.HTTP_403_FORBIDDEN)
+        from datetime import datetime
+        task = self.get_object()
+        task.status = 'completed'
+        task.completed_at = datetime.now()
+        task.save()
+        return Response({'status': 'task marked as complete'})
+
+    @action(detail=True, methods=['post'], permission_classes=[])
+    def mark_as_unfulfilled(self, request, pk=None):
+        """Mark a task as unfulfilled."""
+        if not request.user.is_superuser:
+            return Response({"error": "Only administrators can perform this action."}, status=status.HTTP_403_FORBIDDEN)
+        task = self.get_object()
+        task.status = 'unfulfilled'
+        task.save()
+        return Response({'status': 'task marked as unfulfilled'})
 
 @api_view(['GET'])
 def kpi_history_api(request, employee_id):

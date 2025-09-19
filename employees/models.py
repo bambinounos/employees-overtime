@@ -281,6 +281,11 @@ class Task(models.Model):
         ('monthly', 'Monthly'),
         ('yearly', 'Yearly'),
     ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('unfulfilled', 'Unfulfilled'),
+    ]
 
     list = models.ForeignKey(TaskList, related_name='tasks', on_delete=models.CASCADE)
     assigned_to = models.ForeignKey(Employee, on_delete=models.CASCADE)
@@ -290,7 +295,8 @@ class Task(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     order = models.PositiveIntegerField()
-    due_date = models.DateField(null=True, blank=True)
+    due_date = models.DateTimeField(null=True, blank=True)  # Changed to DateTimeField
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending') # New status field
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by_manager = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
