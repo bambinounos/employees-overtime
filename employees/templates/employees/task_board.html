@@ -48,8 +48,28 @@
     .status-unfulfilled { background-color: #eb5a46; }
 </style>
 
-<h1>{% trans "My Task Board" %}</h1>
+<h1>{% trans "Task Board" %}</h1>
 
+{% if user.is_superuser %}
+<div class="mb-3">
+    <form method="get" action="{% url 'task_board' %}">
+        <label for="employee_id" class="form-label">{% trans "Select Employee" %}:</label>
+        <div class="input-group">
+            <select name="employee_id" id="employee_id" class="form-select">
+                <option value="">{% trans "Select an employee..." %}</option>
+                {% for emp in all_employees %}
+                <option value="{{ emp.id }}" {% if emp.id == selected_employee_id %}selected{% endif %}>
+                    {{ emp.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">{% trans "View Board" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% if board %}
 <div class="task-board">
     {% for list in board.lists.all %}
     <div class="task-list">
@@ -66,8 +86,8 @@
                 <span class="task-status status-{{ task.status }}">{{ task.get_status_display }}</span>
                 {% if user.is_superuser %}
                 <div>
-                    <button class="complete-btn" data-task-id="{{ task.id }}">{% trans "Complete" %}</button>
-                    <button class="unfulfilled-btn" data-task-id="{{ task.id }}">{% trans "Unfulfilled" %}</button>
+                    <button class="btn btn-sm btn-success complete-btn" data-task-id="{{ task.id }}">{% trans "Complete" %}</button>
+                    <button class="btn btn-sm btn-danger unfulfilled-btn" data-task-id="{{ task.id }}">{% trans "Unfulfilled" %}</button>
                 </div>
                 {% endif %}
             </div>
@@ -76,6 +96,14 @@
     </div>
     {% endfor %}
 </div>
+
+{% else %}
+    {% if user.is_superuser %}
+    <p>{% trans "Please select an employee to view their task board." %}</p>
+    {% else %}
+    <p>{% trans "No task board is configured for your user." %}</p>
+    {% endif %}
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
