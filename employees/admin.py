@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Max
 from .models import (
     Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard,
     TaskList, Task, Checklist, ChecklistItem, Comment, EmployeePerformanceRecord,
@@ -84,6 +85,15 @@ class TaskAdmin(admin.ModelAdmin):
         # but ensuring the queryset is distinct solves the immediate problem.
         context['adminform'].form.fields['assigned_to'].queryset = Employee.objects.distinct()
         return super().render_change_form(request, context, *args, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        # If this is a new task (not being changed), set its order.
+        if not obj.pk:
+            # Get the highest order number from tasks in the same list.
+            max_order = Task.objects.filter(list=obj.list).aggregate(Max('order'))['order__max']
+            # If there are no other tasks, start at 1. Otherwise, add 1 to the max.
+            obj.order = (max_order or 0) + 1
+        super().save_model(request, obj, form, change)
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = super().get_fieldsets(request, obj)
