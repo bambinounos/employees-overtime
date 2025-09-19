@@ -59,6 +59,8 @@ class CommentInline(admin.TabularInline):
     extra = 0
     readonly_fields = ('user', 'created_at')
 
+from django.contrib.admin.widgets import AdminSplitDateTime
+
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
     list_display = ('title', 'assigned_to', 'list', 'due_date', 'completed_at', 'is_recurring')
@@ -78,6 +80,11 @@ class TaskAdmin(admin.ModelAdmin):
             'fields': ('is_recurring', 'recurrence_frequency', 'recurrence_end_date'),
         }),
     )
+
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        if db_field.name == 'due_date':
+            kwargs['widget'] = AdminSplitDateTime
+        return super().formfield_for_dbfield(db_field, **kwargs)
 
     def render_change_form(self, request, context, *args, **kwargs):
         # This is a fix for a UI bug where the 'assigned_to' dropdown shows
