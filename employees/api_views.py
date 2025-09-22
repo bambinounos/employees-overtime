@@ -33,8 +33,11 @@ class TaskViewSet(viewsets.ModelViewSet):
         """
         This view should return a list of all the tasks
         for the currently authenticated user.
+        If the user is a superuser, it should return all tasks.
         """
         user = self.request.user
+        if user.is_superuser:
+            return Task.objects.all()
         if hasattr(user, 'employee'):
             return Task.objects.filter(assigned_to=user.employee)
         return Task.objects.none()
@@ -76,11 +79,24 @@ class TaskViewSet(viewsets.ModelViewSet):
         """Mark a task as complete."""
         if not request.user.is_superuser:
             return Response({"error": "Only administrators can perform this action."}, status=status.HTTP_403_FORBIDDEN)
+
         from datetime import datetime
         task = self.get_object()
         task.status = 'completed'
         task.completed_at = datetime.now()
         task.save()
+
+        # Recalculate bonus for the affected employee
+        employee_id = request.data.get('employee_id')
+        if employee_id:
+            try:
+                employee = Employee.objects.get(pk=employee_id)
+                today = date.today()
+                employee.calculate_performance_bonus(today.year, today.month)
+            except Employee.DoesNotExist:
+                # Handle case where employee_id is invalid, though this shouldn't happen
+                pass
+
         return Response({'status': 'task marked as complete'})
 
     @action(detail=True, methods=['post'], permission_classes=[])
@@ -88,9 +104,22 @@ class TaskViewSet(viewsets.ModelViewSet):
         """Mark a task as unfulfilled."""
         if not request.user.is_superuser:
             return Response({"error": "Only administrators can perform this action."}, status=status.HTTP_403_FORBIDDEN)
+
         task = self.get_object()
         task.status = 'unfulfilled'
+        task.completed_at = None # Also clear the completion date
         task.save()
+
+        # Recalculate bonus for the affected employee
+        employee_id = request.data.get('employee_id')
+        if employee_id:
+            try:
+                employee = Employee.objects.get(pk=employee_id)
+                today = date.today()
+                employee.calculate_performance_bonus(today.year, today.month)
+            except Employee.DoesNotExist:
+                pass
+
         return Response({'status': 'task marked as unfulfilled'})
 
 @api_view(['GET'])

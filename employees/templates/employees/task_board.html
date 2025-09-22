@@ -147,12 +147,17 @@ document.addEventListener('DOMContentLoaded', function () {
         button.addEventListener('click', function() {
             const taskId = this.dataset.taskId;
             const url = `/api/tasks/${taskId}/mark_as_complete/`;
+            const employeeId = {{ selected_employee_id|default:"null" }};
+
             fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': '{{ csrf_token }}'
-                }
+                },
+                body: JSON.stringify({
+                    employee_id: employeeId
+                })
             }).then(() => location.reload());
         });
     });
@@ -161,12 +166,17 @@ document.addEventListener('DOMContentLoaded', function () {
         button.addEventListener('click', function() {
             const taskId = this.dataset.taskId;
             const url = `/api/tasks/${taskId}/mark_as_unfulfilled/`;
+            const employeeId = {{ selected_employee_id|default:"null" }};
+
             fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': '{{ csrf_token }}'
-                }
+                },
+                body: JSON.stringify({
+                    employee_id: employeeId
+                })
             }).then(() => location.reload());
         });
     });
