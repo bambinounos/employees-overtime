@@ -56,8 +56,16 @@ class ChecklistInline(admin.StackedInline):
 
 class CommentInline(admin.TabularInline):
     model = Comment
-    extra = 0
+    extra = 1 # Allow adding comments by default
     readonly_fields = ('user', 'created_at')
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # On the 'add' page, `object_id` will be None.
+        # This prevents existing comments from other tasks from being shown.
+        if not request.resolver_match.kwargs.get('object_id'):
+            return qs.none()
+        return qs
 
 from django.contrib.admin.widgets import AdminSplitDateTime
 
@@ -94,13 +102,26 @@ class TaskAdmin(admin.ModelAdmin):
         return super().render_change_form(request, context, *args, **kwargs)
 
     def save_model(self, request, obj, form, change):
-        # If this is a new task (not being changed), set its order.
-        if not obj.pk:
+        # If this is a new task (not being changed), set its order and creator.
+        if not change: # This is a new object
+            obj.created_by = request.user
             # Get the highest order number from tasks in the same list.
             max_order = Task.objects.filter(list=obj.list).aggregate(Max('order'))['order__max']
             # If there are no other tasks, start at 1. Otherwise, add 1 to the max.
             obj.order = (max_order or 0) + 1
         super().save_model(request, obj, form, change)
+
+    def save_formset(self, request, form, formset, change):
+        """
+        Assign the current user to new comments.
+        """
+        instances = formset.save(commit=False)
+        for instance in instances:
+            # Check if the instance is a Comment and if it's a new one
+            if isinstance(instance, Comment) and not instance.pk:
+                instance.user = request.user
+            instance.save()
+        formset.save_m2m()
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = super().get_fieldsets(request, obj)
