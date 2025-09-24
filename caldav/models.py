@@ -11,6 +11,8 @@ class CalendarEvent(models.Model):
     description = models.TextField(blank=True)
     is_personal = models.BooleanField(default=False)
     task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
+    alarm_minutes = models.IntegerField(null=True, blank=True, help_text="Minutes before the event to trigger an alarm.")
+    uid = models.CharField(max_length=255, unique=True, null=True, blank=True)
 
     def __str__(self):
         return self.title

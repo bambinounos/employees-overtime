@@ -16,10 +16,19 @@
         {
           title: '{{ event.title }}',
           start: '{{ event.start_date|date:"Y-m-d" }}',
-          end: '{{ event.end_date|date:"Y-m-d" }}'
+          end: '{{ event.end_date|date:"Y-m-d" }}',
+          description: '{{ event.description|escapejs }}'
         },
         {% endfor %}
-      ]
+      ],
+      eventDidMount: function(info) {
+        var tooltip = new tippy(info.el, {
+          content: info.event.extendedProps.description,
+          placement: 'top',
+          trigger: 'mouseenter',
+          allowHTML: true,
+        });
+      }
     });
     calendar.render();
   });
