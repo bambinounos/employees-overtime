@@ -19,8 +19,43 @@
 </form>
 
 {% if salary is not None %}
-    <div class="alert alert-info">
-        {% trans "Total salary for" %} {{ year }}-{{ month }}: <strong>${{ salary|floatformat:2 }}</strong>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">{% trans "Salary Breakdown for" %} {{ year }}-{{ month }}</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tbody>
+                    <tr>
+                        <th scope="row">{% trans "Base Salary" %}</th>
+                        <td>${{ salary.base_salary|floatformat:2 }}</td>
+                        <td colspan="2"><em>({% trans "Calculation basis" %}: {% trans salary.calculation_basis|capfirst %})</em></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{% trans "Payment for Hours Worked" %}</th>
+                        <td>${{ salary.work_pay|floatformat:2 }}</td>
+                        <td>{{ salary.total_hours_worked|floatformat:2 }} {% trans "hours" %}</td>
+                        <td>@ ${{ salary.hourly_rate|floatformat:2 }}/{% trans "hour" %}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{% trans "Overtime Pay" %}</th>
+                        <td>${{ salary.overtime_pay|floatformat:2 }}</td>
+                        <td>{{ salary.total_overtime_hours|floatformat:2 }} {% trans "hours" %}</td>
+                        <td>@ ${{ salary.overtime_rate|floatformat:4 }}/{% trans "hour" %}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{% trans "Performance Bonus" %}</th>
+                        <td colspan="3">${{ salary.performance_bonus|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr class="table-active">
+                        <th scope="row" class="text-right">{% trans "Total Salary" %}</th>
+                        <th colspan="3">${{ salary.total_salary|floatformat:2 }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
     </div>
 {% else %}
     <div class="alert alert-warning">

@@ -155,11 +155,12 @@ class Employee(models.Model):
         """
         Calculates the final salary for a given month and year, including base pay,
         overtime, and performance bonus.
+        Returns a dictionary with a detailed breakdown of the salary.
         """
         try:
             base_salary = self.salary.base_amount
         except Salary.DoesNotExist:
-            return 0
+            return None # Return None if no base salary is set
 
         # 1. Calculate pay from worked hours and overtime
         work_logs = WorkLog.objects.filter(employee=self, date__year=year, date__month=month)
@@ -169,6 +170,7 @@ class Employee(models.Model):
         # Load company settings to determine the basis for salary calculation
         settings = CompanySettings.load()
         monthly_hours = Decimal('0.00')
+        work_days_in_month = 0
 
         if settings.calculation_basis == 'monthly':
             monthly_hours = settings.base_hours
@@ -179,11 +181,10 @@ class Employee(models.Model):
             # Calculate the number of working days (Mon-Fri) in the given month and year
             import calendar
             cal = calendar.Calendar()
-            work_days = 0
             for day in cal.itermonthdays2(year, month):
                 if day[0] != 0 and day[1] < 5: # day[1] is the weekday (0=Mon, 6=Sun)
-                    work_days += 1
-            monthly_hours = settings.base_hours * Decimal(work_days)
+                    work_days_in_month += 1
+            monthly_hours = settings.base_hours * Decimal(work_days_in_month)
 
         if monthly_hours <= 0:
              # Fallback to a default if hours are not set, to avoid division by zero
@@ -201,7 +202,22 @@ class Employee(models.Model):
         # 3. Calculate final total salary
         total_salary = work_pay + overtime_pay + performance_bonus
 
-        return total_salary
+        # 4. Return a detailed dictionary
+        return {
+            'base_salary': base_salary,
+            'work_pay': work_pay,
+            'overtime_pay': overtime_pay,
+            'performance_bonus': performance_bonus,
+            'total_salary': total_salary,
+            'total_hours_worked': total_hours_worked,
+            'total_overtime_hours': total_overtime_hours,
+            'hourly_rate': hourly_rate,
+            'overtime_rate': overtime_rate,
+            'calculation_basis': settings.calculation_basis,
+            'base_hours': settings.base_hours,
+            'monthly_hours': monthly_hours,
+            'work_days_in_month': work_days_in_month,
+        }
 
 class Salary(models.Model):
     """Represents the base salary for an employee."""
