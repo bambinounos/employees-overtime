@@ -3,23 +3,28 @@ from wsgidav.dav_provider import DAVCollection, DAVNonCollection
 from caldav.models import CalendarEvent
 import vobject
 from datetime import timedelta
+import hashlib
 
 class RootCollection(DAVCollection):
     def __init__(self, path, environ):
         super().__init__(path, environ)
 
     def get_member_names(self):
-        # Return a list of usernames as calendar names
-        return [user.username for user in User.objects.all()]
+        # Only list the authenticated user's calendar
+        if self.environ.get("wsgidav.auth.user_name"):
+            return [self.environ["wsgidav.auth.user_name"]]
+        return []
 
     def get_member(self, name):
-        # Return a calendar resource for the given user
-        try:
-            user = User.objects.get(username=name)
-            # Return a UserCalendarCollection resource
-            return UserCalendarCollection(f"/{name}", self.environ, user)
-        except User.DoesNotExist:
-            return None
+        # Return a calendar resource for the given user, only if authenticated
+        auth_user = self.environ.get("wsgidav.auth.user_name")
+        if auth_user and name == auth_user:
+            try:
+                user = User.objects.get(username=name)
+                return UserCalendarCollection(f"/{name}", self.environ, user)
+            except User.DoesNotExist:
+                return None
+        return None
 
 class UserCalendarCollection(DAVCollection):
     def __init__(self, path, environ, user):
@@ -55,8 +60,6 @@ class UserCalendarCollection(DAVCollection):
         if hasattr(vevent, 'valarm'):
             trigger = vevent.valarm.trigger.value
             if isinstance(trigger, timedelta):
-                # The trigger is a negative timedelta, so we get the total seconds
-                # and convert to positive minutes.
                 alarm_minutes = int(abs(trigger.total_seconds()) / 60)
 
         event, created = CalendarEvent.objects.update_or_create(
@@ -72,8 +75,6 @@ class UserCalendarCollection(DAVCollection):
         )
 
         return CalendarEventResource(f"{self.path}/{event.id}.ics", self.environ, event)
-
-import hashlib
 
 class CalendarEventResource(DAVNonCollection):
     def __init__(self, path, environ, event):
