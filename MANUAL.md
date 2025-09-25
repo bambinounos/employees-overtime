@@ -274,3 +274,112 @@ Para actualizar una instalación existente a la última versión, siga estos pas
     sudo systemctl restart gunicorn
     ```
     Si está usando el servidor de desarrollo de Django, simplemente deténgalo (`Ctrl+C`) y vuelva a iniciarlo.
+
+## 4. Política de Copias de Seguridad
+
+Mantener copias de seguridad regulares es fundamental para proteger los datos de la aplicación contra fallos de hardware, corrupción de datos o errores humanos. Esta sección describe cómo utilizar el script de backup proporcionado.
+
+### 4.1. ¿Qué se Incluye en la Copia de Seguridad?
+
+El proceso de backup está diseñado para salvaguardar los datos más críticos de la aplicación:
+
+1.  **Base de Datos Completa:** Un volcado completo de la base de datos `salary_management` de PostgreSQL.
+2.  **Archivos de Configuración:**
+    *   `salary_management/settings.py`: Contiene la configuración de Django, incluida la conexión a la base de datos.
+    *   `wsgidav.conf`: Contiene la configuración del servidor de calendarios CalDAV.
+
+### 4.2. El Script `backup.sh`
+
+En la raíz del proyecto se encuentra el script `backup.sh`, que automatiza todo el proceso.
+
+*   **Ubicación de las Copias:** Los backups se guardan en el directorio `backups/` en la raíz del proyecto.
+*   **Formato del Archivo:** Cada copia es un archivo `.tar.gz` con un nombre que incluye la fecha y hora, por ejemplo: `backup_2024-09-25_10-30-00.tar.gz`.
+*   **Retención:** El script elimina automáticamente las copias de seguridad con más de 7 días de antigüedad para evitar el consumo excesivo de espacio en disco.
+
+### 4.3. Ejecutar una Copia de Seguridad Manualmente
+
+Para crear una copia de seguridad en cualquier momento, siga estos pasos:
+
+1.  **Navegue al Directorio del Proyecto:**
+    ```bash
+    cd <NOMBRE_DEL_DIRECTORIO>
+    ```
+
+2.  **Asegúrese de que el Script sea Ejecutable:**
+    La primera vez, debe darle permisos de ejecución.
+    ```bash
+    chmod +x backup.sh
+    ```
+
+3.  **Ejecute el Script:**
+    ```bash
+    ./backup.sh
+    ```
+
+    El script mostrará el progreso en la terminal y le notificará cuando el proceso haya finalizado.
+
+    *Nota sobre la contraseña:* El comando `pg_dump` dentro del script puede solicitarle la contraseña del usuario `salary_manager` de la base de datos. Para automatizar esto, se recomienda configurar un archivo `~/.pgpass`.
+
+### 4.4. Restaurar desde una Copia de Seguridad
+
+Restaurar una copia de seguridad implica dos pasos: restaurar la base de datos y restaurar los archivos de configuración.
+
+#### a. Extraer la Copia de Seguridad
+
+Primero, descomprima el archivo de backup que desea restaurar.
+
+```bash
+# Navegue al directorio de backups
+cd backups/
+
+# Extraiga el contenido (reemplace con el nombre de su archivo)
+tar -xzf backup_2024-09-25_10-30-00.tar.gz
+```
+Esto creará una carpeta `backups/` dentro del directorio actual, que contiene el archivo `db_dump.sql` y los archivos de configuración.
+
+#### b. Restaurar la Base de Datos
+
+Utilice el comando `pg_restore` para cargar el volcado en su base de datos.
+
+```bash
+# El -c (o --clean) elimina los objetos de la base de datos antes de recrearlos
+pg_restore -U salary_manager -d salary_management -c -v backups/db_dump.sql
+```
+*Le pedirá la contraseña del usuario `salary_manager`.*
+
+#### c. Restaurar los Archivos de Configuración
+
+Copie los archivos de configuración extraídos a sus ubicaciones originales.
+
+```bash
+# Desde el directorio raíz del proyecto
+cp backups/salary_management/settings.py salary_management/settings.py
+cp backups/wsgidav.conf wsgidav.conf
+```
+
+### 4.5. Automatizar las Copias de Seguridad con Cron
+
+Para garantizar que las copias de seguridad se realicen de forma regular y desatendida, puede usar `cron`, el programador de tareas de Linux.
+
+1.  **Abra el Editor de Cron:**
+    ```bash
+    crontab -e
+    ```
+    Si es la primera vez, es posible que le pida que elija un editor de texto. Seleccione el que prefiera (por ejemplo, `nano`).
+
+2.  **Añada una Nueva Tarea Programada:**
+    Añada la siguiente línea al final del archivo. Este ejemplo ejecuta el script de backup todos los días a las 2:30 AM.
+
+    ```crontab
+    # m h  dom mon dow   command
+    30 2 * * * /ruta/completa/a/su/proyecto/backup.sh >> /ruta/completa/a/su/proyecto/backups/cron.log 2>&1
+    ```
+
+    **Importante:**
+    *   Reemplace `/ruta/completa/a/su/proyecto/` con la ruta absoluta al directorio raíz de su aplicación (ej: `/home/ubuntu/employees_overtime`).
+    *   `>> backups/cron.log 2>&1` redirige la salida del script (tanto la estándar como los errores) a un archivo de registro, lo cual es útil para la depuración.
+
+3.  **Guarde y Cierre el Archivo:**
+    *   En `nano`, presione `Ctrl+X`, luego `Y` para confirmar, y `Enter`.
+
+Con esto, el sistema creará automáticamente una copia de seguridad cada día a la hora especificada.
