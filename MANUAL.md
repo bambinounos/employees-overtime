@@ -202,22 +202,39 @@ La aplicación ofrece vistas para consultar información clave:
 
 El sistema incluye un servidor WebDAV/CalDAV para exponer los calendarios de los empleados. Esto permite a los usuarios suscribirse a sus calendarios de trabajo utilizando clientes de calendario compatibles (como Thunderbird, Outlook o calendarios de móviles).
 
-*   **Cómo Iniciar el Servidor:**
-    1.  Asegúrese de tener el entorno virtual activado (`source venv/bin/activate`).
-    2.  Ejecute el siguiente script desde el directorio raíz del proyecto:
-        ```bash
-        python3 run_wsgidav.py
-        ```
-    3.  El servidor se iniciará en el puerto `8080`. Verá un mensaje como: `WsgiDAV server running on http://0.0.0.0:8080/`.
+#### a. Cómo Iniciar el Servidor (para Desarrollo)
+Para pruebas locales, puede usar el script `run_wsgidav.py`.
 
-*   **Cómo Usarlo:**
-    1.  Abra su cliente de calendario preferido.
-    2.  Busque la opción para añadir un "Calendario en red" o "Calendario CalDAV".
-    3.  Cuando se le solicite la URL, introduzca la dirección del servidor seguida de su nombre de usuario. Por ejemplo, si su nombre de usuario es `jdoe` y está accediendo desde el mismo servidor, la URL sería:
-        ```
-        http://localhost:8080/jdoe
-        ```
-    4.  El servidor está configurado para **acceso anónimo**, por lo que no necesitará introducir un nombre de usuario o contraseña en su cliente de calendario. Su cliente podrá ver y suscribirse a los eventos del calendario del empleado especificado en la URL.
+1.  Asegúrese de tener el entorno virtual activado (`source venv/bin/activate`).
+2.  Ejecute el siguiente script desde el directorio raíz del proyecto:
+    ```bash
+    python3 run_wsgidav.py
+    ```
+3.  El servidor se iniciará en el puerto `8080`. Verá un mensaje como: `WsgiDAV server running on http://0.0.0.0:8080/`.
+
+#### b. Cómo Desplegar en Producción con Gunicorn
+Para un entorno de producción, se recomienda utilizar Gunicorn por su rendimiento y estabilidad.
+
+1.  **Instale Gunicorn** en su entorno virtual:
+    ```bash
+    pip install gunicorn
+    ```
+2.  **Inicie el servidor** apuntando a la aplicación WSGI de CalDAV:
+    ```bash
+    gunicorn --bind 0.0.0.0:8080 caldav.wsgi:application
+    ```
+    Esto iniciará Gunicorn en el puerto `8080`. Para mayor robustez, considere ejecutar Gunicorn como un servicio de `systemd`.
+
+#### c. Cómo Usarlo
+Para conectar su cliente de calendario, siga estos pasos:
+
+1.  Abra su cliente de calendario preferido (p. ej., Thunderbird).
+2.  Busque la opción para añadir un "Calendario en red" o "Calendario CalDAV".
+3.  Cuando se le solicite la URL, introduzca la dirección del servidor seguida de su nombre de usuario. Por ejemplo:
+    ```
+    http://<IP_DE_SU_SERVIDOR>:8080/jdoe
+    ```
+4.  **Autenticación:** A diferencia de la configuración anterior, el sistema ahora requiere autenticación. Deberá introducir su **nombre de usuario y contraseña de Django** cuando el cliente de calendario se lo solicite.
 
 ## 3. Actualización de la Aplicación
 

@@ -1,5 +1,9 @@
 import os
 import sys
+from wsgidav.wsgidav_app import WsgiDAVApp
+from wsgiref.simple_server import make_server
+from wsgidav.fs_dav_provider import FilesystemProvider
+from caldav.dav_provider import CalDAVProvider
 
 def main():
     # Add the project directory to the python path
@@ -9,34 +13,26 @@ def main():
     import django
     django.setup()
 
+    # Load configuration from a file
+    config_file = os.path.join(os.path.dirname(__file__), "wsgidav.conf")
+    from wsgidav.xml_tools import use_lxml
     from wsgidav.wsgidav_app import WsgiDAVApp
-    from caldav.dav_provider import CalDAVProvider
 
-    config = {
-        "provider_mapping": {
-            "/": CalDAVProvider(),
-        },
-        "host": "0.0.0.0",
-        "port": 8080,
-        "verbose": 1,
-        "props_manager": "wsgidav.props.memory_props_manager.MemoryPropsManager",
-        "locks_manager": "wsgidav.locks.memory_locks_manager.MemoryLocksManager",
-        "http_authenticator": {
-            "domain_controller": None,  # Use SimpleDomainController
-        },
-        "simple_dc": {
-            "user_mapping": {
-                "*": True,  # Allow anonymous access
-            }
-        },
-    }
+    # Check if lxml is available
+    if not use_lxml:
+        print("LXML is not available. Please install it using 'pip install lxml'.")
+        sys.exit(1)
 
-    app = WsgiDAVApp(config)
+    # Create the WsgiDAVApp instance from the configuration file
+    app = WsgiDAVApp.new_from_config(config_file)
+
+    # Get host and port from the app's configuration
+    host = app.config["host"]
+    port = app.config["port"]
 
     # Use a simple WSGI server to run the app
-    from wsgiref.simple_server import make_server
-    httpd = make_server(config["host"], config["port"], app)
-    print(f"WsgiDAV server running on http://{config['host']}:{config['port']}/")
+    httpd = make_server(host, port, app)
+    print(f"WsgiDAV server running on http://{host}:{port}/")
     httpd.serve_forever()
 
 if __name__ == "__main__":
