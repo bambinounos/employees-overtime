@@ -16,8 +16,16 @@ def index(request):
 @login_required
 def employee_list(request):
     """Renders the employee list page."""
-    employees = Employee.objects.all()
-    context = {'employees': employees}
+    show_inactive = request.GET.get('show_inactive') == 'true'
+    if show_inactive:
+        employees = Employee.objects.all().order_by('name')
+    else:
+        employees = Employee.objects.filter(end_date__isnull=True).order_by('name')
+
+    context = {
+        'employees': employees,
+        'show_inactive': show_inactive
+    }
     return render(request, 'employees/employee_list.html', context)
 
 @login_required
@@ -65,7 +73,7 @@ def task_board(request):
         return board
 
     if user.is_superuser:
-        all_employees = Employee.objects.all()
+        all_employees = Employee.objects.filter(end_date__isnull=True)
         employee_id_str = request.GET.get('employee_id')
 
         if employee_id_str:
@@ -95,7 +103,7 @@ def performance_report(request):
     """
     Renders the performance report page or handles CSV export.
     """
-    all_employees = Employee.objects.all()
+    all_employees = Employee.objects.filter(end_date__isnull=True)
     selected_employee_id = request.GET.get('employee_id')
 
     records = None
@@ -294,3 +302,24 @@ def employee_ranking(request):
         'period': period,
     }
     return render(request, 'employees/employee_ranking.html', context)
+
+
+@login_required
+def terminate_employee(request, employee_id):
+    """
+    Sets the end date for an employee's contract to the current date.
+    """
+    if not request.user.is_superuser:
+        messages.error(request, "You do not have permission to perform this action.")
+        return redirect('employee_list')
+
+    if request.method == 'POST':
+        try:
+            employee = Employee.objects.get(pk=employee_id)
+            employee.end_date = date.today()
+            employee.save()
+            messages.success(request, f"The contract for {employee.name} has been terminated.")
+        except Employee.DoesNotExist:
+            messages.error(request, "Employee not found.")
+
+    return redirect('employee_list')

@@ -4,13 +4,23 @@
 {% block title %}{% trans "Employees" %} - {% trans "Salary Management" %}{% endblock %}
 
 {% block content %}
-<h1>{% trans "Employee List" %}</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>{% trans "Employee List" %}</h1>
+    <div>
+        {% if show_inactive %}
+            <a href="{% url 'employee_list' %}" class="btn btn-secondary">{% trans "Hide Inactive" %}</a>
+        {% else %}
+            <a href="{% url 'employee_list' %}?show_inactive=true" class="btn btn-secondary">{% trans "Show Inactive" %}</a>
+        {% endif %}
+    </div>
+</div>
 <table class="table">
     <thead>
         <tr>
             <th>{% trans "Name" %}</th>
             <th>{% trans "Email" %}</th>
             <th>{% trans "Hire Date" %}</th>
+            <th>{% trans "End Date" %}</th>
             <th>{% trans "Actions" %}</th>
         </tr>
     </thead>
@@ -20,8 +30,15 @@
             <td>{{ employee.name }}</td>
             <td>{{ employee.email }}</td>
             <td>{{ employee.hire_date }}</td>
+            <td>{{ employee.end_date|default_if_none:"" }}</td>
             <td>
                 <a href="{% url 'employee_salary' employee.id %}" class="btn btn-info btn-sm">{% trans "Salary" %}</a>
+                {% if not employee.end_date and user.is_superuser %}
+                <form action="{% url 'terminate_employee' employee.id %}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('{% trans "Are you sure you want to terminate this employee\'s contract?" %}')">{% trans "Terminate" %}</button>
+                </form>
+                {% endif %}
             </td>
         </tr>
         {% endfor %}

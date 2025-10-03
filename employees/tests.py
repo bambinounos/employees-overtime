@@ -68,8 +68,8 @@ class PerformanceAndSalaryTest(TestCase):
         # Overtime pay: 5 hours * ($10 * 1.5) = $75.
         # Bonus: $50 for meeting the error KPI.
         # Total = 400 + 75 + 50 = $525
-        total_salary = self.employee.calculate_salary(2024, 8)
-        self.assertEqual(total_salary, Decimal('525.00'))
+        salary_details = self.employee.calculate_salary(2024, 8)
+        self.assertEqual(salary_details['total_salary'], Decimal('525.00'))
 
 class ViewsAndAPITest(TestCase):
     def setUp(self):
@@ -108,3 +108,47 @@ class ViewsAndAPITest(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.list, list2)
         self.assertEqual(task.order, 0)
+
+
+class EmployeeDeactivationTest(TestCase):
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser('admin', 'admin@example.com', 'password')
+        self.active_employee = Employee.objects.create(name='Active Employee', email='active@example.com', hire_date=date(2023, 1, 1))
+        self.inactive_employee = Employee.objects.create(name='Inactive Employee', email='inactive@example.com', hire_date=date(2023, 1, 1), end_date=date(2024, 1, 1))
+
+    def test_employee_list_view(self):
+        self.client.login(username='admin', password='password')
+
+        # Test default view (should only show active employees)
+        response = self.client.get(reverse('employee_list'))
+        self.assertContains(response, self.active_employee.name)
+        self.assertNotContains(response, self.inactive_employee.name)
+
+        # Test view with show_inactive=true
+        response = self.client.get(reverse('employee_list') + '?show_inactive=true')
+        self.assertContains(response, self.active_employee.name)
+        self.assertContains(response, self.inactive_employee.name)
+
+    def test_terminate_employee_view(self):
+        self.client.login(username='admin', password='password')
+
+        # Terminate the active employee
+        response = self.client.post(reverse('terminate_employee', args=[self.active_employee.id]))
+        self.assertEqual(response.status_code, 302) # Should redirect
+
+        self.active_employee.refresh_from_db()
+        self.assertIsNotNone(self.active_employee.end_date)
+
+    def test_dropdowns_only_show_active_employees(self):
+        self.client.login(username='admin', password='password')
+
+        # Test task board view
+        response = self.client.get(reverse('task_board'))
+        self.assertContains(response, self.active_employee.name)
+        self.assertNotContains(response, self.inactive_employee.name)
+
+        # Test performance report view
+        response = self.client.get(reverse('performance_report'))
+        self.assertContains(response, self.active_employee.name)
+        self.assertNotContains(response, self.inactive_employee.name)
