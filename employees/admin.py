@@ -1,10 +1,32 @@
 from django.contrib import admin
 from django.db.models import Max
+from django.urls import reverse
+from django.http import HttpResponseRedirect
 from .models import (
     Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard,
     TaskList, Task, Checklist, ChecklistItem, Comment, EmployeePerformanceRecord,
-    ManualKpiEntry
+    ManualKpiEntry, SiteConfiguration
 )
+
+@admin.register(SiteConfiguration)
+class SiteConfigurationAdmin(admin.ModelAdmin):
+    """
+    Admin interface for the singleton SiteConfiguration model.
+    Redirects from the list view to the change view of the single object.
+    """
+    def changelist_view(self, request, extra_context=None):
+        # Get or create the single SiteConfiguration object
+        obj, created = SiteConfiguration.objects.get_or_create(pk=1)
+        # Redirect to its change view
+        return HttpResponseRedirect(reverse('admin:employees_siteconfiguration_change', args=(obj.id,)))
+
+    def has_add_permission(self, request):
+        # Prevent adding new instances
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deleting the instance
+        return False
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
