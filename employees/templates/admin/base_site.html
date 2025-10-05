@@ -11,5 +11,9 @@
 
 {% block extrahead %}
 {{ block.super }}
-<link rel="icon" type="image/x-icon" href="{% static 'employees/img/favicon.ico' %}">
+{% if site_config.favicon %}
+    <link rel="icon" href="{{ site_config.favicon.url }}">
+{% else %}
+    <link rel="icon" type="image/x-icon" href="{% static 'employees/img/favicon.ico' %}">
+{% endif %}
 {% endblock %}

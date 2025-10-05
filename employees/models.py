@@ -421,3 +421,21 @@ class CompanySettings(models.Model):
         # Convenience method to get the single settings object
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
+
+class SiteConfiguration(models.Model):
+    """Singleton model to store site-wide configuration, like the favicon."""
+    favicon = models.ImageField(upload_to='favicons/', null=True, blank=True, help_text="Upload a custom favicon for the site.")
+
+    def __str__(self):
+        return "Site Configuration"
+
+    def save(self, *args, **kwargs):
+        # Enforce a single instance of settings
+        self.pk = 1
+        super(SiteConfiguration, self).save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        # Convenience method to get the single settings object
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
