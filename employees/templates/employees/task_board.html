@@ -76,21 +76,21 @@
         <div class="task-list-header">{{ list.name }}</div>
         <div class="list-cards" data-list-id="{{ list.id }}">
             {% for task in list.tasks.all %}
-            <div class="task-card" data-task-id="{{ task.id }}">
-                {{ task.title }}
-                <div class="task-due-date">
-                    {% if task.due_date %}
-                        {{ task.due_date|date:"Y-m-d H:i" }}
-                    {% endif %}
-                </div>
-                <span class="task-status status-{{ task.status }}">{{ task.get_status_display }}</span>
-                {% if user.is_superuser %}
-                <div>
-                    <button class="btn btn-sm btn-success complete-btn" data-task-id="{{ task.id }}">{% trans "Complete" %}</button>
-                    <button class="btn btn-sm btn-danger unfulfilled-btn" data-task-id="{{ task.id }}">{% trans "Unfulfilled" %}</button>
+                {% if not task.is_recurring %}
+                <div class="task-card" data-task-id="{{ task.id }}">
+                    {{ task.title }}
+                    <div class="task-due-date">
+                        {% if task.due_date %}
+                            <strong>{% trans "Due:" %}</strong> {{ task.due_date|date:"Y-m-d H:i" }}
+                        {% endif %}
+                    </div>
+                    <span class="task-status status-{{ task.status }}">{{ task.get_status_display }}</span>
+                    <div>
+                        <button class="btn btn-sm btn-success complete-btn" data-task-id="{{ task.id }}">{% trans "Complete" %}</button>
+                        <button class="btn btn-sm btn-danger unfulfilled-btn" data-task-id="{{ task.id }}">{% trans "Unfulfilled" %}</button>
+                    </div>
                 </div>
                 {% endif %}
-            </div>
             {% endfor %}
         </div>
     </div>
