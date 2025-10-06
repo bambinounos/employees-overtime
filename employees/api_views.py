@@ -5,6 +5,8 @@ from .models import WorkLog, TaskBoard, Task, EmployeePerformanceRecord, Employe
 from .serializers import WorkLogSerializer, TaskBoardSerializer, TaskSerializer
 from datetime import date, timedelta
 from collections import defaultdict
+from dateutil.relativedelta import relativedelta
+from django.db import transaction
 
 class WorkLogViewSet(viewsets.ModelViewSet):
     queryset = WorkLog.objects.all()
@@ -32,15 +34,78 @@ class TaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         This view should return a list of all the tasks
-        for the currently authenticated user.
-        If the user is a superuser, it should return all tasks.
+        for the currently authenticated user, excluding recurring templates.
+        If the user is a superuser, it should return all tasks (excluding templates).
         """
         user = self.request.user
+        base_queryset = Task.objects.filter(is_recurring=False)
+
         if user.is_superuser:
-            return Task.objects.all()
+            return base_queryset
         if hasattr(user, 'employee'):
-            return Task.objects.filter(assigned_to=user.employee)
+            return base_queryset.filter(assigned_to=user.employee)
         return Task.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        """
+        Overrides the create method to handle recurring tasks.
+        If a task is marked as recurring, it creates a parent "template" task
+        and then generates a series of individual child tasks.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        is_recurring = serializer.validated_data.get('is_recurring', False)
+
+        if not is_recurring:
+            # Default behavior: create a single task
+            serializer.save(created_by=request.user)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+        # Recurring task logic
+        try:
+            with transaction.atomic():
+                # 1. Create the parent "template" task
+                parent_task = serializer.save(created_by=request.user)
+
+                # 2. Generate child tasks based on recurrence
+                frequency = serializer.validated_data.get('recurrence_frequency')
+                end_date = serializer.validated_data.get('recurrence_end_date')
+                current_due_date = parent_task.due_date
+
+                while current_due_date.date() <= end_date:
+                    Task.objects.create(
+                        parent_task=parent_task,
+                        list=parent_task.list,
+                        assigned_to=parent_task.assigned_to,
+                        created_by=request.user,
+                        kpi=parent_task.kpi,
+                        title=f"{parent_task.title} - {current_due_date.strftime('%Y-%m-%d')}",
+                        description=parent_task.description,
+                        order=parent_task.order,
+                        due_date=current_due_date,
+                        is_recurring=False # Child tasks are not recurring themselves
+                    )
+
+                    # Increment date for the next iteration
+                    if frequency == 'daily':
+                        current_due_date += timedelta(days=1)
+                    elif frequency == 'weekly':
+                        current_due_date += timedelta(weeks=1)
+                    elif frequency == 'monthly':
+                        current_due_date += relativedelta(months=1)
+                    elif frequency == 'yearly':
+                        current_due_date += relativedelta(years=1)
+                    else:
+                        break # Should not happen due to validation
+
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
     @action(detail=True, methods=['post'])
     def move(self, request, pk=None):

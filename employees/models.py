@@ -295,6 +295,7 @@ class Task(models.Model):
     """A task (card) on a task list."""
     RECURRENCE_CHOICES = [
         ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
         ('monthly', 'Monthly'),
         ('yearly', 'Yearly'),
     ]
