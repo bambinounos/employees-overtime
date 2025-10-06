@@ -204,26 +204,38 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         return Response({'status': 'task marked as complete', 'task': self.get_serializer(task).data})
 
-    @action(detail=True, methods=['post'], permission_classes=[])
+    @action(detail=True, methods=['post'])
     def mark_as_unfulfilled(self, request, pk=None):
-        """Mark a task as unfulfilled."""
-        if not request.user.is_superuser:
-            return Response({"error": "Only administrators can perform this action."}, status=status.HTTP_403_FORBIDDEN)
-
+        """Mark a task as unfulfilled and move it to the 'Pendiente' list."""
         task = self.get_object()
+
+        # A user can only un-fulfill their own tasks, unless they are a superuser.
+        if not request.user.is_superuser and task.assigned_to.user != request.user:
+            return Response({"error": "You do not have permission to modify this task."}, status=status.HTTP_403_FORBIDDEN)
+
+        from .models import TaskList
         task.status = 'unfulfilled'
-        task.completed_at = None # Also clear the completion date
+        task.completed_at = None  # Also clear the completion date
+
+        # Move the task back to the "Pendiente" list
+        try:
+            board = task.list.board
+            pending_list = board.lists.get(name__iexact="Pendiente")
+            task.list = pending_list
+        except TaskList.DoesNotExist:
+            # If for some reason the list doesn't exist, we can't move it,
+            # but we should still save the status change.
+            pass
+
         task.save()
 
         # Recalculate bonus for the affected employee
-        employee_id = request.data.get('employee_id')
-        if employee_id:
-            try:
-                employee = Employee.objects.get(pk=employee_id)
-                today = date.today()
-                employee.calculate_performance_bonus(today.year, today.month)
-            except Employee.DoesNotExist:
-                pass
+        try:
+            employee = task.assigned_to
+            today = date.today()
+            employee.calculate_performance_bonus(today.year, today.month)
+        except Employee.DoesNotExist:
+            pass
 
         return Response({'status': 'task marked as unfulfilled'})
 
