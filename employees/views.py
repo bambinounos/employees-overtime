@@ -316,10 +316,14 @@ def terminate_employee(request, employee_id):
     if request.method == 'POST':
         try:
             employee = Employee.objects.get(pk=employee_id)
-            employee.end_date = date.today()
-            employee.save()
-            messages.success(request, f"The contract for {employee.name} has been terminated.")
+            # Use the is_active property to prevent terminating an already inactive employee
+            if employee.is_active:
+                employee.end_date = date.today()
+                employee.save()
+                messages.success(request, f"El contrato de {employee.name} ha sido terminado.")
+            else:
+                messages.warning(request, f"{employee.name} ya se encuentra inactivo.")
         except Employee.DoesNotExist:
-            messages.error(request, "Employee not found.")
+            messages.error(request, "Empleado no encontrado.")
 
     return redirect('employee_list')

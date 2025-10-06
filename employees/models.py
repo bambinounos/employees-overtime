@@ -16,6 +16,11 @@ class Employee(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def is_active(self):
+        """Returns True if the employee is currently active."""
+        return self.end_date is None
+
     def calculate_ipac(self, year, month):
         """
         Calculates the Quality-Adjusted Productivity Index (IPAC) for a given month.

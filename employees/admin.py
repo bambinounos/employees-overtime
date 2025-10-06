@@ -30,8 +30,23 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'hire_date')
+    list_display = ('name', 'email', 'hire_date', 'end_date', 'is_active_status')
     search_fields = ('name', 'email')
+    list_filter = ('end_date',)
+
+    @admin.display(boolean=True, description='Active')
+    def is_active_status(self, obj):
+        return obj.is_active
+
+    def save_model(self, request, obj, form, change):
+        """
+        When creating a new employee, ensure the end_date is None unless a value
+        is explicitly provided. This prevents incorrect database-level defaults
+        from making new employees inactive.
+        """
+        if not change and not form.cleaned_data.get('end_date'):
+            obj.end_date = None
+        super().save_model(request, obj, form, change)
 
 @admin.register(Salary)
 class SalaryAdmin(admin.ModelAdmin):
