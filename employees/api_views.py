@@ -139,30 +139,70 @@ class TaskViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['post'], permission_classes=[])
+    @action(detail=True, methods=['post'])
     def mark_as_complete(self, request, pk=None):
-        """Mark a task as complete."""
-        if not request.user.is_superuser:
-            return Response({"error": "Only administrators can perform this action."}, status=status.HTTP_403_FORBIDDEN)
+        """
+        Mark a task as complete. If it's a recurring task, generate the next one.
+        """
+        task = self.get_object()
+
+        # A user can only complete their own tasks, unless they are a superuser.
+        if not request.user.is_superuser and task.assigned_to.user != request.user:
+            return Response({"error": "You do not have permission to modify this task."}, status=status.HTTP_403_FORBIDDEN)
 
         from datetime import datetime
-        task = self.get_object()
-        task.status = 'completed'
-        task.completed_at = datetime.now()
-        task.save()
+        from .models import TaskList
 
-        # Recalculate bonus for the affected employee
-        employee_id = request.data.get('employee_id')
-        if employee_id:
+        with transaction.atomic():
+            task.status = 'completed'
+            task.completed_at = datetime.now()
+            task.save()
+
+            # If this is an instance of a recurring task, create the next one.
+            if task.parent_task:
+                parent = task.parent_task
+
+                # Calculate the next due date
+                if parent.recurrence_frequency == 'daily':
+                    next_due_date = task.due_date + timedelta(days=1)
+                elif parent.recurrence_frequency == 'weekly':
+                    next_due_date = task.due_date + timedelta(weeks=1)
+                elif parent.recurrence_frequency == 'monthly':
+                    next_due_date = task.due_date + relativedelta(months=1)
+                elif parent.recurrence_frequency == 'yearly':
+                    next_due_date = task.due_date + relativedelta(years=1)
+                else:
+                    next_due_date = None
+
+                # Create the next task if it's within the recurrence end date
+                if next_due_date and parent.recurrence_end_date and next_due_date.date() <= parent.recurrence_end_date:
+                    try:
+                        pending_list = parent.list
+                    except TaskList.DoesNotExist:
+                        pending_list = task.list # Fallback
+
+                    Task.objects.create(
+                        parent_task=parent,
+                        list=pending_list,
+                        assigned_to=parent.assigned_to,
+                        created_by=parent.created_by,
+                        kpi=parent.kpi,
+                        title=f"{parent.title} - {next_due_date.strftime('%Y-%m-%d')}",
+                        description=parent.description,
+                        order=parent.order,
+                        due_date=next_due_date,
+                        is_recurring=False
+                    )
+
+            # Recalculate bonus for the affected employee
             try:
-                employee = Employee.objects.get(pk=employee_id)
+                employee = task.assigned_to
                 today = date.today()
                 employee.calculate_performance_bonus(today.year, today.month)
             except Employee.DoesNotExist:
-                # Handle case where employee_id is invalid, though this shouldn't happen
                 pass
 
-        return Response({'status': 'task marked as complete'})
+        return Response({'status': 'task marked as complete', 'task': self.get_serializer(task).data})
 
     @action(detail=True, methods=['post'], permission_classes=[])
     def mark_as_unfulfilled(self, request, pk=None):
