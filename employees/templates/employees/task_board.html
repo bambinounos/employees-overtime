@@ -85,10 +85,12 @@
                         {% endif %}
                     </div>
                     <span class="task-status status-{{ task.status }}">{{ task.get_status_display }}</span>
+                    {% if user.is_superuser %}
                     <div>
                         <button class="btn btn-sm btn-success complete-btn" data-task-id="{{ task.id }}">{% trans "Complete" %}</button>
                         <button class="btn btn-sm btn-danger unfulfilled-btn" data-task-id="{{ task.id }}">{% trans "Unfulfilled" %}</button>
                     </div>
+                    {% endif %}
                 </div>
                 {% endif %}
             {% endfor %}
