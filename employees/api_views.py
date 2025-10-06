@@ -146,9 +146,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         """
         task = self.get_object()
 
-        # A user can only complete their own tasks, unless they are a superuser.
-        if not request.user.is_superuser and task.assigned_to.user != request.user:
-            return Response({"error": "You do not have permission to modify this task."}, status=status.HTTP_403_FORBIDDEN)
+        # Only superusers can mark tasks as complete.
+        if not request.user.is_superuser:
+            return Response({"error": "You do not have permission to perform this action."}, status=status.HTTP_403_FORBIDDEN)
 
         from datetime import datetime
         from .models import TaskList
@@ -209,9 +209,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         """Mark a task as unfulfilled and move it to the 'Pendiente' list."""
         task = self.get_object()
 
-        # A user can only un-fulfill their own tasks, unless they are a superuser.
-        if not request.user.is_superuser and task.assigned_to.user != request.user:
-            return Response({"error": "You do not have permission to modify this task."}, status=status.HTTP_403_FORBIDDEN)
+        # Only superusers can mark tasks as un-fulfilled.
+        if not request.user.is_superuser:
+            return Response({"error": "You do not have permission to perform this action."}, status=status.HTTP_403_FORBIDDEN)
 
         from .models import TaskList
         task.status = 'unfulfilled'
