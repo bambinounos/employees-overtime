@@ -3,6 +3,10 @@ from .models import Employee, WorkLog, Task, TaskList, TaskBoard
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=Employee.objects.filter(end_date__isnull=True)
+    )
+
     class Meta:
         model = Task
         fields = [
