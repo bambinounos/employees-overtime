@@ -120,7 +120,8 @@ class TaskAdmin(admin.ModelAdmin):
         # This is a fix for a UI bug where the 'assigned_to' dropdown shows
         # duplicate employees. The root cause is unclear from the current codebase,
         # but ensuring the queryset is distinct solves the immediate problem.
-        context['adminform'].form.fields['assigned_to'].queryset = Employee.objects.distinct()
+        # It also now filters to only show active employees.
+        context['adminform'].form.fields['assigned_to'].queryset = Employee.objects.filter(end_date__isnull=True)
         return super().render_change_form(request, context, *args, **kwargs)
 
     def save_model(self, request, obj, form, change):
