@@ -152,3 +152,41 @@ class EmployeeDeactivationTest(TestCase):
         response = self.client.get(reverse('performance_report'))
         self.assertContains(response, self.active_employee.name)
         self.assertNotContains(response, self.inactive_employee.name)
+
+    def test_task_serializer_filters_inactive_employees(self):
+        """
+        Verify that the TaskSerializer's 'assigned_to' field only allows active employees.
+        """
+        api_client = APIClient()
+        api_client.force_authenticate(user=self.superuser)
+
+        board = TaskBoard.objects.create(employee=self.active_employee, name="Test Board")
+        task_list = TaskList.objects.create(board=board, name="To Do", order=1)
+
+        # Case 1: Try to assign a task to an INACTIVE employee (should fail)
+        invalid_data = {
+            'title': 'Test Task for Inactive Employee',
+            'list': task_list.id,
+            'assigned_to': self.inactive_employee.id,
+            'order': 1
+        }
+        url = reverse('task-list')
+        response = api_client.post(url, invalid_data, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('assigned_to', response.data)
+        # Check for the Spanish translation of the error message.
+        self.assertTrue('inválid' in str(response.data['assigned_to'][0]))
+
+        # Case 2: Try to assign a task to an ACTIVE employee (should succeed)
+        valid_data = {
+            'title': 'Test Task for Active Employee',
+            'list': task_list.id,
+            'assigned_to': self.active_employee.id,
+            'order': 1
+        }
+        response = api_client.post(url, valid_data, format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(Task.objects.count(), 1)
+        self.assertEqual(Task.objects.first().assigned_to, self.active_employee)
