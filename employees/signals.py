@@ -29,7 +29,7 @@ def handle_recurring_task(sender, instance, created, **kwargs):
     elif instance.recurrence_frequency == 'yearly':
         next_due_date = instance.due_date + relativedelta(years=1)
 
-    if not next_due_date or (instance.recurrence_end_date and next_due_date > instance.recurrence_end_date):
+    if not next_due_date or (instance.recurrence_end_date and next_due_date.date() > instance.recurrence_end_date):
         return
 
     try:
