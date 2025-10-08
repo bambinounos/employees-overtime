@@ -22,6 +22,7 @@
         margin-bottom: 12px;
     }
     .task-card {
+        position: relative; /* Needed for tooltip positioning */
         background-color: #ffffff;
         border-radius: 3px;
         box-shadow: 0 1px 0 rgba(9,30,66,.25);
@@ -46,6 +47,49 @@
     .status-pending { background-color: #0079bf; }
     .status-completed { background-color: #61bd4f; }
     .status-unfulfilled { background-color: #eb5a46; }
+
+    /* Tooltip styles */
+    #task-tooltip {
+        display: none;
+        position: absolute;
+        width: 300px;
+        background-color: #fff;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        padding: 15px;
+        z-index: 1000;
+        font-size: 14px;
+    }
+    #task-tooltip h5 {
+        font-size: 16px;
+        margin-top: 0;
+    }
+    #task-tooltip p {
+        margin-bottom: 10px;
+        white-space: pre-wrap; /* Respect newlines in description */
+    }
+    #tooltip-due-date {
+        font-weight: bold;
+        padding: 3px 6px;
+        border-radius: 3px;
+        color: #fff;
+    }
+    .due-date-vencido { background-color: #eb5a46; } /* Red */
+    .due-date-por_vencer { background-color: #f2d600; } /* Yellow */
+    .due-date-a_tiempo { background-color: #61bd4f; } /* Green */
+
+    #tooltip-checklist ul {
+        list-style-type: none;
+        padding-left: 0;
+    }
+    #tooltip-checklist li {
+        text-decoration: none;
+    }
+    #tooltip-checklist li.completed {
+        text-decoration: line-through;
+        color: #888;
+    }
 </style>
 
 <h1>{% trans "Task Board" %}</h1>
@@ -107,9 +151,25 @@
     {% endif %}
 {% endif %}
 
+<!-- Tooltip HTML Structure -->
+<div id="task-tooltip">
+    <h5 id="tooltip-title"></h5>
+    <p id="tooltip-description"></p>
+    <div id="tooltip-due-date-container" class="mb-2">
+        <strong>{% trans "Due Date:" %}</strong>
+        <span id="tooltip-due-date"></span>
+    </div>
+    <div id="tooltip-checklist">
+        <h6>{% trans "Checklist" %}</h6>
+        <ul id="tooltip-checklist-items"></ul>
+    </div>
+</div>
+
+
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // SortableJS logic (existing)
     const lists = document.querySelectorAll('.list-cards');
     lists.forEach(list => {
         new Sortable(list, {
@@ -129,57 +189,101 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': '{{ csrf_token }}'
                     },
-                    body: JSON.stringify({
-                        list_id: toListId,
-                        order: newIndex
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error('Error moving task:', data.error);
-                    }
-                })
-                .catch(error => console.error('Error:', error));
+                    body: JSON.stringify({ list_id: toListId, order: newIndex })
+                }).then(response => response.json()).then(data => {
+                    if (data.error) console.error('Error moving task:', data.error);
+                }).catch(error => console.error('Error:', error));
             }
         });
     });
 
+    // Button logic (existing)
     document.querySelectorAll('.complete-btn').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation();
             const taskId = this.dataset.taskId;
             const url = `/api/tasks/${taskId}/mark_as_complete/`;
-            const employeeId = {{ selected_employee_id|default:"null" }};
-
             fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({
-                    employee_id: employeeId
-                })
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({ employee_id: {{ selected_employee_id|default:"null" }} })
             }).then(() => location.reload());
         });
     });
 
     document.querySelectorAll('.unfulfilled-btn').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation();
             const taskId = this.dataset.taskId;
             const url = `/api/tasks/${taskId}/mark_as_unfulfilled/`;
-            const employeeId = {{ selected_employee_id|default:"null" }};
-
             fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({
-                    employee_id: employeeId
-                })
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({ employee_id: {{ selected_employee_id|default:"null" }} })
             }).then(() => location.reload());
+        });
+    });
+
+    // --- Tooltip Logic ---
+    const tooltip = document.getElementById('task-tooltip');
+    const taskCards = document.querySelectorAll('.task-card');
+    let hoverTimeout;
+
+    taskCards.forEach(card => {
+        card.addEventListener('mouseenter', function (e) {
+            const taskId = this.dataset.taskId;
+
+            hoverTimeout = setTimeout(() => {
+                fetch(`/api/tasks/${taskId}/`)
+                    .then(response => response.json())
+                    .then(task => {
+                        // Populate tooltip
+                        document.getElementById('tooltip-title').textContent = task.title;
+                        document.getElementById('tooltip-description').textContent = task.description || '{% trans "No description." %}';
+
+                        // Due Date
+                        const dueDateContainer = document.getElementById('tooltip-due-date-container');
+                        if (task.due_date) {
+                            const dueDateEl = document.getElementById('tooltip-due-date');
+                            const date = new Date(task.due_date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            dueDateEl.textContent = date;
+                            dueDateEl.className = `due-date-${task.due_date_status}`;
+                            dueDateContainer.style.display = 'block';
+                        } else {
+                            dueDateContainer.style.display = 'none';
+                        }
+
+                        // Checklist
+                        const checklistContainer = document.getElementById('tooltip-checklist');
+                        const checklistItemsEl = document.getElementById('tooltip-checklist-items');
+                        checklistItemsEl.innerHTML = ''; // Clear previous items
+                        if (task.checklists && task.checklists.length > 0 && task.checklists[0].items.length > 0) {
+                            task.checklists[0].items.forEach(item => {
+                                const li = document.createElement('li');
+                                li.textContent = item.text;
+                                if (item.is_completed) {
+                                    li.classList.add('completed');
+                                }
+                                checklistItemsEl.appendChild(li);
+                            });
+                            checklistContainer.style.display = 'block';
+                        } else {
+                            checklistContainer.style.display = 'none';
+                        }
+
+                        // Position and show tooltip
+                        const rect = card.getBoundingClientRect();
+                        tooltip.style.left = `${rect.left + window.scrollX}px`;
+                        tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
+                        tooltip.style.display = 'block';
+                    })
+                    .catch(error => console.error('Error fetching task details:', error));
+            }, 500); // Delay of 500ms
+        });
+
+        card.addEventListener('mouseleave', function () {
+            clearTimeout(hoverTimeout);
+            tooltip.style.display = 'none';
         });
     });
 });
