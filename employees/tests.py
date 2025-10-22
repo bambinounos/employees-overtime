@@ -8,7 +8,7 @@ from .models import (
     ManualKpiEntry, EmployeePerformanceRecord
 )
 from decimal import Decimal
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from django.utils import timezone
 
 class PerformanceAndSalaryTest(TestCase):
@@ -190,3 +190,44 @@ class EmployeeDeactivationTest(TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(Task.objects.count(), 1)
         self.assertEqual(Task.objects.first().assigned_to, self.active_employee)
+
+
+class RecurringTaskTest(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser('admin', 'admin@example.com', 'password')
+        self.employee = Employee.objects.create(name='Recurring Task Employee', email='recurring@example.com', hire_date=date(2023, 1, 1))
+        self.api_client = APIClient()
+        self.api_client.force_authenticate(user=self.superuser)
+
+        self.board = TaskBoard.objects.create(employee=self.employee, name="Test Board")
+        self.task_list = TaskList.objects.create(board=self.board, name="To Do", order=1)
+
+    def test_recurring_task_generation(self):
+        # 1. Create a weekly recurring task
+        start_date = date.today() - timedelta(days=10)
+        end_date = date.today() + timedelta(days=20)
+        task_data = {
+            'title': 'Weekly Report',
+            'list': self.task_list.id,
+            'assigned_to': self.employee.id,
+            'order': 1,
+            'is_recurring': True,
+            'recurrence_frequency': 'weekly',
+            'due_date': start_date,
+            'recurrence_end_date': end_date
+        }
+        url = reverse('task-list')
+        response = self.api_client.post(url, task_data, format='json')
+        self.assertEqual(response.status_code, 201)
+
+        # 2. Verify initial creation
+        # Should have one parent task and one child instance
+        self.assertEqual(Task.objects.filter(is_recurring=True).count(), 1)
+        self.assertEqual(Task.objects.filter(is_recurring=False).count(), 1)
+
+        # 3. Trigger on-demand generation by accessing the task list
+        self.api_client.get(url)
+
+        # 4. Assert that the next task instance is created
+        # We expect two instances to have been created: one for last week and one for this week.
+        self.assertEqual(Task.objects.filter(is_recurring=False).count(), 2)
