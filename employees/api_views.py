@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 from django.db import transaction
+from django.utils import timezone
 
 class WorkLogViewSet(viewsets.ModelViewSet):
     queryset = WorkLog.objects.all()
@@ -53,7 +54,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             parent_tasks = Task.objects.filter(
                 assigned_to=employee,
                 is_recurring=True,
-                recurrence_end_date__gte=date.today()
+                recurrence_end_date__gte=timezone.now().date()
             )
             for parent in parent_tasks:
                 self.generate_missing_tasks(parent)
@@ -89,7 +90,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 return # Should not happen
 
         # Generate all missing tasks up to today
-        while next_due_date.date() <= date.today() and next_due_date.date() <= parent_task.recurrence_end_date:
+        while next_due_date.date() <= timezone.now().date() and next_due_date.date() <= parent_task.recurrence_end_date:
             Task.objects.create(
                 parent_task=parent_task,
                 list=parent_task.list,
@@ -176,7 +177,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             task.order = new_order
 
             if new_list.name.lower() == 'hecho':
-                task.completed_at = datetime.now()
+                task.completed_at = timezone.now()
                 task.status = 'completed'
 
             task.save()
@@ -202,13 +203,13 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             task.status = 'completed'
-            task.completed_at = datetime.now()
+            task.completed_at = timezone.now()
             task.save()
 
             # Recalculate bonus for the affected employee
             try:
                 employee = task.assigned_to
-                today = date.today()
+                today = timezone.now().date()
                 employee.calculate_performance_bonus(today.year, today.month)
             except Employee.DoesNotExist:
                 pass
@@ -243,7 +244,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Recalculate bonus for the affected employee
         try:
             employee = task.assigned_to
-            today = date.today()
+            today = timezone.now().date()
             employee.calculate_performance_bonus(today.year, today.month)
         except Employee.DoesNotExist:
             pass
@@ -261,7 +262,7 @@ def kpi_history_api(request, employee_id):
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Calculate the date 12 months ago from the first day of the current month
-    today = date.today()
+    today = timezone.now().date()
     twelve_months_ago = (today.replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=365)
 
 
