@@ -36,15 +36,81 @@ class TaskViewSet(viewsets.ModelViewSet):
         This view should return a list of all the tasks
         for the currently authenticated user, excluding recurring templates.
         If the user is a superuser, it should return all tasks (excluding templates).
+        Before returning, it checks for and generates any overdue recurring task instances.
         """
         user = self.request.user
-        base_queryset = Task.objects.filter(is_recurring=False)
 
+        # Determine the base set of employees to check tasks for
+        if user.is_superuser:
+            employees = Employee.objects.all()
+        elif hasattr(user, 'employee'):
+            employees = Employee.objects.filter(pk=user.employee.pk)
+        else:
+            return Task.objects.none()
+
+        # Generate recurring tasks that are due
+        for employee in employees:
+            parent_tasks = Task.objects.filter(
+                assigned_to=employee,
+                is_recurring=True,
+                recurrence_end_date__gte=date.today()
+            )
+            for parent in parent_tasks:
+                self.generate_missing_tasks(parent)
+
+        # Return the visible tasks (non-templates) for the user
+        base_queryset = Task.objects.filter(is_recurring=False)
         if user.is_superuser:
             return base_queryset
         if hasattr(user, 'employee'):
             return base_queryset.filter(assigned_to=user.employee)
         return Task.objects.none()
+
+    def generate_missing_tasks(self, parent_task):
+        """
+        Generates instances for a recurring task that are due but not yet created.
+        """
+        last_instance = Task.objects.filter(parent_task=parent_task).order_by('-due_date').first()
+
+        if not last_instance:
+            # This shouldn't happen if the first instance is created with the parent, but as a fallback.
+            next_due_date = parent_task.due_date
+        else:
+            # Calculate the next due date from the last instance
+            if parent_task.recurrence_frequency == 'daily':
+                next_due_date = last_instance.due_date + timedelta(days=1)
+            elif parent_task.recurrence_frequency == 'weekly':
+                next_due_date = last_instance.due_date + timedelta(weeks=1)
+            elif parent_task.recurrence_frequency == 'monthly':
+                next_due_date = last_instance.due_date + relativedelta(months=1)
+            elif parent_task.recurrence_frequency == 'yearly':
+                next_due_date = last_instance.due_date + relativedelta(years=1)
+            else:
+                return # Should not happen
+
+        # Generate all missing tasks up to today
+        while next_due_date.date() <= date.today() and next_due_date.date() <= parent_task.recurrence_end_date:
+            Task.objects.create(
+                parent_task=parent_task,
+                list=parent_task.list,
+                assigned_to=parent_task.assigned_to,
+                created_by=parent_task.created_by,
+                kpi=parent_task.kpi,
+                title=f"{parent_task.title} - {next_due_date.strftime('%Y-%m-%d')}",
+                description=parent_task.description,
+                order=parent_task.order,
+                due_date=next_due_date,
+                is_recurring=False
+            )
+            # Increment date for the next potential loop
+            if parent_task.recurrence_frequency == 'daily':
+                next_due_date += timedelta(days=1)
+            elif parent_task.recurrence_frequency == 'weekly':
+                next_due_date += timedelta(weeks=1)
+            elif parent_task.recurrence_frequency == 'monthly':
+                next_due_date += relativedelta(months=1)
+            elif parent_task.recurrence_frequency == 'yearly':
+                next_due_date += relativedelta(years=1)
 
     def create(self, request, *args, **kwargs):
         """
@@ -68,41 +134,22 @@ class TaskViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 # 1. Create the parent "template" task
                 parent_task = serializer.save(created_by=request.user)
-
-                # 2. Generate child tasks based on recurrence
-                frequency = serializer.validated_data.get('recurrence_frequency')
-                end_date = serializer.validated_data.get('recurrence_end_date')
-                current_due_date = parent_task.due_date
-
-                while current_due_date.date() <= end_date:
+                # 2. Generate the first visible task instance
+                if parent_task.due_date and parent_task.recurrence_end_date and parent_task.due_date.date() <= parent_task.recurrence_end_date:
                     Task.objects.create(
                         parent_task=parent_task,
                         list=parent_task.list,
                         assigned_to=parent_task.assigned_to,
                         created_by=request.user,
                         kpi=parent_task.kpi,
-                        title=f"{parent_task.title} - {current_due_date.strftime('%Y-%m-%d')}",
+                        title=f"{parent_task.title} - {parent_task.due_date.strftime('%Y-%m-%d')}",
                         description=parent_task.description,
                         order=parent_task.order,
-                        due_date=current_due_date,
-                        is_recurring=False # Child tasks are not recurring themselves
+                        due_date=parent_task.due_date,
+                        is_recurring=False  # Child tasks are not recurring themselves
                     )
-
-                    # Increment date for the next iteration
-                    if frequency == 'daily':
-                        current_due_date += timedelta(days=1)
-                    elif frequency == 'weekly':
-                        current_due_date += timedelta(weeks=1)
-                    elif frequency == 'monthly':
-                        current_due_date += relativedelta(months=1)
-                    elif frequency == 'yearly':
-                        current_due_date += relativedelta(years=1)
-                    else:
-                        break # Should not happen due to validation
-
             headers = self.get_success_headers(serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -157,42 +204,6 @@ class TaskViewSet(viewsets.ModelViewSet):
             task.status = 'completed'
             task.completed_at = datetime.now()
             task.save()
-
-            # If this is an instance of a recurring task, create the next one.
-            if task.parent_task:
-                parent = task.parent_task
-
-                # Calculate the next due date
-                if parent.recurrence_frequency == 'daily':
-                    next_due_date = task.due_date + timedelta(days=1)
-                elif parent.recurrence_frequency == 'weekly':
-                    next_due_date = task.due_date + timedelta(weeks=1)
-                elif parent.recurrence_frequency == 'monthly':
-                    next_due_date = task.due_date + relativedelta(months=1)
-                elif parent.recurrence_frequency == 'yearly':
-                    next_due_date = task.due_date + relativedelta(years=1)
-                else:
-                    next_due_date = None
-
-                # Create the next task if it's within the recurrence end date
-                if next_due_date and parent.recurrence_end_date and next_due_date.date() <= parent.recurrence_end_date:
-                    try:
-                        pending_list = parent.list
-                    except TaskList.DoesNotExist:
-                        pending_list = task.list # Fallback
-
-                    Task.objects.create(
-                        parent_task=parent,
-                        list=pending_list,
-                        assigned_to=parent.assigned_to,
-                        created_by=parent.created_by,
-                        kpi=parent.kpi,
-                        title=f"{parent.title} - {next_due_date.strftime('%Y-%m-%d')}",
-                        description=parent.description,
-                        order=parent.order,
-                        due_date=next_due_date,
-                        is_recurring=False
-                    )
 
             # Recalculate bonus for the affected employee
             try:
