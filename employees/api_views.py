@@ -70,48 +70,60 @@ class TaskViewSet(viewsets.ModelViewSet):
     def generate_missing_tasks(self, parent_task):
         """
         Generates instances for a recurring task that are due but not yet created.
+        This process is idempotent; it will not create duplicate tasks for the same day.
         """
         last_instance = Task.objects.filter(parent_task=parent_task).order_by('-due_date').first()
 
-        if not last_instance:
-            # This shouldn't happen if the first instance is created with the parent, but as a fallback.
-            next_due_date = parent_task.due_date
+        # Determine the date to start generating tasks from.
+        if last_instance:
+            start_date = last_instance.due_date.date()
         else:
-            # Calculate the next due date from the last instance
-            if parent_task.recurrence_frequency == 'daily':
-                next_due_date = last_instance.due_date + timedelta(days=1)
-            elif parent_task.recurrence_frequency == 'weekly':
-                next_due_date = last_instance.due_date + timedelta(weeks=1)
-            elif parent_task.recurrence_frequency == 'monthly':
-                next_due_date = last_instance.due_date + relativedelta(months=1)
-            elif parent_task.recurrence_frequency == 'yearly':
-                next_due_date = last_instance.due_date + relativedelta(years=1)
-            else:
-                return # Should not happen
+            # If no instances exist, start from the parent's due date. To ensure the first
+            # task is created by the loop, we set the start date to the day before.
+            start_date = parent_task.due_date.date() - timedelta(days=1)
 
-        # Generate all missing tasks up to today
-        while next_due_date.date() <= timezone.now().date() and next_due_date.date() <= parent_task.recurrence_end_date:
-            Task.objects.create(
-                parent_task=parent_task,
-                list=parent_task.list,
-                assigned_to=parent_task.assigned_to,
-                created_by=parent_task.created_by,
-                kpi=parent_task.kpi,
-                title=f"{parent_task.title} - {next_due_date.strftime('%Y-%m-%d')}",
-                description=parent_task.description,
-                order=parent_task.order,
-                due_date=next_due_date,
-                is_recurring=False
-            )
-            # Increment date for the next potential loop
+        # Determine the time from the parent task's due date
+        due_time = parent_task.due_date.time()
+
+        # Loop to generate missing tasks until today.
+        next_date = start_date
+        while True:
+            # Calculate the next theoretical due date.
             if parent_task.recurrence_frequency == 'daily':
-                next_due_date += timedelta(days=1)
+                next_date += timedelta(days=1)
             elif parent_task.recurrence_frequency == 'weekly':
-                next_due_date += timedelta(weeks=1)
+                next_date += timedelta(weeks=1)
             elif parent_task.recurrence_frequency == 'monthly':
-                next_due_date += relativedelta(months=1)
+                next_date += relativedelta(months=1)
             elif parent_task.recurrence_frequency == 'yearly':
-                next_due_date += relativedelta(years=1)
+                next_date += relativedelta(years=1)
+            else:
+                break  # Should not happen
+
+            # Stop if the next date is in the future or after the end date.
+            if next_date > timezone.now().date() or next_date > parent_task.recurrence_end_date:
+                break
+
+            # Combine date and time to get the final due datetime.
+            # This requires making the naive datetime object timezone-aware.
+            from datetime import datetime
+            naive_datetime = datetime.combine(next_date, due_time)
+            due_datetime = timezone.make_aware(naive_datetime)
+
+            # Idempotency check: only create the task if one for that day doesn't exist.
+            if not Task.objects.filter(parent_task=parent_task, due_date__date=next_date).exists():
+                Task.objects.create(
+                    parent_task=parent_task,
+                    list=parent_task.list,
+                    assigned_to=parent_task.assigned_to,
+                    created_by=parent_task.created_by,
+                    kpi=parent_task.kpi,
+                    title=f"{parent_task.title} - {next_date.strftime('%Y-%m-%d')}",
+                    description=parent_task.description,
+                    order=parent_task.order,
+                    due_date=due_datetime,
+                    is_recurring=False
+                )
 
     def create(self, request, *args, **kwargs):
         """
