@@ -31,9 +31,10 @@ class PerformanceAndSalaryTest(TestCase):
     def test_calculate_performance_bonus(self):
         # --- Simulate performance for a month (e.g., August 2024) ---
         # 1. Task Performance: 9 out of 10 tasks completed = 90%
+        due_datetime = timezone.make_aware(datetime(2024, 8, 15))
         for i in range(9):
-            Task.objects.create(list=self.list_done, assigned_to=self.employee, kpi=self.kpi_tasks, title=f"Task {i}", order=i, due_date=date(2024, 8, 15), completed_at=timezone.now())
-        Task.objects.create(list=self.list_todo, assigned_to=self.employee, kpi=self.kpi_tasks, title="Task 10", order=10, due_date=date(2024, 8, 15))
+            Task.objects.create(list=self.list_done, assigned_to=self.employee, kpi=self.kpi_tasks, title=f"Task {i}", order=i, due_date=due_datetime, completed_at=timezone.now())
+        Task.objects.create(list=self.list_todo, assigned_to=self.employee, kpi=self.kpi_tasks, title="Task 10", order=10, due_date=due_datetime)
 
         # 2. Manual Entry Performance: 2 errors logged (target is < 3)
         ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_errors, date=date(2024, 8, 10), value=1)
@@ -204,8 +205,8 @@ class RecurringTaskTest(TestCase):
 
     def test_recurring_task_generation(self):
         # 1. Create a weekly recurring task
-        start_date = date.today() - timedelta(days=10)
-        end_date = date.today() + timedelta(days=20)
+        start_datetime = timezone.now() - timedelta(days=10)
+        end_date = (timezone.now() + timedelta(days=20)).date()
         task_data = {
             'title': 'Weekly Report',
             'list': self.task_list.id,
@@ -213,8 +214,8 @@ class RecurringTaskTest(TestCase):
             'order': 1,
             'is_recurring': True,
             'recurrence_frequency': 'weekly',
-            'due_date': start_date,
-            'recurrence_end_date': end_date
+            'due_date': start_datetime.isoformat(),
+            'recurrence_end_date': end_date.isoformat()
         }
         url = reverse('task-list')
         response = self.api_client.post(url, task_data, format='json')
