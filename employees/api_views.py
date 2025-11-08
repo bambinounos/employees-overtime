@@ -76,11 +76,11 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         # Determine the date to start generating tasks from.
         if last_instance:
-            start_date = last_instance.due_date.date()
+            start_date = timezone.localtime(last_instance.due_date).date()
         else:
             # If no instances exist, start from the parent's due date. To ensure the first
             # task is created by the loop, we set the start date to the day before.
-            start_date = parent_task.due_date.date() - timedelta(days=1)
+            start_date = timezone.localtime(parent_task.due_date).date() - timedelta(days=1)
 
         # Determine the time from the parent task's due date
         due_time = parent_task.due_date.time()
@@ -111,7 +111,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             due_datetime = timezone.make_aware(naive_datetime)
 
             # Idempotency check: only create the task if one for that day doesn't exist.
-            if not Task.objects.filter(parent_task=parent_task, due_date__date=next_date).exists():
+            if not Task.objects.filter(parent_task=parent_task, due_date__date=due_datetime.date()).exists():
                 Task.objects.create(
                     parent_task=parent_task,
                     list=parent_task.list,
