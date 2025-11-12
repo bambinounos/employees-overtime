@@ -232,3 +232,66 @@ class RecurringTaskTest(TestCase):
         # 4. Assert that the next task instance is created
         # We expect two instances to have been created: one for last week and one for this week.
         self.assertEqual(Task.objects.filter(is_recurring=False).count(), 2)
+
+    def test_idempotent_task_generation(self):
+        # 1. Create a daily recurring task that should have started 3 days ago
+        start_datetime = timezone.now() - timedelta(days=3)
+        end_date = (timezone.now() + timedelta(days=10)).date()
+        task_data = {
+            'title': 'Daily Standup',
+            'list': self.task_list.id,
+            'assigned_to': self.employee.id,
+            'order': 1,
+            'is_recurring': True,
+            'recurrence_frequency': 'daily',
+            'due_date': start_datetime.isoformat(),
+            'recurrence_end_date': end_date.isoformat()
+        }
+        url = reverse('task-list')
+        response = self.api_client.post(url, task_data, format='json')
+        self.assertEqual(response.status_code, 201)
+
+        # On creation, one "template" and one instance are made.
+        self.assertEqual(Task.objects.filter(is_recurring=True).count(), 1)
+        self.assertEqual(Task.objects.filter(is_recurring=False).count(), 1)
+
+        # 2. Trigger generation
+        self.api_client.get(url)
+
+        # After GET, tasks for day -2, -1, and 0 (today) should be created.
+        # The initial instance for day -3 already exists. So, 3 new tasks.
+        # Total instances = 1 (initial) + 3 (generated) = 4
+        self.assertEqual(Task.objects.filter(is_recurring=False).count(), 4)
+
+        # 3. Trigger generation again
+        self.api_client.get(url)
+
+        # The number of tasks should not change, proving idempotency.
+        self.assertEqual(Task.objects.filter(is_recurring=False).count(), 4)
+
+    def test_superuser_generates_tasks_for_specific_employee(self):
+        # 1. Create a recurring task for a specific employee
+        start_datetime = timezone.now() - timedelta(days=2)
+        end_date = (timezone.now() + timedelta(days=10)).date()
+        task_data = {
+            'title': 'Employee-Specific Task',
+            'list': self.task_list.id,
+            'assigned_to': self.employee.id,
+            'order': 1,
+            'is_recurring': True,
+            'recurrence_frequency': 'daily',
+            'due_date': start_datetime.isoformat(),
+            'recurrence_end_date': end_date.isoformat()
+        }
+        url = reverse('task-list')
+        response = self.api_client.post(url, task_data, format='json')
+        self.assertEqual(response.status_code, 201)
+
+        # 2. Access the API as a superuser for that specific employee
+        # This should trigger the generation of missing tasks for that employee.
+        url_with_param = f"{url}?employee_id={self.employee.id}"
+        self.api_client.get(url_with_param)
+
+        # 3. Assert that tasks were generated
+        # Initial task (day -2) + generated tasks (day -1, day 0) = 3 tasks
+        self.assertEqual(Task.objects.filter(is_recurring=False, assigned_to=self.employee).count(), 3)
