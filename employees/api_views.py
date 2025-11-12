@@ -40,30 +40,44 @@ class TaskViewSet(viewsets.ModelViewSet):
         Before returning, it checks for and generates any overdue recurring task instances.
         """
         user = self.request.user
+        employee_id = self.request.query_params.get('employee_id')
 
         # Determine the base set of employees to check tasks for
+        employees_to_check = []
         if user.is_superuser:
-            employees = Employee.objects.all()
+            if employee_id:
+                # Superuser is viewing a specific employee's board
+                try:
+                    employees_to_check = [Employee.objects.get(pk=employee_id)]
+                except Employee.DoesNotExist:
+                    return Task.objects.none() # Return empty if employee not found
+            else:
+                # Superuser is viewing their own board or a general view
+                 employees_to_check = Employee.objects.all()
         elif hasattr(user, 'employee'):
-            employees = Employee.objects.filter(pk=user.employee.pk)
-        else:
-            return Task.objects.none()
+            # Regular employee viewing their own board
+            employees_to_check = [user.employee]
 
-        # Generate recurring tasks that are due
-        for employee in employees:
-            parent_tasks = Task.objects.filter(
-                assigned_to=employee,
-                is_recurring=True,
-                recurrence_end_date__gte=timezone.now().date()
-            )
-            for parent in parent_tasks:
-                self.generate_missing_tasks(parent)
 
-        # Return the visible tasks (non-templates) for the user
+        # Generate recurring tasks that are due for the determined employees
+        if employees_to_check:
+             for employee in employees_to_check:
+                parent_tasks = Task.objects.filter(
+                    assigned_to=employee,
+                    is_recurring=True,
+                    recurrence_end_date__gte=timezone.now().date()
+                )
+                for parent in parent_tasks:
+                    self.generate_missing_tasks(parent)
+
+
+        # Filter the final queryset based on user permissions and employee_id
         base_queryset = Task.objects.filter(is_recurring=False)
         if user.is_superuser:
+            if employee_id:
+                return base_queryset.filter(assigned_to__id=employee_id)
             return base_queryset
-        if hasattr(user, 'employee'):
+        elif hasattr(user, 'employee'):
             return base_queryset.filter(assigned_to=user.employee)
         return Task.objects.none()
 
