@@ -131,12 +131,16 @@ class TaskAdmin(admin.ModelAdmin):
             kwargs['widget'] = AdminSplitDateTime
         return super().formfield_for_dbfield(db_field, **kwargs)
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "assigned_to":
+            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def render_change_form(self, request, context, *args, **kwargs):
         # This is a fix for a UI bug where the 'assigned_to' dropdown shows
         # duplicate employees. The root cause is unclear from the current codebase,
         # but ensuring the queryset is distinct solves the immediate problem.
         # It also now filters to only show active employees.
-        context['adminform'].form.fields['assigned_to'].queryset = Employee.objects.filter(end_date__isnull=True)
         return super().render_change_form(request, context, *args, **kwargs)
 
     def save_model(self, request, obj, form, change):
