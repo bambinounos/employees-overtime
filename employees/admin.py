@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.db.models import Max
+from django.db.models import Max, Q
+from django.utils import timezone
 from django.urls import reverse
 from django.http import HttpResponseRedirect
 from .models import (
@@ -59,6 +60,41 @@ class WorkLogAdmin(admin.ModelAdmin):
     list_display = ('employee', 'date', 'hours_worked', 'overtime_hours')
     list_filter = ('date', 'employee')
     search_fields = ('employee__name',)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "employee":
+            # Only show active employees (end_date is None or in the future)
+            # using Q objects to filter
+            today = timezone.now().date()
+            base_queryset = Employee.objects.filter(
+                Q(end_date__isnull=True) | Q(end_date__gte=today)
+            )
+
+            # If we are in a Change View (editing an existing object), we MUST include the current employee
+            # even if they are inactive, to pass form validation.
+            object_id = request.resolver_match.kwargs.get('object_id')
+            if object_id:
+                try:
+                    current_worklog = WorkLog.objects.get(pk=object_id)
+                    # Include the current employee if not already in the base queryset
+                    if not base_queryset.filter(pk=current_worklog.employee.pk).exists():
+                         # Union is not ideal for form queryset because it prevents further filtering/ordering
+                         # better to use OR in filter.
+                         kwargs["queryset"] = Employee.objects.filter(
+                             Q(end_date__isnull=True) |
+                             Q(end_date__gte=today) |
+                             Q(pk=current_worklog.employee.pk)
+                         )
+                    else:
+                        kwargs["queryset"] = base_queryset
+                except WorkLog.DoesNotExist:
+                    # Fallback
+                    kwargs["queryset"] = base_queryset
+            else:
+                # Add View
+                kwargs["queryset"] = base_queryset
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 # --- Performance Management Admin ---
 
