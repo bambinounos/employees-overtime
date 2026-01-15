@@ -1,77 +1,152 @@
-# employees-overtime
-It calculates employees salary and overtime, it based on calendar selecction
+# Employees & Overtime Management System
 
-Solución para el error de traducción (gettext)
-El error que encontré al intentar compilar las traducciones (CommandError: Can't find msgfmt...) se debe a que la herramienta gettext, que es necesaria para manejar los archivos de traducción, no está instalada en el entorno de desarrollo.
-La solución es instalar gettext en tu servidor Ubuntu. Puedes hacerlo con el siguiente comando:
-sudo apt install gettext -y
+Sistema integral basado en Django para la gestión de recursos humanos, seguimiento de tareas y evaluación del desempeño mediante KPIs y bonificaciones.
 
-Una vez instalado, el comando python3 manage.py compilemessages debería funcionar correctamente y las traducciones al español se mostrarán en la aplicación.
-Pasos de instalación en Ubuntu 24.04 Server
-Aquí tienes una guía paso a paso para instalar y configurar la aplicación en tu servidor:
-Actualizar el sistema:
-sudo apt update && sudo apt upgrade -y
+## Descripción General
 
+Este proyecto es una solución completa para administrar empleados, calcular salarios (incluyendo horas extra), gestionar tareas diarias a través de un tablero Kanban, y medir el rendimiento del personal mediante indicadores clave (KPIs) y el Índice de Productividad Ajustado por Calidad (IPAC).
 
-Instalar dependencias del sistema (Python, pip, venv, PostgreSQL y gettext):
-sudo apt install python3 python3-pip python3-venv postgresql postgresql-contrib gettext -y
+El sistema permite automatizar cálculos de bonos basados en reglas configurables y generar reportes estratégicos para la toma de decisiones.
 
+## Funcionalidades Principales
 
-Configurar la base de datos PostgreSQL: Inicia sesión en PostgreSQL y crea la base de datos y el usuario para la aplicación.
-sudo -u postgres psql
+### 1. Gestión de Empleados y Salarios
+*   **Perfil del Empleado:** Gestión de información personal, fechas de contratación y terminación.
+*   **Estado Activo/Inactivo:** Los empleados se desactivan automáticamente al establecer una fecha de fin de contrato (`end_date`), conservando su historial.
+*   **Cálculo de Nómina:**
+    *   Salario base configurable.
+    *   Registro diario de horas trabajadas y horas extra (`WorkLog`).
+    *   Cálculo automático de pagos basado en horas, horas extra (x1.5) y bonificaciones por desempeño.
+    *   Soporte para bases de cálculo mensual, semanal o diaria.
 
+### 2. Gestión de Tareas (Tablero Kanban)
+*   **Tableros Personales:** Cada empleado tiene su propio tablero de tareas.
+*   **Flujo de Trabajo:** Listas predeterminadas: "Pendiente", "En Progreso", "Hecho".
+*   **Gestión de Tarjetas:**
+    *   Creación de tareas con título, descripción, fecha de vencimiento y prioridad.
+    *   **Subtareas (Checklist):** Listas de verificación dentro de cada tarea.
+    *   **Comentarios:** Hilo de conversación en cada tarea.
+    *   Movimiento de tareas entre listas (Drag & Drop en la UI, API `move` en el backend).
+*   **Tareas Recurrentes:**
+    *   Generación automática de instancias de tareas basadas en una plantilla (padre).
+    *   Frecuencias soportadas: Diaria, Semanal, Mensual, Anual.
+    *   Lógica inteligente que genera las tareas faltantes al visualizar el tablero.
 
-Dentro de la consola de psql, ejecuta los siguientes comandos. Reemplaza 'tu_contraseña' con una contraseña segura.
-CREATE DATABASE salary_management;
-CREATE USER salary_manager WITH PASSWORD 'tu_contraseña';
-ALTER ROLE salary_manager SET client_encoding TO 'utf8';
-ALTER ROLE salary_manager SET default_transaction_isolation TO 'read committed';
-ALTER ROLE salary_manager SET timezone TO 'UTC';
-GRANT ALL PRIVILEGES ON DATABASE salary_management TO salary_manager;
-\q
+### 3. Gestión del Rendimiento (KPIs y Bonos)
+*   **Indicadores Clave (KPIs):**
+    *   **Tipos de Medición:** Porcentaje, Conteo (Menor que), Conteo (Mayor que) y Compuesto (IPAC).
+    *   **Metas:** Definición de valores objetivo para cada KPI.
+    *   **KPIs de Advertencia:** Envío automático de correos electrónicos al registrar incidencias en KPIs marcados como disciplinarios.
+*   **Índice IPAC (Índice de Productividad Ajustado por Calidad):**
+    *   Fórmula compleja que evalúa:
+        *   Volumen de tareas completadas.
+        *   Factor de Puntualidad (tareas a tiempo vs. total con vencimiento).
+        *   Factor de Calidad (basado en errores registrados manualmente).
+        *   Tiempo promedio de ejecución.
+*   **Sistema de Bonificaciones:**
+    *   Reglas configurables (`BonusRule`) que asignan montos monetarios al cumplir metas de KPIs específicos.
+    *   Cálculo mensual automático reflejado en la nómina.
+*   **Registros Manuales:** Bitácora para registrar eventos puntuales (ej. errores administrativos) que afectan los KPIs.
 
+### 4. Reportes y Dashboards
+*   **Dashboard Estratégico:**
+    *   Visión global del mes anterior.
+    *   KPIs agregados (Tareas completadas, % Puntualidad, IPAC promedio).
+    *   Ranking de mejores empleados.
+    *   Listado de empleados con advertencias.
+    *   Gráfico de tendencia histórica del IPAC.
+*   **Reporte de Rendimiento:**
+    *   Vista detallada del desempeño por empleado.
+    *   Exportación a CSV.
+*   **Ranking de Empleados:** Tabla comparativa ordenada por cualquier KPI seleccionado.
 
-Clonar el repositorio: Descarga el código de la aplicación desde el repositorio.
-git clone <URL_DEL_REPOSITORIO>
-cd <NOMBRE_DEL_DIRECTORIO>
+### 5. Configuración y Administración
+*   **Panel de Administración (Django Admin):** Interfaz completa para gestionar todos los modelos.
+*   **Configuración de Empresa:** Ajuste de horas base y modalidad de cálculo (Mensual/Semanal/Diaria).
+*   **Personalización del Sitio:** Carga de Favicon personalizado.
 
+## Instalación y Configuración
 
-Configurar el entorno de Python: Crea un entorno virtual e instala las dependencias de Python.
-python3 -m venv venv
-source venv/bin/activate
-pip install django django-year-calendar djangorestframework psycopg2-binary
+### Requisitos Previos (Ubuntu 24.04 Server)
+Para desplegar la aplicación en un entorno de producción o desarrollo:
 
+1.  **Actualizar el sistema:**
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    ```
 
-(Nota: psycopg2-binary es necesario para que Django se conecte con PostgreSQL).
-Configurar la conexión a la base de datos en Django: Edita el archivo salary_management/settings.py y modifica la sección DATABASES para que se vea así. No olvides usar la contraseña que creaste en el paso 3.
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'salary_management',
-        'USER': 'salary_manager',
-        'PASSWORD': 'tu_contraseña',
-        'HOST': 'localhost',
-        'PORT': '',
+2.  **Instalar dependencias del sistema:**
+    ```bash
+    sudo apt install python3 python3-pip python3-venv postgresql postgresql-contrib gettext -y
+    ```
+    *Nota: `gettext` es necesario para compilar las traducciones.*
+
+3.  **Configurar PostgreSQL:**
+    ```bash
+    sudo -u postgres psql
+    ```
+    Dentro de la consola `psql`:
+    ```sql
+    CREATE DATABASE salary_management;
+    CREATE USER salary_manager WITH PASSWORD 'tu_contraseña';
+    ALTER ROLE salary_manager SET client_encoding TO 'utf8';
+    ALTER ROLE salary_manager SET default_transaction_isolation TO 'read committed';
+    ALTER ROLE salary_manager SET timezone TO 'UTC';
+    GRANT ALL PRIVILEGES ON DATABASE salary_management TO salary_manager;
+    \q
+    ```
+
+### Despliegue del Código
+
+1.  **Clonar el repositorio:**
+    ```bash
+    git clone <URL_DEL_REPOSITORIO>
+    cd <NOMBRE_DEL_DIRECTORIO>
+    ```
+
+2.  **Configurar entorno virtual:**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install django django-year-calendar djangorestframework psycopg2-binary python-dateutil wsgidav vobject Pillow
+    ```
+
+3.  **Configurar Base de Datos:**
+    Edita `salary_management/settings.py` con tus credenciales:
+    ```python
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': 'salary_management',
+            'USER': 'salary_manager',
+            'PASSWORD': 'tu_contraseña',
+            'HOST': 'localhost',
+            'PORT': '',
+        }
     }
-}
+    ```
 
+4.  **Migraciones y Usuario Administrador:**
+    ```bash
+    python3 manage.py migrate
+    python3 manage.py createsuperuser
+    ```
 
-Aplicar las migraciones de la base de datos:
-python3 manage.py migrate
+5.  **Compilar Traducciones:**
+    ```bash
+    python3 manage.py compilemessages
+    ```
+    *Si obtienes un error relacionado con `msgfmt`, asegúrate de haber instalado `gettext` como se indicó en los requisitos.*
 
+6.  **Ejecutar Servidor:**
+    ```bash
+    python3 manage.py runserver 0.0.0.0:8000
+    ```
+    Accede a `http://<IP_DE_TU_SERVIDOR>:8000`.
 
-Compilar las traducciones: Ahora que gettext está instalado, puedes compilar los archivos de traducción.
-python3 manage.py compilemessages
-
-
-Crear un superusuario para el panel de administración:
-python3 manage.py createsuperuser
-
-
-Sigue las instrucciones para crear tu cuenta de administrador.
-Ejecutar el servidor de desarrollo: Para probar la aplicación, puedes usar el servidor de desarrollo de Django.
-python3 manage.py runserver 0.0.0.0:8000
-
-
-Ahora deberías poder acceder a la aplicación desde tu navegador en http://<IP_DE_TU_SERVIDOR>:8000.
-Para un entorno de producción, te recomiendo usar un servidor de aplicaciones como Gunicorn y un proxy inverso como Nginx, pero estos pasos te darán una instalación funcional para empezar.
+## API REST
+El sistema expone una API REST para integración y operaciones del frontend:
+*   `/api/tasks/`: CRUD de tareas.
+*   `/api/boards/`: Acceso a tableros.
+*   `/api/worklogs/`: Registro de horas.
+*   `/api/kpi-history/<employee_id>/`: Historial de rendimiento para gráficos.
