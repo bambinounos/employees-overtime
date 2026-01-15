@@ -1,13 +1,13 @@
 import csv
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
-from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI
+from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI, BonusRule
 from django.contrib.auth.decorators import login_required
 from datetime import date
 from decimal import Decimal
 from django.contrib import messages
 import calendar
-from django.db.models import Max
+from django.db.models import Max, Sum
 
 def index(request):
     """Renders the home page."""
@@ -39,11 +39,46 @@ def employee_salary(request, employee_id):
 
     salary = employee.calculate_salary(year, month)
 
+    # Calculate additional "Striking" metrics for the dashboard
+    potential_bonus = Decimal('0.00')
+    lost_bonus = Decimal('0.00')
+    lost_lateness = Decimal('0.00')
+    total_potential = Decimal('0.00')
+    percentage_potential = 0
+
+    if salary:
+        # 1. Potential Bonus (Sum of all active bonus rules)
+        potential_bonus = BonusRule.objects.aggregate(total=Sum('bonus_amount'))['total'] or Decimal('0.00')
+
+        # 2. Lost Bonus
+        earned_bonus = salary.get('performance_bonus', Decimal('0.00'))
+        lost_bonus = max(Decimal('0.00'), potential_bonus - earned_bonus)
+
+        # 3. Lost due to Lateness/Absence
+        base_salary = salary.get('base_salary', Decimal('0.00'))
+        work_pay = salary.get('work_pay', Decimal('0.00'))
+        lost_lateness = max(Decimal('0.00'), base_salary - work_pay)
+
+        # 4. Total Potential (Base + Potential Bonus)
+        total_potential = base_salary + potential_bonus
+
+        # 5. Percentage Reached
+        total_earned = salary.get('total_salary', Decimal('0.00'))
+        if total_potential > 0:
+            percentage_potential = (total_earned / total_potential) * 100
+        else:
+            percentage_potential = 0
+
     context = {
         'employee': employee,
         'year': year,
         'month': month,
         'salary': salary,
+        'potential_bonus': potential_bonus,
+        'lost_bonus': lost_bonus,
+        'lost_lateness': lost_lateness,
+        'total_potential': total_potential,
+        'percentage_potential': percentage_potential,
     }
     return render(request, 'employees/employee_salary.html', context)
 
