@@ -1,5 +1,5 @@
 import calendar
-from django.test import TestCase
+from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -295,3 +295,84 @@ class RecurringTaskTest(TestCase):
         # 3. Assert that tasks were generated
         # Initial task (day -2) + generated tasks (day -1, day 0) = 3 tasks
         self.assertEqual(Task.objects.filter(is_recurring=False, assigned_to=self.employee).count(), 3)
+
+
+class SalaryViewTest(TestCase):
+    def setUp(self):
+        # Create user and employee
+        self.user = User.objects.create_user(username='testuser2', password='password')
+        self.employee = Employee.objects.create(
+            user=self.user,
+            name='John Doe',
+            email='john@example.com',
+            hire_date=date(2023, 1, 1)
+        )
+        self.client.login(username='testuser2', password='password')
+
+        # Create Base Salary
+        Salary.objects.create(employee=self.employee, base_amount=Decimal('1600.00'), effective_date=date(2023, 1, 1))
+        # Assuming 160 hours monthly base (default setting), so rate is $10/hr.
+
+        # Create Work Logs (Underworked to simulate lateness)
+        # Worked 150 hours instead of 160. Lost 10 hours * $10 = $100.
+        # Note: hours_worked has max_digits=4 (max 99.99), so we split into multiple logs.
+        WorkLog.objects.create(employee=self.employee, date=date(2023, 1, 1), hours_worked=75, overtime_hours=0)
+        WorkLog.objects.create(employee=self.employee, date=date(2023, 1, 2), hours_worked=75, overtime_hours=0)
+
+        # Create KPI and Bonus Rule
+        self.kpi = KPI.objects.create(name='Test KPI', measurement_type='count_gt', target_value=10)
+        BonusRule.objects.create(kpi=self.kpi, bonus_amount=Decimal('200.00'), description='Test Bonus')
+
+        # No performance record created, so target not met. Lost Bonus = $200.
+
+    def test_salary_view_calculations(self):
+        url = reverse('employee_salary', args=[self.employee.id])
+        response = self.client.get(url, {'year': 2023, 'month': 1})
+
+        self.assertEqual(response.status_code, 200)
+        context = response.context
+
+        # Check Base Calculations
+        self.assertAlmostEqual(context['salary']['base_salary'], Decimal('1600.00'))
+        self.assertAlmostEqual(context['salary']['work_pay'], Decimal('1500.00')) # 150 * 10
+
+        # Check Striking Metrics
+        # Lost Lateness: 1600 - 1500 = 100
+        self.assertAlmostEqual(context['lost_lateness'], Decimal('100.00'))
+
+        # Potential Bonus: 200
+        self.assertAlmostEqual(context['potential_bonus'], Decimal('200.00'))
+
+        # Earned Bonus: 0 (Target not met)
+        self.assertAlmostEqual(context['salary']['performance_bonus'], Decimal('0.00'))
+
+        # Lost Bonus: 200 - 0 = 200
+        self.assertAlmostEqual(context['lost_bonus'], Decimal('200.00'))
+
+        # Total Potential: Base (1600) + Potential Bonus (200) = 1800
+        self.assertAlmostEqual(context['total_potential'], Decimal('1800.00'))
+
+        # Percentage: Earned (1500) / Potential (1800)
+        expected_percentage = (Decimal('1500') / Decimal('1800')) * 100
+        self.assertAlmostEqual(context['percentage_potential'], expected_percentage)
+
+    def test_overtime_does_not_reduce_loss(self):
+        # Case where overtime makes total pay > base, but lateness logic should still capture lost base hours?
+        # My logic: lost_lateness = max(0, base_salary - work_pay).
+        # work_pay = normal_hours * rate.
+        # If I work 150 normal hours + 20 overtime hours.
+        # work_pay is based on 150 hours. Overtime is separate.
+        # So lost_lateness should still be 100.
+
+        # Update log
+        WorkLog.objects.filter(employee=self.employee).delete()
+        # Split 150 hours to fit max_digits=4
+        WorkLog.objects.create(employee=self.employee, date=date(2023, 1, 1), hours_worked=75, overtime_hours=10)
+        WorkLog.objects.create(employee=self.employee, date=date(2023, 1, 2), hours_worked=75, overtime_hours=10)
+
+        url = reverse('employee_salary', args=[self.employee.id])
+        response = self.client.get(url, {'year': 2023, 'month': 1})
+
+        # work_pay is still 1500. Overtime pay is extra.
+        self.assertAlmostEqual(response.context['lost_lateness'], Decimal('100.00'))
+        self.assertAlmostEqual(response.context['salary']['overtime_pay'], Decimal('300.00')) # 20 * 15 (1.5x)

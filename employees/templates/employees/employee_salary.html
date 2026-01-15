@@ -4,61 +4,163 @@
 {% block title %}{% trans "Salary for" %} {{ employee.name }} - {% trans "Salary Management" %}{% endblock %}
 
 {% block content %}
-<h1>{% trans "Salary for" %} {{ employee.name }}</h1>
-
-<form method="get" class="form-inline mb-4">
-    <div class="form-group mr-2">
-        <label for="year" class="mr-2">{% trans "Year" %}:</label>
-        <input type="number" name="year" id="year" value="{{ year }}" class="form-control">
-    </div>
-    <div class="form-group mr-2">
-        <label for="month" class="mr-2">{% trans "Month" %}:</label>
-        <input type="number" name="month" id="month" value="{{ month }}" class="form-control">
-    </div>
-    <button type="submit" class="btn btn-primary">{% trans "Calculate" %}</button>
-</form>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{% trans "Salary for" %} {{ employee.name }}</h1>
+    <form method="get" class="form-inline">
+        <div class="form-group mr-2">
+            <label for="year" class="mr-2">{% trans "Year" %}:</label>
+            <input type="number" name="year" id="year" value="{{ year }}" class="form-control" style="width: 100px;">
+        </div>
+        <div class="form-group mr-2">
+            <label for="month" class="mr-2">{% trans "Month" %}:</label>
+            <input type="number" name="month" id="month" value="{{ month }}" class="form-control" style="width: 80px;">
+        </div>
+        <button type="submit" class="btn btn-primary">{% trans "Calculate" %}</button>
+    </form>
+</div>
 
 {% if salary is not None %}
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">{% trans "Salary Breakdown for" %} {{ year }}-{{ month }}</h5>
+    {# --- Top Summary Cards --- #}
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-success h-100 shadow">
+                <div class="card-body text-center">
+                    <h5 class="card-title">{% trans "Total Earned" %}</h5>
+                    <h2 class="display-4">${{ salary.total_salary|floatformat:2 }}</h2>
+                    <p class="card-text">{% trans "Net Pay for this period" %}</p>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <table class="table table-bordered">
-                <tbody>
-                    <tr>
-                        <th scope="row">{% trans "Base Salary" %}</th>
-                        <td>${{ salary.base_salary|floatformat:2 }}</td>
-                        <td colspan="2"><em>({% trans "Calculation basis" %}: {% trans salary.calculation_basis|capfirst %})</em></td>
-                    </tr>
-                    <tr>
-                        <th scope="row">{% trans "Payment for Hours Worked" %}</th>
-                        <td>${{ salary.work_pay|floatformat:2 }}</td>
-                        <td>{{ salary.total_hours_worked|floatformat:2 }} {% trans "hours" %}</td>
-                        <td>@ ${{ salary.hourly_rate|floatformat:2 }}/{% trans "hour" %}</td>
-                    </tr>
-                    <tr>
-                        <th scope="row">{% trans "Overtime Pay" %}</th>
-                        <td>${{ salary.overtime_pay|floatformat:2 }}</td>
-                        <td>{{ salary.total_overtime_hours|floatformat:2 }} {% trans "hours" %}</td>
-                        <td>@ ${{ salary.overtime_rate|floatformat:4 }}/{% trans "hour" %}</td>
-                    </tr>
-                    <tr>
-                        <th scope="row">{% trans "Performance Bonus" %}</th>
-                        <td colspan="3">${{ salary.performance_bonus|floatformat:2 }}</td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr class="table-active">
-                        <th scope="row" class="text-right">{% trans "Total Salary" %}</th>
-                        <th colspan="3">${{ salary.total_salary|floatformat:2 }}</th>
-                    </tr>
-                </tfoot>
-            </table>
+        <div class="col-md-4">
+            <div class="card text-white bg-danger h-100 shadow">
+                <div class="card-body text-center">
+                    <h5 class="card-title">{% trans "Total Lost" %}</h5>
+                    <h2 class="display-4">
+                        {% if lost_lateness > 0 or lost_bonus > 0 %}
+                            -${{ lost_lateness|add:lost_bonus|floatformat:2 }}
+                        {% else %}
+                            $0.00
+                        {% endif %}
+                    </h2>
+                    <p class="card-text">{% trans "Money lost due to lateness or missed goals" %}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light h-100 shadow border-primary">
+                <div class="card-body text-center text-primary">
+                    <h5 class="card-title">{% trans "Potential Earnings" %}</h5>
+                    <h2 class="display-4">${{ total_potential|floatformat:2 }}</h2>
+                    <p class="card-text">{% trans "If all goals were met & full attendance" %}</p>
+                </div>
+            </div>
         </div>
     </div>
+
+    {# --- Progress Bar --- #}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">{% trans "Performance Progress" %}</h5>
+            <div class="progress" style="height: 30px;">
+                <div class="progress-bar bg-success" role="progressbar" style="width: {{ percentage_potential|floatformat:0 }}%;" aria-valuenow="{{ percentage_potential }}" aria-valuemin="0" aria-valuemax="100">
+                    {{ percentage_potential|floatformat:0 }}% {% trans "of Potential" %}
+                </div>
+            </div>
+            <small class="text-muted mt-2 d-block">
+                {% if percentage_potential >= 100 %}
+                    {% trans "Excellent! You have maximized your earning potential!" %}
+                {% else %}
+                    {% trans "Keep pushing! You can earn more by hitting targets and avoiding lateness." %}
+                {% endif %}
+            </small>
+        </div>
+    </div>
+
+    {# --- Detailed Breakdown Columns --- #}
+    <div class="row">
+        {# --- Earnings Column --- #}
+        <div class="col-md-6">
+            <div class="card border-success mb-3 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">{% trans "Earnings Breakdown" %}</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{% trans "Base Pay (Hours Worked)" %}</strong>
+                            <br>
+                            <small class="text-muted">{{ salary.total_hours_worked|floatformat:2 }} {% trans "hours" %} @ ${{ salary.hourly_rate|floatformat:2 }}/hr</small>
+                        </div>
+                        <span class="text-success font-weight-bold">+ ${{ salary.work_pay|floatformat:2 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{% trans "Overtime Pay" %}</strong>
+                            <br>
+                            <small class="text-muted">{{ salary.total_overtime_hours|floatformat:2 }} {% trans "hours" %} @ ${{ salary.overtime_rate|floatformat:2 }}/hr</small>
+                        </div>
+                        <span class="text-success font-weight-bold">+ ${{ salary.overtime_pay|floatformat:2 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{% trans "Performance Bonus" %}</strong>
+                            <br>
+                            <small class="text-muted">{% trans "KPI targets met" %}</small>
+                        </div>
+                        <span class="text-success font-weight-bold">+ ${{ salary.performance_bonus|floatformat:2 }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        {# --- Losses Column --- #}
+        <div class="col-md-6">
+            <div class="card border-danger mb-3 shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">{% trans "Losses & Missed Opportunities" %}</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{% trans "Lost due to Lateness/Absence" %}</strong>
+                            <br>
+                            <small class="text-muted">{% trans "Difference between base salary and hours worked" %}</small>
+                        </div>
+                        <span class="text-danger font-weight-bold">
+                            {% if lost_lateness > 0 %}
+                                - ${{ lost_lateness|floatformat:2 }}
+                            {% else %}
+                                $0.00
+                            {% endif %}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{% trans "Missed Bonuses" %}</strong>
+                            <br>
+                            <small class="text-muted">{% trans "KPI targets not met" %}</small>
+                        </div>
+                        <span class="text-danger font-weight-bold">
+                             {% if lost_bonus > 0 %}
+                                - ${{ lost_bonus|floatformat:2 }}
+                            {% else %}
+                                $0.00
+                            {% endif %}
+                        </span>
+                    </li>
+                </ul>
+                <div class="card-body bg-light">
+                    <p class="card-text text-danger small">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        {% trans "Attention: Lateness and missed targets directly impact your take-home pay. Arrive on time to reclaim your full base salary!" %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
 {% else %}
-    <div class="alert alert-warning">
+    <div class="alert alert-warning mt-4">
         {% trans "Could not calculate salary. Please make sure the employee has a base salary and work logs for the selected period." %}
     </div>
 {% endif %}
