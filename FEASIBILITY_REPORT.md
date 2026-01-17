@@ -13,7 +13,8 @@ Se requiere desarrollar un **Módulo Personalizado de Dolibarr** que utilice el 
 *   **Evento 1: Validación de Proforma (`PROPAL_VALIDATE`)**: Cuando una proforma se valida, el módulo enviará un webhook (petición HTTP POST) al software de salarios.
 *   **Evento 2: Validación de Factura (`BILL_VALIDATE`)**: Cuando una factura se valida, el módulo enviará un webhook con los datos de la venta.
     *   *Crucial:* El payload debe incluir el ID de la proforma de origen (`fk_propal`) para trazar el ciclo de venta.
-*   **Evento 3: Validación de Nota de Crédito (`BILL_VALIDATE` con tipo Credit Note)**: Cuando se genera una nota de crédito, se enviará un evento para descontar este monto de las comisiones.
+    *   *Crucial:* El payload debe incluir el **total sin impuestos (Base Imponible/Total HT)**, ya que las comisiones no se calculan sobre el IVA.
+*   **Evento 3: Validación de Nota de Crédito (`BILL_VALIDATE` con tipo Credit Note)**: Cuando se genera una nota de crédito, se enviará un evento para descontar este monto (también sin impuestos) de las comisiones.
 
 ### 2.2. Lado Software de Salarios (Django)
 Se requiere extender la aplicación `employees` para recibir, almacenar y procesar estos datos.
@@ -58,7 +59,7 @@ Se requiere extender la aplicación `employees` para recibir, almacenar y proces
     *   `dolibarr_proforma_id`: ID original en Dolibarr (RowID).
     *   `dolibarr_invoice_id`: ID original en Dolibarr (RowID).
     *   `status`: Estado del ciclo (proformado, facturado, cancelado).
-    *   `amount`: Monto monetario (para comisiones).
+    *   `amount`: Monto monetario **sin impuestos** (para comisiones).
 
 #### B. Modificación de Modelos Existentes (`Employee`)
 Es necesario agregar banderas de configuración para determinar a quién se le aplican estas lógicas:
@@ -78,7 +79,7 @@ Es necesario agregar banderas de configuración para determinar a quién se le a
     *   *Paso 3 (Bonificación):* Se busca en `KPIBonusTier` los niveles superados por el porcentaje obtenido y se asigna el monto correspondiente al nivel más alto.
 
 2.  **Comisiones (Considerando Devoluciones):**
-    *   *Lógica:* `(Monto Facturado - Monto Notas de Crédito) * % Comisión`.
+    *   *Lógica:* `(Monto Facturado Sin Impuestos - Monto Notas de Crédito Sin Impuestos) * % Comisión`.
     *   *Identificación:* El sistema debe rastrear la Nota de Crédito usando el `dolibarr_instance` para asociarla correctamente a la factura original.
 
 ## 4. Análisis de Implicaciones
