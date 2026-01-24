@@ -3,7 +3,7 @@
 ## 1. Resumen Ejecutivo
 Es **totalmente factible** implementar la funcionalidad solicitada. La arquitectura propuesta implica el desarrollo de un módulo personalizado en Dolibarr que se comunique con el software de salarios (Django) a través de una API REST segura. Esto permitirá automatizar el cálculo del KPI de "Efectividad de Ventas" (conversión de proforma a factura) y el cálculo de comisiones para los vendedores.
 
-Se mantienen las observaciones críticas de versiones anteriores para asegurar la integridad de los datos: prevención de **fraude por omisión de proformas** (mediante umbrales mínimos), manejo correcto de **devoluciones (notas de crédito)** para no pagar comisiones indebidas, y soporte robusto para **múltiples empresas**.
+Se mantienen las observaciones críticas de versiones anteriores para asegurar la integridad de los datos: prevención de **fraude por omisión de proformas** (mediante umbrales mínimos) y manejo correcto de **devoluciones**. Adicionalmente, esta versión (v8) incorpora mejoras de **seguridad (autenticación HMAC/Token)**, **resiliencia (cola de reintentos)** y **auditoría** para garantizar que ninguna venta se pierda por fallos de red.
 
 Adicionalmente, se introduce el modelo **`JobProfile`** para gestionar qué KPIs aplican a cada rol (Ventas vs. Contabilidad) y se detallan las medidas anti-fraude para el **KPI de Creación de Productos**, incluyendo validación por Referencia (SKU).
 
@@ -19,16 +19,26 @@ Se requiere desarrollar un **Módulo Personalizado de Dolibarr** que utilice el 
 *   **Evento 3: Validación de Nota de Crédito (`BILL_VALIDATE` con tipo Credit Note)**: Se envía webhook para descontar este monto de las comisiones del mes.
 *   **Evento 4: Creación de Producto (`PRODUCT_CREATE`)**: Se envía webhook con ID, referencia (SKU), fecha y usuario.
 
+#### Mejoras de Robustez en Dolibarr (Nuevos Requisitos)
+*   **Cola de Reintentos (Retry Queue):** Si el servidor Django no responde (200 OK), el módulo debe guardar el evento y reintentar automáticamente (ej: cada 15 min).
+*   **Resync Manual:** Botón en la ficha de Factura/Proforma para forzar el reenvío del evento en caso de errores.
+*   **Dashboard Widget:** Indicador visual en el inicio de Dolibarr que alerte sobre fallos de conexión con el sistema de nómina.
+
 ### 2.2. Lado Software de Salarios (Django)
 Se requiere extender la aplicación `employees` para recibir, almacenar y procesar estos datos.
-*   **API REST Segura:** Endpoint que valida el `company_uid` y recibe los eventos.
-*   **Base de Datos:** Nuevos modelos para configuración, traza de ventas y perfiles.
+*   **API REST Segura:** Endpoint protegido que valida el `company_uid` y verifica la autenticidad del mensaje mediante **Token/Secreto (HMAC)**.
+*   **Procesamiento Asíncrono:** Recepción inmediata en un log (`WebhookLog`) para evitar timeouts, con procesamiento diferido de reglas de negocio.
+*   **Base de Datos:** Nuevos modelos para configuración, logs de auditoría, traza de ventas y perfiles.
 
 ## 3. Implementación Detallada
 
 ### 3.1. Sincronización de Usuarios e Instancias
-*   **Identificación de Empleado:** Se usará el **Correo Electrónico** como identificador único.
-*   **Identificación de Empresa:** Modelo `DolibarrInstance` que mapea el "ID Profesional 1" a un nombre legible (ej: "Sucursal Norte").
+*   **Estrategia Robusta (Multi-Instancia):** Dado que un empleado puede vender en múltiples empresas (instancias) con distintos usuarios, no nos basaremos solo en el email.
+*   **Modelo de Mapeo (`DolibarrUserIdentity`):** Tabla explícita que vincula `(DolibarrInstance, external_user_id)` -> `Employee`.
+    *   Si llega un webhook con un ID no mapeado, el sistema crea un log de advertencia ("Empleado no identificado para ID 123 en Instancia A") para que el admin cree el vínculo.
+* 3.  **Identificación de Empresa:** Modelo `DolibarrInstance`:
+    *   Mapea el "ID Profesional 1" a un nombre legible.
+    *   Almacena el **API Secret/Token** único para validar las peticiones de esa instancia.
 
 ### 3.2. Cambios en el Software de Salarios (Django)
 
@@ -50,13 +60,21 @@ Se requiere extender la aplicación `employees` para recibir, almacenar y proces
 
 4.  **Modelo `JobProfile` (Gestión de Roles - NUEVO):**
     Centraliza la configuración de elegibilidad para evitar errores manuales.
-    *   `name`: Nombre del puesto (ej: "Vendedor", "Contador").
-    *   `measure_sales_effectiveness` (Boolean): ¿Se mide conversión Proforma->Factura? (True para Vendedor, False para Contador).
-    *   `earns_commissions` (Boolean): ¿Gana comisiones por ventas?
-    *   `measure_product_creation` (Boolean): ¿Gana bono por digitación de productos?
+    *   `name`: Nombre del puesto (ej: "Vendedor", "Contador", "Gerente de Logística").
+    *   `kpis`: Relación Many-to-Many con el modelo `KPI`. Define qué indicadores se miden para este perfil.
+    *   `earns_commissions`: Boolean (General). Indica si este perfil es elegible para el esquema de comisiones variable estándar.
 
-5.  **Modelo `SalesRecord` (Traza de Ventas):**
+        *   `api_secret`: Token HMAC para validar webhooks de esta instancia.
+
+6.  **Modelo `DolibarrUserIdentity` (Mapeo de Usuarios - NUEVO):**
     *   `employee`: FK a `Employee`.
+    *   `dolibarr_instance`: FK a `DolibarrInstance`.
+    *   `dolibarr_user_id`: ID numérico del usuario en esa instancia de Dolibarr.
+    *   `dolibarr_login`: (Opcional) Login/Username para referencia visual.
+    *   *Unique Constraint:* (`dolibarr_instance`, `dolibarr_user_id`).
+
+7.  **Modelo `SalesRecord` (Traza de Ventas):**
+    *   `employee`: FK a `Employee` (Resolución: Webhook -> Instance+UserID -> Identity -> Employee).
     *   `dolibarr_instance`: FK a `DolibarrInstance`.
     *   `dolibarr_proforma_id`: ID original (RowID).
     *   `dolibarr_invoice_id`: ID original (RowID).
@@ -69,6 +87,10 @@ Se requiere extender la aplicación `employees` para recibir, almacenar y proces
     *   `created_at`: Fecha.
     *   *Unique Constraint:* (`dolibarr_instance`, `dolibarr_product_id`).
 
+7.  **Modelo `WebhookLog` (Auditoría y Resiliencia - NUEVO):**
+    *   Almacena el payload crudo (`JSON`), headers, IP de origen y estado de procesamiento.
+    *   Permite re-procesar eventos si hay bugs en la lógica de negocio sin perder los datos originales.
+
 #### B. Modificación de Modelos Existentes (`Employee`)
 *   Se añade campo `profile` (FK a `JobProfile`).
 *   Se eliminan los campos booleanos individuales del empleado, delegando esa lógica al perfil.
@@ -76,7 +98,9 @@ Se requiere extender la aplicación `employees` para recibir, almacenar y proces
 #### C. Lógica de Cálculo Actualizada
 
 1.  **Validación de Perfil:**
-    El sistema primero verifica `employee.profile`. Si el perfil no aplica para el KPI (ej: Contador para Ventas), se omite el cálculo.
+1.  **Validación de Perfil:**
+    *   Antes de calcular cualquier métrica, el sistema verificará: `if kpi in employee.profile.kpis.all()`.
+    *   Esto permite tener N perfiles (Ej: "Vendedor Junior", "Vendedor Senior") con diferentes sets de KPIs activados.
 
 2.  **KPI Efectividad de Ventas (Conversión):**
     *   *Filtro Anti-Fraude:* Si `total_proformas < kpi.min_volume_threshold`, la efectividad es 0%.
@@ -84,9 +108,10 @@ Se requiere extender la aplicación `employees` para recibir, almacenar y proces
     *   *Bono:* Se asigna según el `KPIBonusTier` alcanzado.
 
 3.  **Comisiones por Ventas:**
-    *   *Base:* Suma de `amount` (sin impuestos) de todas las facturas del mes.
-    *   *Deducción:* Resta de `amount` (sin impuestos) de todas las Notas de Crédito (devoluciones).
-    *   *Pago:* `(Total Ventas - Total Devoluciones) * % Comisión`.
+    *   *Conversión de Moneda:* Si el payload indica una moneda distinta a la base del sistema, se normalizará el valor.
+    *   *Inmutabilidad:* Las Notas de Crédito **no borran** el `SalesRecord` original. Crean un nuevo registro con monto negativo para mantener la traza de auditoría.
+    *   *Base:* Suma de `amount` de todas las facturas y notas de crédito (negativas) del mes.
+    *   *Pago:* `(Total Ventas Netas) * % Comisión`.
 
 4.  **Bono por Creación de Productos (Anti-Fraude Reforzado):**
     *   *Problema:* Si un usuario borra un producto y lo recrea, Dolibarr asigna un nuevo ID, burlando la restricción de ID único.
