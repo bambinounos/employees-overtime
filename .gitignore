@@ -17,3 +17,4 @@ db.sqlite3-journal
 
 # Other
 .DS_Store
+.vscode/
