@@ -3,7 +3,45 @@ from django.contrib.auth.models import User
 from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import F, Avg, Sum
+from django.db.models import F, Avg, Sum
 from django.db.models.functions import Coalesce
+import hashlib
+import hmac
+from django.utils import timezone
+
+class JobProfile(models.Model):
+    """Defines a job role and the KPIs associated with it."""
+    name = models.CharField(max_length=255, unique=True)
+    kpis = models.ManyToManyField('KPI', related_name='job_profiles', blank=True)
+    earns_commissions = models.BooleanField(default=False, help_text="If true, this profile is eligible for variable sales commissions.")
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
+
+class DolibarrInstance(models.Model):
+    """Represents a connected Dolibarr ERP instance."""
+    name = models.CharField(max_length=255, help_text="Friendly name, e.g., 'Empresa A'")
+    professional_id = models.CharField(max_length=100, unique=True, help_text="ID Profesional 1 from Dolibarr Admin Panel")
+    api_secret = models.CharField(max_length=128, help_text="Secret key for HMAC validation of webhooks")
+    
+    def __str__(self):
+        return f"{self.name} ({self.professional_id})"
+
+class DolibarrUserIdentity(models.Model):
+    """Links a local Employee to a user in a specific Dolibarr instance."""
+    employee = models.ForeignKey('Employee', on_delete=models.CASCADE, related_name='dolibarr_identities')
+    dolibarr_instance = models.ForeignKey(DolibarrInstance, on_delete=models.CASCADE)
+    dolibarr_user_id = models.IntegerField(help_text="Numeric User ID in Dolibarr (rowid)")
+    dolibarr_login = models.CharField(max_length=100, blank=True, null=True, help_text="Login username in Dolibarr (reference only)")
+
+    class Meta:
+        unique_together = ('dolibarr_instance', 'dolibarr_user_id')
+        verbose_name_plural = "Dolibarr User Identities"
+
+    def __str__(self):
+        return f"{self.employee.name} @ {self.dolibarr_instance.name}"
+
 
 class Employee(models.Model):
     """Represents an employee in the company."""
@@ -11,7 +49,11 @@ class Employee(models.Model):
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     hire_date = models.DateField()
+    email = models.EmailField(unique=True)
+    hire_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    profile = models.ForeignKey(JobProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', help_text="Job Profile determining active KPIs for this employee.")
+
 
     def __str__(self):
         return self.name
@@ -88,61 +130,107 @@ class Employee(models.Model):
         It also creates EmployeePerformanceRecord entries for each KPI.
         """
         total_bonus = Decimal('0.00')
-        all_bonus_rules = BonusRule.objects.all().select_related('kpi')
+        
+        # Determine eligible KPIs based on profile
+        eligible_kpis = self.profile.kpis.all() if self.profile else KPI.objects.all()
 
         # Use the last day of the month for the record date
         import calendar
         last_day = calendar.monthrange(year, month)[1]
         record_date = date(year, month, last_day)
 
-        for rule in all_bonus_rules:
-            kpi = rule.kpi
+        for kpi in eligible_kpis:
             target_met = False
             actual_value = 0
 
-            # --- Evaluate KPI based on its measurement type ---
+            # --- Evaluate KPI based on internal_code or measurement_type ---
+            
+            if kpi.internal_code == 'SALES_EFFECTIVENESS':
+                # Logic: (Invoiced Proformas / Total Proformas) * 100
+                # Anti-fraud: Min volume threshold
+                
+                # Fetch SalesRecords for this month
+                sales_records = self.sales_records.filter(
+                    date__year=year, 
+                    date__month=month
+                )
+                
+                total_proformas = sales_records.filter(status='proforma').count()
+                    
+                if total_proformas >= kpi.min_volume_threshold and total_proformas > 0:
+                    # Count how many of these proformas were invoiced
+                    # We look for invoices that reference a proforma created effectively by this employee
+                    # Simplified logic: We count "Invoiced" records that track back to a proforma? 
+                    # The FEASIBILITY_REPORT says: "Facturas con Proforma / Total Proformas".
+                    # Our SalesRecord has 'origin_proforma_id'.
+                    
+                    # Get IDs of proformas created this month
+                    # Note: This might be complex if proforma was created last month. 
+                    # Report usually implies "Closed in this month". 
+                    # Let's assume we measure "Conversion of Proformas created in this month" OR "Invoices generated this month"
+                    # "Efectividad de Ventas (Conversión)": Usually (Invoices / Proformas) in the period.
+                    
+                    invoices_count = sales_records.filter(status='invoiced', origin_proforma_id__isnull=False).count()
+                    
+                    actual_value = (Decimal(invoices_count) / Decimal(total_proformas)) * 100
+                else:
+                    actual_value = 0
 
-            if kpi.measurement_type == 'percentage':
+            elif kpi.measurement_type == 'percentage':
                 # e.g., "Productividad General"
                 tasks = Task.objects.filter(assigned_to=self, kpi=kpi, due_date__year=year, due_date__month=month)
                 total_tasks = tasks.count()
                 if total_tasks > 0:
                     completed_tasks = tasks.filter(completed_at__isnull=False, list__name__iexact="Hecho").count()
                     actual_value = (completed_tasks / total_tasks) * 100
-                    if actual_value >= kpi.target_value:
-                        target_met = True
+                else:
+                    # If no tasks assigned, is it 100% or 0%? Defaulting to 0 effectively or handling elsewhere.
+                    actual_value = 0
 
             elif kpi.measurement_type == 'count_lt':
                 # e.g., "Calidad Administrativa" (fewer than X errors)
                 entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
                 actual_value = sum(entry.value for entry in entries)
-                if actual_value < kpi.target_value:
-                    target_met = True
 
             elif kpi.measurement_type == 'count_gt':
                 # e.g., "Gestión Comercial Pública" (more than X offers)
-                # Automated based on completed tasks with this KPI
                 actual_value = Task.objects.filter(
                     assigned_to=self,
                     kpi=kpi,
                     completed_at__year=year,
                     completed_at__month=month
                 ).count()
-                if actual_value >= kpi.target_value:
-                    target_met = True
 
             elif kpi.measurement_type == 'composite_ipac':
                 # This KPI is calculated by its own complex method
                 actual_value = self.calculate_ipac(year, month)
-                # For composite KPIs, higher is better
-                if actual_value >= kpi.target_value:
-                    target_met = True
 
-            # --- Award bonus and save record ---
+            # --- Check Target and Bonus ---
+            
+            bonus_amount_for_kpi = Decimal('0.00')
 
-            bonus_awarded = rule.bonus_amount if target_met else Decimal('0.00')
-            if target_met:
-                total_bonus += rule.bonus_amount
+            # 1. Check Standard Target (Legacy) using BonusRule
+            # Only if it's NOT a tiered only KPI? We support both mixed.
+            if kpi.measurement_type == 'count_lt':
+                 if actual_value < kpi.target_value:
+                     target_met = True
+            else:
+                 if actual_value >= kpi.target_value:
+                     target_met = True
+            
+            rule = BonusRule.objects.filter(kpi=kpi).first()
+            if rule and target_met:
+                bonus_amount_for_kpi = rule.bonus_amount
+
+            # 2. Check Tiered Bonuses (Overrides standard if higher)
+            tiers = kpi.tiers.all() # Uses related_name='tiers' from KPIBonusTier
+            for tier in tiers:
+                if actual_value >= tier.threshold:
+                     if tier.bonus_amount > bonus_amount_for_kpi:
+                         bonus_amount_for_kpi = tier.bonus_amount
+                         target_met = True # Implicitly met if tier reached
+
+            total_bonus += bonus_amount_for_kpi
 
             EmployeePerformanceRecord.objects.update_or_create(
                 employee=self,
@@ -151,7 +239,7 @@ class Employee(models.Model):
                 defaults={
                     'actual_value': actual_value,
                     'target_met': target_met,
-                    'bonus_awarded': bonus_awarded
+                    'bonus_awarded': bonus_amount_for_kpi
                 }
             )
 
@@ -247,6 +335,59 @@ class WorkLog(models.Model):
     def __str__(self):
         return f"{self.employee.name} on {self.date}"
 
+class SalesRecord(models.Model):
+    """Tracks a sales event (Invoice or Credit Note) synced from Dolibarr."""
+    STATUS_CHOICES = [
+        ('proforma', 'Proforma/Proposal'),
+        ('invoiced', 'Facturado/Invoiced'),
+        ('cancelled', 'Cancelado/Cancelled'),
+        ('credit_note', 'Nota de Crédito/Credit Note'),
+    ]
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='sales_records')
+    dolibarr_instance = models.ForeignKey(DolibarrInstance, on_delete=models.CASCADE)
+    dolibarr_id = models.IntegerField(help_text="RowID of the object in Dolibarr")
+    dolibarr_ref = models.CharField(max_length=100, help_text="Reference (e.g., FA23-001)")
+    
+    origin_proforma_id = models.IntegerField(null=True, blank=True, help_text="RowID of the proforma (if this is an invoice)")
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    amount_untaxed = models.DecimalField(max_digits=12, decimal_places=2, help_text="Base imponible (Total HT)")
+    
+    date = models.DateField(help_text="Date of validation or invoicing")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('dolibarr_instance', 'dolibarr_id', 'status') # Prevent duplicate processing of same event type
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.dolibarr_ref} - {self.status} ({self.amount_untaxed})"
+
+class ProductCreationLog(models.Model):
+    """Tracks product creations for the 'Product Creation' KPI to prevent fraud."""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    dolibarr_instance = models.ForeignKey(DolibarrInstance, on_delete=models.CASCADE)
+    dolibarr_product_id = models.IntegerField()
+    product_ref = models.CharField(max_length=255, help_text="SKU/Ref of the product")
+    created_at = models.DateTimeField()
+
+    class Meta:
+        unique_together = ('dolibarr_instance', 'dolibarr_product_id')
+
+class WebhookLog(models.Model):
+    """Raw log of incoming webhooks for audit and debugging."""
+    received_at = models.DateTimeField(auto_now_add=True)
+    sender_ip = models.GenericIPAddressField(null=True, blank=True)
+    payload = models.JSONField(default=dict)
+    headers = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default='pending') # pending, processed, error
+    error_message = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Webhook {self.id} at {self.received_at} ({self.status})"
+
+
 # --- Trello-like & Performance Management Models ---
 
 class KPI(models.Model):
@@ -261,6 +402,12 @@ class KPI(models.Model):
         ('composite_ipac', 'Composite IPAC'),
     ]
     measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_CHOICES)
+
+    
+    # New fields for implementation
+    internal_code = models.SlugField(max_length=50, blank=True, null=True, help_text="System code for logic mapping (e.g. SALES_EFFECTIVENESS)")
+    min_volume_threshold = models.IntegerField(default=0, help_text="Minimum volume of records required to trigger this KPI (e.g. 10 proformas)")
+    
     target_value = models.DecimalField(max_digits=10, decimal_places=2, help_text="E.g., 95 for percentage, 3 for count.")
     is_warning_kpi = models.BooleanField(default=False, help_text="Check if this KPI represents a disciplinary warning that should trigger an email.")
 
@@ -274,7 +421,22 @@ class BonusRule(models.Model):
     description = models.CharField(max_length=255, help_text="E.g., 'Completar >= 95% de las tareas'")
 
     def __str__(self):
+
         return f"{self.kpi.name} - ${self.bonus_amount}"
+
+class KPIBonusTier(models.Model):
+    """Defines tiered bonuses for a KPI (e.g. >90%: $50, >95%: $100)."""
+    kpi = models.ForeignKey(KPI, on_delete=models.CASCADE, related_name='tiers')
+    threshold = models.DecimalField(max_digits=10, decimal_places=2, help_text="Value required to reach this tier.")
+    bonus_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['threshold']
+
+    def __str__(self):
+        return f"{self.kpi.name} > {self.threshold}: ${self.bonus_amount}"
+
 
 class TaskBoard(models.Model):
     """A board for an employee's tasks."""
