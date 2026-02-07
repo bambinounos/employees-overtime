@@ -6,7 +6,9 @@ from django.http import HttpResponseRedirect
 from .models import (
     Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard,
     TaskList, Task, Checklist, ChecklistItem, Comment, EmployeePerformanceRecord,
-    ManualKpiEntry, SiteConfiguration
+    ManualKpiEntry, SiteConfiguration,
+    JobProfile, KPIBonusTier, DolibarrInstance, DolibarrUserIdentity,
+    SalesRecord, ProductCreationLog, WebhookLog,
 )
 
 @admin.register(SiteConfiguration)
@@ -31,9 +33,9 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'hire_date', 'end_date', 'is_active_status')
+    list_display = ('name', 'email', 'hire_date', 'end_date', 'profile', 'is_active_status')
     search_fields = ('name', 'email')
-    list_filter = ('end_date',)
+    list_filter = ('end_date', 'profile')
 
     @admin.display(boolean=True, description='Active')
     def is_active_status(self, obj):
@@ -100,9 +102,9 @@ class WorkLogAdmin(admin.ModelAdmin):
 
 @admin.register(KPI)
 class KPIAdmin(admin.ModelAdmin):
-    list_display = ('name', 'measurement_type', 'target_value')
+    list_display = ('name', 'measurement_type', 'target_value', 'internal_code', 'min_volume_threshold')
     list_filter = ('measurement_type',)
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'internal_code')
 
 @admin.register(BonusRule)
 class BonusRuleAdmin(admin.ModelAdmin):
@@ -219,3 +221,79 @@ class ManualKpiEntryAdmin(admin.ModelAdmin):
     list_filter = ('date', 'employee', 'kpi')
     search_fields = ('employee__name', 'kpi__name', 'notes')
     autocomplete_fields = ['employee', 'kpi']
+
+
+# --- Sales & Commissions Admin (v1.1) ---
+
+class KPIBonusTierInline(admin.TabularInline):
+    model = KPIBonusTier
+    extra = 1
+
+
+# Add tiers inline to KPI admin
+KPIAdmin.inlines = [KPIBonusTierInline]
+
+
+class DolibarrUserIdentityInline(admin.TabularInline):
+    model = DolibarrUserIdentity
+    extra = 1
+
+
+@admin.register(JobProfile)
+class JobProfileAdmin(admin.ModelAdmin):
+    list_display = ('name', 'earns_commissions', 'get_kpi_count')
+    list_filter = ('earns_commissions',)
+    search_fields = ('name',)
+    filter_horizontal = ('kpis',)
+
+    @admin.display(description='KPIs')
+    def get_kpi_count(self, obj):
+        return obj.kpis.count()
+
+
+@admin.register(DolibarrInstance)
+class DolibarrInstanceAdmin(admin.ModelAdmin):
+    list_display = ('name', 'professional_id')
+    search_fields = ('name', 'professional_id')
+    inlines = [DolibarrUserIdentityInline]
+
+
+@admin.register(DolibarrUserIdentity)
+class DolibarrUserIdentityAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'dolibarr_instance', 'dolibarr_user_id', 'dolibarr_login')
+    list_filter = ('dolibarr_instance',)
+    search_fields = ('employee__name', 'dolibarr_login')
+    autocomplete_fields = ['employee']
+
+
+@admin.register(SalesRecord)
+class SalesRecordAdmin(admin.ModelAdmin):
+    list_display = ('dolibarr_ref', 'employee', 'status', 'amount_untaxed', 'date', 'dolibarr_instance')
+    list_filter = ('status', 'dolibarr_instance', 'date')
+    search_fields = ('dolibarr_ref', 'employee__name')
+    date_hierarchy = 'date'
+    readonly_fields = ('created_at',)
+
+
+@admin.register(ProductCreationLog)
+class ProductCreationLogAdmin(admin.ModelAdmin):
+    list_display = ('product_ref', 'employee', 'dolibarr_instance', 'created_at', 'is_suspect_duplicate')
+    list_filter = ('dolibarr_instance', 'is_suspect_duplicate')
+    search_fields = ('product_ref', 'employee__name')
+
+
+@admin.register(WebhookLog)
+class WebhookLogAdmin(admin.ModelAdmin):
+    list_display = ('id', 'received_at', 'status', 'sender_ip', 'short_error')
+    list_filter = ('status', 'received_at')
+    readonly_fields = ('received_at', 'sender_ip', 'payload', 'headers', 'status', 'error_message')
+    date_hierarchy = 'received_at'
+
+    @admin.display(description='Error')
+    def short_error(self, obj):
+        if obj.error_message:
+            return obj.error_message[:80] + '...' if len(obj.error_message) > 80 else obj.error_message
+        return '-'
+
+    def has_add_permission(self, request):
+        return False
