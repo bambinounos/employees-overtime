@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import F, Avg, Sum
-from django.db.models import F, Avg, Sum
 from django.db.models.functions import Coalesce
 import hashlib
 import hmac
@@ -47,8 +46,6 @@ class Employee(models.Model):
     """Represents an employee in the company."""
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255)
-    email = models.EmailField(unique=True)
-    hire_date = models.DateField()
     email = models.EmailField(unique=True)
     hire_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
@@ -371,6 +368,10 @@ class ProductCreationLog(models.Model):
     dolibarr_product_id = models.IntegerField()
     product_ref = models.CharField(max_length=255, help_text="SKU/Ref of the product")
     created_at = models.DateTimeField()
+    is_suspect_duplicate = models.BooleanField(
+        default=False,
+        help_text="Flagged if same SKU was already created this month (anti-fraud per FEASIBILITY_REPORT 3.2.C.4)"
+    )
 
     class Meta:
         unique_together = ('dolibarr_instance', 'dolibarr_product_id')

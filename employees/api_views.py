@@ -3,9 +3,10 @@ from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
+from rest_framework.throttling import AnonRateThrottle
 from .models import WorkLog, TaskBoard, Task, EmployeePerformanceRecord, Employee, DolibarrInstance, DolibarrUserIdentity, SalesRecord, WebhookLog, ProductCreationLog
 from .serializers import WorkLogSerializer, TaskBoardSerializer, TaskSerializer
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 from django.db import transaction
@@ -13,7 +14,15 @@ from django.utils import timezone
 import hashlib
 import hmac
 import json
+import logging
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+class WebhookRateThrottle(AnonRateThrottle):
+    """Rate limiter for webhook endpoints: 60 requests/minute."""
+    rate = '60/min'
 
 class WorkLogViewSet(viewsets.ModelViewSet):
     queryset = WorkLog.objects.all()
@@ -318,20 +327,22 @@ class DolibarrWebhookView(APIView):
     """
     Endpoint to receive webhooks from Dolibarr.
     Validates HMAC signature and processes sales/product events.
+    Supports: BILL_VALIDATE (invoices & credit notes), PROPAL_VALIDATE, PRODUCT_CREATE.
     """
-    permission_classes = [AllowAny] # We use HMAC for auth
+    permission_classes = [AllowAny]  # We use HMAC for auth
+    throttle_classes = [WebhookRateThrottle]
 
     def post(self, request):
         # 1. Capture Raw Data for logging and verification
         try:
             body_unicode = request.body.decode('utf-8')
-        except:
+        except (UnicodeDecodeError, AttributeError):
             body_unicode = str(request.body)
-            
+
         professional_id = request.headers.get('X-Dolibarr-Professional-ID')
         signature = request.headers.get('X-Dolibarr-Signature')
-        
-        # 2. Log reception (Async processing ideally, but sync for now)
+
+        # 2. Log reception immediately (audit trail per FEASIBILITY_REPORT)
         log = WebhookLog.objects.create(
             sender_ip=self.get_client_ip(request),
             headers=dict(request.headers),
@@ -341,17 +352,14 @@ class DolibarrWebhookView(APIView):
         try:
             # 3. Authenticate Instance
             if not professional_id or not signature:
-                raise ValueError("Missing headers")
+                raise ValueError("Missing authentication headers: X-Dolibarr-Professional-ID and X-Dolibarr-Signature required")
 
             try:
                 instance = DolibarrInstance.objects.get(professional_id=professional_id)
             except DolibarrInstance.DoesNotExist:
-                raise ValueError("Unknown Instance")
+                raise ValueError(f"Unknown Dolibarr instance: professional_id={professional_id}")
 
-            # 4. Validate HMAC
-            # Signature = HMAC-SHA256(Secret + Body)? Or just Body?
-            # Standard Dolibarr webhook module usually signs the body.
-            # Assuming Hex Digest.
+            # 4. Validate HMAC-SHA256 signature
             computed_signature = hmac.new(
                 key=instance.api_secret.encode('utf-8'),
                 msg=request.body,
@@ -359,81 +367,127 @@ class DolibarrWebhookView(APIView):
             ).hexdigest()
 
             if not hmac.compare_digest(computed_signature, signature):
-                raise ValueError("Invalid Signature")
+                raise ValueError("Invalid HMAC signature")
 
             # 5. Process Event
             payload = request.data
-            event_type = payload.get('trigger_code') # Dolibarr trigger code e.g. 'BILL_VALIDATE'
-            
+            event_type = payload.get('trigger_code')
+
             if event_type == 'BILL_VALIDATE':
-                self.process_invoice(payload, instance)
+                self.process_bill_validate(payload, instance)
             elif event_type == 'PROPAL_VALIDATE':
-                 # Might log for audit, but Sales Effectiveness mainly cares about conversion
-                 # If we need to count total proformas, we should store them too.
-                 self.process_proforma(payload, instance)
+                self.process_proforma(payload, instance)
             elif event_type == 'PRODUCT_CREATE':
                 self.process_product_creation(payload, instance)
+            else:
+                logger.warning("Unknown trigger_code received: %s from instance %s", event_type, instance.name)
 
             log.status = 'processed'
             log.save()
             return Response({'status': 'ok'})
 
+        except ValueError as e:
+            log.status = 'error'
+            log.error_message = str(e)
+            log.save()
+            logger.warning("Webhook validation error: %s", e)
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             log.status = 'error'
             log.error_message = str(e)
             log.save()
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.exception("Unexpected error processing webhook")
+            return Response({'error': 'Internal processing error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_client_ip(self, request):
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
+            ip = x_forwarded_for.split(',')[0].strip()
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
 
-    def process_invoice(self, payload, instance):
-        # Payload structure depends on Dolibarr version, assuming standard object fields
-        # object: { id, ref, total_ht, fk_user_author, ... }
-        obj = payload.get('object', {})
-        dolibarr_user_id = obj.get('fk_user_author')
-        
-        # Find Employee
+    def _resolve_employee(self, instance, dolibarr_user_id):
+        """Resolve a Dolibarr user ID to a local Employee. Returns None if not mapped."""
         try:
             identity = DolibarrUserIdentity.objects.get(
                 dolibarr_instance=instance,
                 dolibarr_user_id=dolibarr_user_id
             )
-            employee = identity.employee
+            return identity.employee
         except DolibarrUserIdentity.DoesNotExist:
-            # Log warning or create a "Unknown" record?
-            # For now, just return, or log warning in WebhookLog
-            print(f"Employee not found for user {dolibarr_user_id}")
-            return
+            logger.warning(
+                "Employee not mapped for dolibarr_user_id=%s in instance '%s'. "
+                "Admin should create a DolibarrUserIdentity mapping.",
+                dolibarr_user_id, instance.name
+            )
+            return None
 
-        SalesRecord.objects.create(
-            employee=employee,
-            dolibarr_instance=instance,
-            dolibarr_id=obj.get('id'),
-            dolibarr_ref=obj.get('ref'),
-            origin_poforma_id=obj.get('fk_propal', None), # Assuming field name
-            status='invoiced',
-            amount_untaxed=obj.get('total_ht'),
-            date=timezone.now().date() # Or payload date
-        )
+    @staticmethod
+    def _parse_event_date(obj):
+        """Extract the event date from the payload, falling back to today."""
+        date_str = obj.get('date_validation') or obj.get('date_creation')
+        if date_str:
+            try:
+                return datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                pass
+        return timezone.now().date()
 
-    def process_proforma(self, payload, instance):
+    def process_bill_validate(self, payload, instance):
+        """
+        Process BILL_VALIDATE events.
+        Distinguishes between regular invoices (type=0) and credit notes (type=2)
+        per FEASIBILITY_REPORT section 2.1 events 2 & 3.
+        """
         obj = payload.get('object', {})
         dolibarr_user_id = obj.get('fk_user_author')
-        
-        try:
-            identity = DolibarrUserIdentity.objects.get(
-                dolibarr_instance=instance, 
-                dolibarr_user_id=dolibarr_user_id
-            )
-            employee = identity.employee
-        except DolibarrUserIdentity.DoesNotExist:
+
+        employee = self._resolve_employee(instance, dolibarr_user_id)
+        if not employee:
             return
+
+        event_date = self._parse_event_date(obj)
+        bill_type = obj.get('type', 0)
+
+        # type=2 in Dolibarr = Credit Note (Nota de Credito)
+        if int(bill_type) == 2:
+            # Credit notes: negative amount to deduct from commissions
+            amount = obj.get('total_ht', 0)
+            SalesRecord.objects.create(
+                employee=employee,
+                dolibarr_instance=instance,
+                dolibarr_id=obj.get('id'),
+                dolibarr_ref=obj.get('ref'),
+                origin_proforma_id=obj.get('fk_propal'),
+                status='credit_note',
+                amount_untaxed=-abs(amount),  # Always negative for credit notes
+                date=event_date,
+            )
+            logger.info("Credit note %s processed for employee %s", obj.get('ref'), employee.name)
+        else:
+            # Regular invoice
+            SalesRecord.objects.create(
+                employee=employee,
+                dolibarr_instance=instance,
+                dolibarr_id=obj.get('id'),
+                dolibarr_ref=obj.get('ref'),
+                origin_proforma_id=obj.get('fk_propal'),
+                status='invoiced',
+                amount_untaxed=obj.get('total_ht', 0),
+                date=event_date,
+            )
+
+    def process_proforma(self, payload, instance):
+        """Process PROPAL_VALIDATE events (proforma/proposal validated)."""
+        obj = payload.get('object', {})
+        dolibarr_user_id = obj.get('fk_user_author')
+
+        employee = self._resolve_employee(instance, dolibarr_user_id)
+        if not employee:
+            return
+
+        event_date = self._parse_event_date(obj)
 
         SalesRecord.objects.create(
             employee=employee,
@@ -441,27 +495,47 @@ class DolibarrWebhookView(APIView):
             dolibarr_id=obj.get('id'),
             dolibarr_ref=obj.get('ref'),
             status='proforma',
-            amount_untaxed=obj.get('total_ht'),
-            date=timezone.now().date()
+            amount_untaxed=obj.get('total_ht', 0),
+            date=event_date,
         )
 
     def process_product_creation(self, payload, instance):
+        """
+        Process PRODUCT_CREATE events with anti-fraud SKU validation.
+        Per FEASIBILITY_REPORT section 3.2.C.4: If a product with the same SKU
+        was already created this month in this instance, the new entry is marked
+        as a suspected duplicate (not eligible for bonus).
+        """
         obj = payload.get('object', {})
         dolibarr_user_id = obj.get('fk_user_author')
-        
-        try:
-            identity = DolibarrUserIdentity.objects.get(
-                dolibarr_instance=instance,
-                dolibarr_user_id=dolibarr_user_id
-            )
-            employee = identity.employee
-        except DolibarrUserIdentity.DoesNotExist:
+
+        employee = self._resolve_employee(instance, dolibarr_user_id)
+        if not employee:
             return
 
-        ProductCreationLog.objects.create(
+        product_ref = obj.get('ref', '')
+        now = timezone.now()
+
+        # Anti-fraud: check for same SKU created this month in this instance
+        duplicate_sku = ProductCreationLog.objects.filter(
+            dolibarr_instance=instance,
+            product_ref=product_ref,
+            created_at__year=now.year,
+            created_at__month=now.month,
+        ).exists()
+
+        log_entry = ProductCreationLog.objects.create(
             employee=employee,
             dolibarr_instance=instance,
             dolibarr_product_id=obj.get('id'),
-            product_ref=obj.get('ref'),
-            created_at=timezone.now()
+            product_ref=product_ref,
+            created_at=now,
+            is_suspect_duplicate=duplicate_sku,
         )
+
+        if duplicate_sku:
+            logger.warning(
+                "Suspect duplicate product creation: SKU '%s' already exists this month "
+                "in instance '%s'. Log ID: %s",
+                product_ref, instance.name, log_entry.pk
+            )

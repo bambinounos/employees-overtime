@@ -1,0 +1,36 @@
+# Dolibarr language file - Payroll Connect Module - en_US
+# Copyright (C) 2026 Bambinounos
+
+# Module
+Module505050Name = Payroll Connect
+Module505050Desc = Syncs Sales, Invoice, Credit Note and Product data to Django Payroll System via webhooks
+
+# Admin page
+PayrollConnectSetup = Payroll Connect Setup
+Settings = Settings
+RetryQueue = Retry Queue
+Parameter = Parameter
+Value = Value
+Save = Save
+BackToModuleList = Back to module list
+
+# Permissions
+Permission505051 = Read Payroll Connect configuration
+Permission505052 = Configure Payroll Connect module
+
+# Dashboard widget
+PayrollConnectWidgetTitle = Payroll Connect Status
+PayrollConnectPending = Pending webhook retries
+PayrollConnectFailed = Failed webhook deliveries (max retries reached)
+PayrollConnectAllClear = All webhooks delivered successfully
+
+# Messages
+ConfigurationSaved = Configuration saved successfully
+ErrorSavingConfiguration = Error saving configuration
+WebhookURLRequired = Webhook URL is required
+APISecretRequired = API Secret is required
+SecurityTokenExpired = Security token expired. Please try again.
+EventsProcessed = %s event(s) successfully re-sent to payroll system
+NoEventsToProcess = No pending events to process, or all retries failed
+EventResent = Event #%s re-sent successfully
+EventResendFailed = Failed to resend event #%s
