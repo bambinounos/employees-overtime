@@ -1,10 +1,11 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.core.mail import send_mail
 from django.conf import settings
 from .models import ManualKpiEntry, Task, TaskList
-from datetime import date
+from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
+import uuid
 
 @receiver(post_save, sender=Task)
 def handle_recurring_task(sender, instance, created, **kwargs):
@@ -79,3 +80,61 @@ def send_warning_notification(sender, instance, created, **kwargs):
 
         send_mail(subject, message, from_email, recipient_list)
         print(f"Sent warning email to {employee.email}") # For logging in console
+
+
+# --- CalDAV Integration: auto-create calendar reminders for Tasks ---
+
+DEFAULT_ALARM_MINUTES = 30
+
+@receiver(post_save, sender=Task)
+def sync_task_to_calendar(sender, instance, created, **kwargs):
+    """
+    Creates or updates a CalendarEvent when a Task with a due_date is saved.
+    This allows Thunderbird and other CalDAV clients to show reminders/alarms.
+    """
+    # Skip if this save was triggered by CalDAV PUT (avoids redundant update loop)
+    if getattr(instance, '_skip_calendar_sync', False):
+        return
+
+    from caldav.models import CalendarEvent
+
+    # If no due_date, remove any existing calendar event for this task
+    if not instance.due_date:
+        CalendarEvent.objects.filter(task=instance).delete()
+        return
+
+    # Determine the user: the assigned employee's Django user
+    user = getattr(instance.assigned_to, 'user', None)
+    if not user:
+        return
+
+    # Build event data from task
+    start_date = instance.due_date
+    # Tasks are 1-hour events by default
+    end_date = start_date + timedelta(hours=1)
+    description = instance.description or ''
+
+    # Update existing event or create a new one
+    event, event_created = CalendarEvent.objects.update_or_create(
+        task=instance,
+        defaults={
+            'user': user,
+            'title': instance.title,
+            'start_date': start_date,
+            'end_date': end_date,
+            'description': description,
+            'alarm_minutes': DEFAULT_ALARM_MINUTES,
+        }
+    )
+
+    # Ensure UID is set for CalDAV compatibility
+    if not event.uid:
+        event.uid = f"task-{instance.pk}-{uuid.uuid4().hex[:8]}@payroll"
+        event.save(update_fields=['uid'])
+
+
+@receiver(post_delete, sender=Task)
+def delete_task_calendar_event(sender, instance, **kwargs):
+    """Remove the calendar event when a task is deleted."""
+    from caldav.models import CalendarEvent
+    CalendarEvent.objects.filter(task=instance).delete()
