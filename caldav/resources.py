@@ -74,6 +74,14 @@ class UserCalendarCollection(DAVCollection):
             }
         )
 
+        # Bidirectional sync: propagate date changes back to the linked Task
+        if event.task_id:
+            task = event.task
+            if task.due_date != start_date:
+                task.due_date = start_date
+                task._skip_calendar_sync = True  # Prevent signal from re-updating CalendarEvent
+                task.save(update_fields=['due_date'])
+
         return CalendarEventResource(f"{self.path}/{event.id}.ics", self.environ, event)
 
 class CalendarEventResource(DAVNonCollection):

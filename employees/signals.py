@@ -92,6 +92,10 @@ def sync_task_to_calendar(sender, instance, created, **kwargs):
     Creates or updates a CalendarEvent when a Task with a due_date is saved.
     This allows Thunderbird and other CalDAV clients to show reminders/alarms.
     """
+    # Skip if this save was triggered by CalDAV PUT (avoids redundant update loop)
+    if getattr(instance, '_skip_calendar_sync', False):
+        return
+
     from caldav.models import CalendarEvent
 
     # If no due_date, remove any existing calendar event for this task
