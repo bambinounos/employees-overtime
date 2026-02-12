@@ -15,6 +15,9 @@ db.sqlite3-journal
 /static/
 /staticfiles/
 
+# Build artifacts
+/dist/
+
 # Other
 .DS_Store
 .vscode/
