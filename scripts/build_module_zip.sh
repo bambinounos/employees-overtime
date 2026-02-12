@@ -28,7 +28,7 @@ set -euo pipefail
 # -- Configuration --
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERSION_FILE="$PROJECT_ROOT/VERSION"
+VERSION_FILE="$PROJECT_ROOT/dolibarr_module/VERSION"
 MODULE_SRC="$PROJECT_ROOT/dolibarr_module/payroll_connect"
 DIST_DIR="$PROJECT_ROOT/dist"
 
