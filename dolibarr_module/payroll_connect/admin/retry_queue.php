@@ -26,7 +26,7 @@ $action = GETPOST('action', 'alpha');
 
 // Process retry queue manually (Resync Manual per FEASIBILITY_REPORT 2.1)
 if ($action == 'process_queue') {
-    if (!verifToken()) {
+    if (GETPOST('token', 'alpha') != newToken()) {
         setEventMessages("Security token expired. Please try again.", null, 'errors');
     } else {
         $processed = PayrollConnectHelper::processRetryQueue($db);
@@ -40,7 +40,7 @@ if ($action == 'process_queue') {
 
 // Retry a single specific event
 if ($action == 'retry_one') {
-    if (!verifToken()) {
+    if (GETPOST('token', 'alpha') != newToken()) {
         setEventMessages("Security token expired.", null, 'errors');
     } else {
         $queue_id = GETPOST('id', 'int');

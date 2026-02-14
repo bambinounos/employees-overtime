@@ -26,8 +26,7 @@ $action = GETPOST('action', 'alpha');
 
 // Save settings (with CSRF token validation)
 if ($action == 'set') {
-    // Validate CSRF token
-    if (!verifToken()) {
+    if (GETPOST('token', 'alpha') != newToken()) {
         setEventMessages("Security token expired. Please try again.", null, 'errors');
     } else {
         // Use GETPOST for proper input sanitization (Dolibarr standard)
