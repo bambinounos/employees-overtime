@@ -91,19 +91,36 @@ class modPayrollConnect extends DolibarrModules
     {
         $this->remove($options);
 
-        // Create retry queue table
+        // Create retry queue table (compatible with MySQL and PostgreSQL)
         $sql = array();
-        $sql[] = "CREATE TABLE IF NOT EXISTS " . MAIN_DB_PREFIX . "payroll_connect_retry_queue ("
-            . "rowid INTEGER AUTO_INCREMENT PRIMARY KEY,"
-            . "payload TEXT NOT NULL,"
-            . "trigger_code VARCHAR(50) NOT NULL,"
-            . "status VARCHAR(20) DEFAULT 'pending',"
-            . "attempts INTEGER DEFAULT 0,"
-            . "date_creation DATETIME NOT NULL,"
-            . "date_next_retry DATETIME,"
-            . "date_processed DATETIME,"
-            . "INDEX idx_retry_status_date (status, date_next_retry)"
-            . ") ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+
+        if ($this->db->type == 'pgsql') {
+            $sql[] = "CREATE TABLE IF NOT EXISTS " . MAIN_DB_PREFIX . "payroll_connect_retry_queue ("
+                . "rowid SERIAL PRIMARY KEY,"
+                . "payload TEXT NOT NULL,"
+                . "trigger_code VARCHAR(50) NOT NULL,"
+                . "status VARCHAR(20) DEFAULT 'pending',"
+                . "attempts INTEGER DEFAULT 0,"
+                . "date_creation TIMESTAMP NOT NULL,"
+                . "date_next_retry TIMESTAMP,"
+                . "date_processed TIMESTAMP"
+                . ")";
+        } else {
+            $sql[] = "CREATE TABLE IF NOT EXISTS " . MAIN_DB_PREFIX . "payroll_connect_retry_queue ("
+                . "rowid INTEGER AUTO_INCREMENT PRIMARY KEY,"
+                . "payload TEXT NOT NULL,"
+                . "trigger_code VARCHAR(50) NOT NULL,"
+                . "status VARCHAR(20) DEFAULT 'pending',"
+                . "attempts INTEGER DEFAULT 0,"
+                . "date_creation DATETIME NOT NULL,"
+                . "date_next_retry DATETIME,"
+                . "date_processed DATETIME"
+                . ") ENGINE=InnoDB DEFAULT CHARSET=utf8";
+        }
+
+        // Index created separately for cross-DB compatibility
+        $sql[] = "CREATE INDEX IF NOT EXISTS idx_retry_status_date ON "
+            . MAIN_DB_PREFIX . "payroll_connect_retry_queue (status, date_next_retry)";
 
         return $this->_init($sql, $options);
     }
