@@ -61,6 +61,12 @@ print load_fiche_titre($page_name, $linkback, 'title_setup');
 $head = payrollconnect_admin_prepare_head();
 print dol_get_fiche_head($head, 'settings', $page_name, -1, 'payroll_connect@payroll_connect');
 
+// Help box
+print '<div class="opacitymedium" style="margin-bottom: 12px;">';
+print 'Este m&oacute;dulo env&iacute;a webhooks al servidor Django de n&oacute;minas cada vez que se valida una factura, presupuesto, nota de cr&eacute;dito o se crea un producto. ';
+print 'La comunicaci&oacute;n se autentica con firma HMAC-SHA256.';
+print '</div>';
+
 print '<form method="POST" action="' . $_SERVER["PHP_SELF"] . '">';
 print '<input type="hidden" name="action" value="set">';
 print '<input type="hidden" name="token" value="' . newToken() . '">';
@@ -70,18 +76,28 @@ print '<tr class="liste_titre"><td>' . $langs->trans("Parameter") . '</td><td>' 
 
 // Webhook URL
 $webhook_val = getDolGlobalString('PAYROLL_CONNECT_WEBHOOK_URL');
-print '<tr class="oddeven"><td>Webhook URL (Django API endpoint)</td>';
-print '<td><input type="url" name="PAYROLL_CONNECT_WEBHOOK_URL" value="' . dol_escape_htmltag($webhook_val) . '" size="60" placeholder="https://payroll.example.com/api/webhook/dolibarr/"></td></tr>';
+print '<tr class="oddeven">';
+print '<td>Webhook URL<br><span class="opacitymedium small">Endpoint del servidor Django. Ejemplo: <code>https://salarios.ejemplo.com/api/webhook/dolibarr/</code></span></td>';
+print '<td><input type="url" name="PAYROLL_CONNECT_WEBHOOK_URL" value="' . dol_escape_htmltag($webhook_val) . '" size="60" placeholder="https://salarios.ejemplo.com/api/webhook/dolibarr/"></td></tr>';
 
 // API Secret
 $secret_val = getDolGlobalString('PAYROLL_CONNECT_API_SECRET');
-print '<tr class="oddeven"><td>API Secret (HMAC-SHA256 Key)</td>';
+print '<tr class="oddeven">';
+print '<td>API Secret (HMAC-SHA256)<br><span class="opacitymedium small">Clave compartida con Django. Generar con: <code>python3 -c "import secrets; print(secrets.token_hex(32))"</code><br>Debe ser id&eacute;ntica en Django Admin &gt; Dolibarr Instances &gt; Api secret.</span></td>';
 print '<td><input type="password" name="PAYROLL_CONNECT_API_SECRET" value="' . dol_escape_htmltag($secret_val) . '" size="60"></td></tr>';
 
 print '</table>';
 
-print '<div class="center"><input type="submit" class="button" value="' . $langs->trans("Save") . '"></div>';
+print '<div class="center" style="margin-top: 8px;"><input type="submit" class="button" value="' . $langs->trans("Save") . '"></div>';
 print '</form>';
+
+// Help: required Django-side configuration
+print '<br>';
+print '<div class="opacitymedium small">';
+print '<strong>Configuraci&oacute;n requerida en Django:</strong><br>';
+print '1. Admin &gt; Dolibarr Instances &gt; crear instancia con el <strong>ID Profesional 1</strong> de esta empresa (Admin &gt; Empresa/Organizaci&oacute;n) y el mismo API Secret.<br>';
+print '2. Admin &gt; Dolibarr User Identities &gt; vincular cada empleado con su <strong>User ID</strong> de Dolibarr (visible en la URL: <code>/user/card.php?id=<strong>N</strong></code>).';
+print '</div>';
 
 print dol_get_fiche_end();
 
