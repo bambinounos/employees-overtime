@@ -24,7 +24,7 @@ class modPayrollConnect extends DolibarrModules
         $this->description = "Syncs Sales, Invoice, Credit Note and Product data to Django Payroll System via webhooks.";
         $this->descriptionlong = "Payroll Connect sends real-time webhook notifications to your Django-based payroll system when invoices are validated, proposals are confirmed, credit notes are issued, and products are created. Includes HMAC-SHA256 authentication and a retry queue for reliability.";
 
-        $this->version = '1.1.0';
+        $this->version = '1.1.1';
         $this->const_name = 'MAIN_MODULE_' . strtoupper($this->name);
         $this->picto = 'payroll_connect@payroll_connect';
 
