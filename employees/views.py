@@ -126,8 +126,43 @@ def task_board(request):
         except Employee.DoesNotExist:
             board = None # User not linked to an employee profile
 
+    # --- Smart filtering ---
+    filtered_lists = []
+    completed_range = request.GET.get('completed_range', '7')
+    status_filter = request.GET.get('status', '')
+
+    if board:
+        cutoff_days = {'7': 7, '30': 30, '90': 90}
+        cutoff = None
+        if completed_range in cutoff_days:
+            from django.utils import timezone
+            cutoff = timezone.now() - timedelta(days=cutoff_days[completed_range])
+
+        for tl in board.lists.all():
+            tasks = tl.tasks.filter(is_recurring=False)
+
+            if status_filter:
+                tasks = tasks.filter(status=status_filter)
+
+            hidden_count = 0
+            if tl.name == 'Hecho' and cutoff is not None:
+                from django.db.models import Q
+                total = tasks.count()
+                tasks = tasks.filter(Q(completed_at__gte=cutoff) | Q(completed_at__isnull=True))
+                hidden_count = total - tasks.count()
+
+            filtered_lists.append({
+                'id': tl.id,
+                'name': tl.name,
+                'tasks': tasks.order_by('order'),
+                'hidden_count': hidden_count,
+            })
+
     context = {
         'board': board,
+        'filtered_lists': filtered_lists,
+        'completed_range': completed_range,
+        'status_filter': status_filter,
         'all_employees': all_employees,
         'selected_employee_id': selected_employee_id,
     }

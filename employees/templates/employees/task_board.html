@@ -114,13 +114,42 @@
 {% endif %}
 
 {% if board %}
+<div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+    <form method="get" action="{% url 'task_board' %}" class="d-flex align-items-center gap-2 flex-wrap">
+        {% if selected_employee_id %}
+        <input type="hidden" name="employee_id" value="{{ selected_employee_id }}">
+        {% endif %}
+        <label class="form-label mb-0" for="completed_range">{% trans "Completed:" %}</label>
+        <select name="completed_range" id="completed_range" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+            <option value="7" {% if completed_range == '7' %}selected{% endif %}>{% trans "Last week" %}</option>
+            <option value="30" {% if completed_range == '30' %}selected{% endif %}>{% trans "Last month" %}</option>
+            <option value="90" {% if completed_range == '90' %}selected{% endif %}>{% trans "Last quarter" %}</option>
+            <option value="all" {% if completed_range == 'all' %}selected{% endif %}>{% trans "All" %}</option>
+        </select>
+        <label class="form-label mb-0" for="status">{% trans "Status:" %}</label>
+        <select name="status" id="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+            <option value="" {% if not status_filter %}selected{% endif %}>{% trans "All" %}</option>
+            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>{% trans "Pending" %}</option>
+            <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>{% trans "Completed" %}</option>
+            <option value="unfulfilled" {% if status_filter == 'unfulfilled' %}selected{% endif %}>{% trans "Unfulfilled" %}</option>
+        </select>
+    </form>
+    {% if completed_range != 'all' %}
+    <small class="text-muted">{% trans "Showing completed tasks from the last" %} {{ completed_range }} {% trans "days" %}</small>
+    {% endif %}
+</div>
+
 <div class="task-board">
-    {% for list in board.lists.all %}
+    {% for list in filtered_lists %}
     <div class="task-list">
-        <div class="task-list-header">{{ list.name }}</div>
+        <div class="task-list-header">
+            {{ list.name }}
+            {% if list.hidden_count %}
+                <small class="text-muted">(+{{ list.hidden_count }})</small>
+            {% endif %}
+        </div>
         <div class="list-cards" data-list-id="{{ list.id }}">
-            {% for task in list.tasks.all %}
-                {% if not task.is_recurring %}
+            {% for task in list.tasks %}
                 <div class="task-card" data-task-id="{{ task.id }}">
                     {{ task.title }}
                     <div class="task-due-date">
@@ -136,7 +165,6 @@
                     </div>
                     {% endif %}
                 </div>
-                {% endif %}
             {% endfor %}
         </div>
     </div>
