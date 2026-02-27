@@ -99,7 +99,14 @@ def calcular_matrices(respuestas):
 
 
 def calcular_situacional(respuestas):
-    """Calcula puntaje de prueba situacional por dimensión."""
+    """Calcula puntaje de prueba situacional por dimensión.
+
+    Cada dimensión se promedia (escala 1-5), y el total se normaliza
+    a porcentaje 0-100 para que sea comparable con los umbrales del sistema.
+    Máximo teórico: 3 dimensiones × 5.0 = 15.0 → 100%.
+    """
+    MAX_SUM = 15.0  # 3 dimensiones × máximo 5.0 cada una
+
     dimensiones = {
         'SIT_RESP': [], 'SIT_OBED': [], 'SIT_LEAL': []
     }
@@ -112,8 +119,8 @@ def calcular_situacional(respuestas):
     for dim, valores in dimensiones.items():
         resultado[dim] = mean(valores) if valores else 0
 
-    total = sum(resultado.values())
-    resultado['total'] = total
+    raw_total = sum(resultado.values())
+    resultado['total'] = (raw_total / MAX_SUM) * 100 if MAX_SUM > 0 else 0
     return resultado
 
 

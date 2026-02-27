@@ -12,6 +12,8 @@ from .models import (
     RespuestaPsicometrica, RespuestaProyectiva,
     RespuestaMemoria, RespuestaMatriz, RespuestaSituacional,
 )
+import random
+
 from .utils import seleccionar_preguntas_evaluacion
 from .scoring import calcular_resultado_final
 
@@ -59,9 +61,12 @@ def _serializar_preguntas(preguntas, tipo):
             item['secuencia_correcta'] = p.secuencia_correcta
         if tipo in ('BIGFIVE', 'COMPROMISO', 'OBEDIENCIA', 'DESEABILIDAD',
                      'SITUACIONAL', 'MATRICES'):
+            opciones = list(p.opciones.all().order_by('orden'))
+            if tipo == 'MATRICES':
+                random.shuffle(opciones)
             item['opciones'] = [
                 {'id': o.id, 'texto': o.texto, 'valor': o.valor, 'orden': o.orden}
-                for o in p.opciones.all().order_by('orden')
+                for o in opciones
             ]
         resultado.append(item)
     return resultado
@@ -266,6 +271,13 @@ def realizar_prueba(request, token, tipo_prueba):
         preguntas = preguntas.filter(id__in=evaluacion.preguntas_seleccionadas)
     preguntas = preguntas.prefetch_related('opciones')
     preguntas_list = list(preguntas)
+
+    # Shuffle options for matrices to prevent position bias
+    if tipo_upper == 'MATRICES':
+        for p in preguntas_list:
+            shuffled = list(p.opciones.all())
+            random.shuffle(shuffled)
+            p.shuffled_opciones = shuffled
 
     # Serialize for JS
     preguntas_json = _serializar_preguntas(preguntas_list, tipo_upper)

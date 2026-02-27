@@ -295,14 +295,24 @@ class CalcSituacionalTest(TestCase):
         self.assertEqual(result['SIT_OBED'], 4.0)
         self.assertEqual(result['SIT_LEAL'], 5.0)
 
-    def test_total(self):
+    def test_total_normalizado_porcentaje(self):
         respuestas = [
             _mock_respuesta_situacional('SIT_RESP', 4),
             _mock_respuesta_situacional('SIT_OBED', 4),
             _mock_respuesta_situacional('SIT_LEAL', 4),
         ]
         result = calcular_situacional(respuestas)
-        self.assertEqual(result['total'], 12.0)
+        # raw sum = 12, normalized = (12/15)*100 = 80.0
+        self.assertEqual(result['total'], 80.0)
+
+    def test_total_maximo(self):
+        respuestas = [
+            _mock_respuesta_situacional('SIT_RESP', 5),
+            _mock_respuesta_situacional('SIT_OBED', 5),
+            _mock_respuesta_situacional('SIT_LEAL', 5),
+        ]
+        result = calcular_situacional(respuestas)
+        self.assertEqual(result['total'], 100.0)
 
     def test_sin_respuestas(self):
         result = calcular_situacional([])
