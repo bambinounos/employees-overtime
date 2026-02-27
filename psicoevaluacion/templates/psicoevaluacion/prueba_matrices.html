@@ -1,0 +1,175 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .matriz-card {
+        display: none;
+    }
+    .matriz-card.active {
+        display: block;
+    }
+    .patron-text {
+        font-family: 'Courier New', monospace;
+        font-size: 1.1rem;
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        white-space: pre-wrap;
+        line-height: 1.8;
+    }
+    .opcion-matriz {
+        cursor: pointer;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        transition: all 0.2s;
+    }
+    .opcion-matriz:hover {
+        border-color: #2c3e50;
+    }
+    .opcion-matriz.selected {
+        border-color: #27ae60;
+        background-color: #f0fff4;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="mb-3">
+            <a data-toggle="collapse" href="#instrucciones" class="text-muted small">
+                Ver instrucciones &#9660;
+            </a>
+            <div class="collapse" id="instrucciones">
+                <div class="card card-body mt-2 bg-light small">
+                    {{ prueba.instrucciones|linebreaksbr }}
+                </div>
+            </div>
+        </div>
+
+        {% for pregunta in preguntas %}
+        <div class="matriz-card" data-index="{{ forloop.counter0 }}"
+             data-pregunta-id="{{ pregunta.id }}">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <p class="text-muted small mb-2">Problema {{ forloop.counter }} de {{ preguntas|length }}</p>
+                    <div class="patron-text mb-3">{{ pregunta.texto }}</div>
+
+                    <p class="text-muted small mb-2">Seleccione la respuesta correcta:</p>
+                    {% for opcion in pregunta.opciones.all %}
+                    <div class="opcion-matriz" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
+                        <div class="d-flex align-items-center">
+                            <input type="radio" name="matriz_{{ pregunta.id }}"
+                                   value="{{ opcion.id }}" class="mr-2">
+                            <span>{{ opcion.texto }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="text-center mb-3">
+                <span class="save-indicator save-ind">&#10004; Guardado</span>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-flex justify-content-between mb-3">
+            <button id="btn-anterior" class="btn btn-outline-secondary" disabled>&laquo; Anterior</button>
+            <span id="counter" class="text-muted align-self-center"></span>
+            <button id="btn-siguiente" class="btn btn-outline-secondary">Siguiente &raquo;</button>
+        </div>
+
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var current = 0;
+    var cards = document.querySelectorAll('.matriz-card');
+    var total = cards.length;
+    var respondidas = new Set({{ respondidas_json|safe }});
+    var startTimes = {};
+    var tiempoLimite = {{ prueba.tiempo_limite_minutos|default:"0" }};
+
+    function show(idx) {
+        if (idx < 0 || idx >= total) return;
+        cards[current].classList.remove('active');
+        current = idx;
+        cards[current].classList.add('active');
+        document.getElementById('btn-anterior').disabled = (current === 0);
+        document.getElementById('btn-siguiente').disabled = (current === total - 1);
+        document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
+        startTimes[current] = Date.now();
+        if (respondidas.size >= total) {
+            document.getElementById('btn-next-test').style.display = 'block';
+        }
+    }
+
+    cards[0].classList.add('active');
+    show(0);
+
+    // Timer
+    if (tiempoLimite > 0) {
+        iniciarTimer(tiempoLimite, function() {
+            // Time's up - move to next test
+            window.location.href = '{{ siguiente_url }}';
+        });
+    }
+
+    document.getElementById('btn-anterior').addEventListener('click', function() {
+        if (current > 0) show(current - 1);
+    });
+    document.getElementById('btn-siguiente').addEventListener('click', function() {
+        if (current < total - 1) show(current + 1);
+    });
+
+    // Option selection
+    document.querySelectorAll('.opcion-matriz').forEach(function(opt) {
+        opt.addEventListener('click', function() {
+            var card = this.closest('.matriz-card');
+            card.querySelectorAll('.opcion-matriz').forEach(function(o) {
+                o.classList.remove('selected');
+                o.querySelector('input').checked = false;
+            });
+            this.classList.add('selected');
+            this.querySelector('input').checked = true;
+
+            var preguntaId = parseInt(card.dataset.preguntaId);
+            var opcionId = parseInt(this.dataset.opcionId);
+            var idx = parseInt(card.dataset.index);
+            var tiempo = startTimes[idx] ? Math.round((Date.now() - startTimes[idx]) / 1000) : null;
+
+            guardarRespuesta('/psicoevaluacion/api/respuesta/matriz/', {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: preguntaId,
+                opcion_id: opcionId,
+                tiempo_respuesta_seg: tiempo
+            }).then(function() {
+                respondidas.add(preguntaId);
+                mostrarGuardado(card.querySelector('.save-ind'));
+
+                if (respondidas.size >= total) {
+                    document.getElementById('btn-next-test').style.display = 'block';
+                }
+                if (current < total - 1) {
+                    setTimeout(function() { show(current + 1); }, 500);
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

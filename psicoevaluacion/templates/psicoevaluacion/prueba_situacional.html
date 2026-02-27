@@ -1,0 +1,191 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .escenario-card {
+        display: none;
+    }
+    .escenario-card.active {
+        display: block;
+    }
+    .opcion-card {
+        cursor: pointer;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+    }
+    .opcion-card:hover {
+        border-color: #2c3e50;
+        background-color: #f8f9fa;
+    }
+    .opcion-card.selected {
+        border-color: #27ae60;
+        background-color: #f0fff4;
+    }
+    .opcion-card input[type="radio"] {
+        margin-right: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="mb-3">
+            <a data-toggle="collapse" href="#instrucciones" class="text-muted small">
+                Ver instrucciones &#9660;
+            </a>
+            <div class="collapse" id="instrucciones">
+                <div class="card card-body mt-2 bg-light small">
+                    {{ prueba.instrucciones|linebreaksbr }}
+                </div>
+            </div>
+        </div>
+
+        {% for pregunta in preguntas %}
+        <div class="escenario-card" data-index="{{ forloop.counter0 }}"
+             data-pregunta-id="{{ pregunta.id }}">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <p class="text-muted small">Escenario {{ forloop.counter }} de {{ preguntas|length }}</p>
+                    <h5 class="mb-0">{{ pregunta.texto }}</h5>
+                </div>
+            </div>
+
+            <div class="opciones-container mb-3">
+                {% for opcion in pregunta.opciones.all %}
+                <div class="opcion-card" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
+                    <div class="d-flex align-items-start">
+                        <input type="radio" name="opcion_{{ pregunta.id }}"
+                               value="{{ opcion.id }}" class="mt-1">
+                        <span>{{ opcion.texto }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="form-group">
+                <label class="text-muted small">Justificacion (opcional):</label>
+                <textarea class="form-control justificacion-input" rows="2"
+                          placeholder="Explique brevemente por que eligio esta opcion..."></textarea>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <span id="save-ind-{{ forloop.counter0 }}" class="save-indicator">&#10004; Guardado</span>
+                <button class="btn btn-primary btn-confirmar" disabled>
+                    Confirmar respuesta
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-flex justify-content-between mb-3">
+            <button id="btn-anterior" class="btn btn-outline-secondary" disabled>&laquo; Anterior</button>
+            <span id="counter" class="text-muted align-self-center"></span>
+            <button id="btn-siguiente" class="btn btn-outline-secondary">Siguiente &raquo;</button>
+        </div>
+
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var current = 0;
+    var cards = document.querySelectorAll('.escenario-card');
+    var total = cards.length;
+    var respondidas = new Set({{ respondidas_json|safe }});
+    var startTimes = {};
+
+    function show(idx) {
+        cards[current].classList.remove('active');
+        current = idx;
+        cards[current].classList.add('active');
+        document.getElementById('btn-anterior').disabled = (current === 0);
+        document.getElementById('btn-siguiente').disabled = (current === total - 1);
+        document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
+        startTimes[current] = Date.now();
+        if (respondidas.size >= total) {
+            document.getElementById('btn-next-test').style.display = 'block';
+        }
+    }
+
+    cards[0].classList.add('active');
+    show(0);
+
+    document.getElementById('btn-anterior').addEventListener('click', function() {
+        if (current > 0) show(current - 1);
+    });
+    document.getElementById('btn-siguiente').addEventListener('click', function() {
+        if (current < total - 1) show(current + 1);
+    });
+
+    // Option card selection
+    document.querySelectorAll('.opcion-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+            var container = this.closest('.opciones-container');
+            container.querySelectorAll('.opcion-card').forEach(function(c) {
+                c.classList.remove('selected');
+                c.querySelector('input').checked = false;
+            });
+            this.classList.add('selected');
+            this.querySelector('input').checked = true;
+            var escenario = this.closest('.escenario-card');
+            escenario.querySelector('.btn-confirmar').disabled = false;
+        });
+    });
+
+    // Confirm button
+    document.querySelectorAll('.btn-confirmar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var card = this.closest('.escenario-card');
+            var preguntaId = parseInt(card.dataset.preguntaId);
+            var idx = parseInt(card.dataset.index);
+            var selected = card.querySelector('.opcion-card.selected');
+            if (!selected) return;
+
+            var opcionId = parseInt(selected.dataset.opcionId);
+            var valor = parseInt(selected.dataset.valor);
+            var justificacion = card.querySelector('.justificacion-input').value;
+            var tiempo = startTimes[idx] ? Math.round((Date.now() - startTimes[idx]) / 1000) : null;
+
+            this.disabled = true;
+            this.textContent = 'Guardando...';
+            var thisBtn = this;
+
+            guardarRespuesta('/psicoevaluacion/api/respuesta/situacional/', {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: preguntaId,
+                opcion_id: opcionId,
+                valor: valor,
+                justificacion: justificacion,
+                tiempo_respuesta_seg: tiempo
+            }).then(function() {
+                respondidas.add(preguntaId);
+                thisBtn.textContent = 'Confirmado';
+                thisBtn.classList.remove('btn-primary');
+                thisBtn.classList.add('btn-success');
+                mostrarGuardado(document.getElementById('save-ind-' + idx));
+
+                if (respondidas.size >= total) {
+                    document.getElementById('btn-next-test').style.display = 'block';
+                }
+                if (current < total - 1) {
+                    setTimeout(function() { show(current + 1); }, 600);
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

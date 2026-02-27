@@ -1,0 +1,168 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .frase-card {
+        display: none;
+    }
+    .frase-card.active {
+        display: block;
+    }
+    .frase-texto {
+        font-size: 1.3rem;
+        font-style: italic;
+        color: #2c3e50;
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-left: 4px solid #2c3e50;
+        border-radius: 0 8px 8px 0;
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="mb-3">
+            <a data-toggle="collapse" href="#instrucciones" class="text-muted small">
+                Ver instrucciones &#9660;
+            </a>
+            <div class="collapse" id="instrucciones">
+                <div class="card card-body mt-2 bg-light small">
+                    {{ prueba.instrucciones|linebreaksbr }}
+                </div>
+            </div>
+        </div>
+
+        {% for pregunta in preguntas %}
+        <div class="frase-card" data-index="{{ forloop.counter0 }}"
+             data-pregunta-id="{{ pregunta.id }}">
+            <div class="card mb-3">
+                <div class="card-body py-4">
+                    <p class="text-muted small">Frase {{ forloop.counter }} de {{ preguntas|length }}</p>
+                    <div class="frase-texto">{{ pregunta.texto }}</div>
+                    <textarea class="form-control frase-input" rows="3"
+                              placeholder="Complete la frase con lo primero que se le venga a la mente..."
+                    ></textarea>
+                    <div class="mt-2 text-right">
+                        <span class="save-indicator save-ind">&#10004; Guardado</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-flex justify-content-between mb-3">
+            <button id="btn-anterior" class="btn btn-outline-secondary" disabled>&laquo; Anterior</button>
+            <span id="counter" class="text-muted align-self-center"></span>
+            <button id="btn-siguiente" class="btn btn-outline-secondary">Siguiente &raquo;</button>
+        </div>
+
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var current = 0;
+    var cards = document.querySelectorAll('.frase-card');
+    var total = cards.length;
+    var respondidas = new Set({{ respondidas_json|safe }});
+    var debounceTimers = {};
+    var savedTexts = {};
+
+    function show(idx) {
+        if (idx < 0 || idx >= total) return;
+        // Save current before navigating
+        saveCurrentFrase();
+        cards[current].classList.remove('active');
+        current = idx;
+        cards[current].classList.add('active');
+        document.getElementById('btn-anterior').disabled = (current === 0);
+        document.getElementById('btn-siguiente').disabled = (current === total - 1);
+        document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
+        if (respondidas.size >= total) {
+            document.getElementById('btn-next-test').style.display = 'block';
+        }
+    }
+
+    cards[0].classList.add('active');
+    show(0);
+
+    document.getElementById('btn-anterior').addEventListener('click', function() {
+        show(current - 1);
+    });
+    document.getElementById('btn-siguiente').addEventListener('click', function() {
+        show(current + 1);
+    });
+
+    function saveCurrentFrase() {
+        var card = cards[current];
+        var textarea = card.querySelector('.frase-input');
+        var text = textarea.value.trim();
+        var preguntaId = parseInt(card.dataset.preguntaId);
+
+        if (!text || savedTexts[preguntaId] === text) return;
+
+        guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
+            evaluacion_token: '{{ token }}',
+            pregunta_id: preguntaId,
+            prueba_id: {{ prueba.id }},
+            tipo: 'TEXTO',
+            texto_respuesta: text
+        }).then(function() {
+            respondidas.add(preguntaId);
+            savedTexts[preguntaId] = text;
+            mostrarGuardado(card.querySelector('.save-ind'));
+            if (respondidas.size >= total) {
+                document.getElementById('btn-next-test').style.display = 'block';
+            }
+        });
+    }
+
+    // Debounced auto-save on input (3s)
+    document.querySelectorAll('.frase-input').forEach(function(textarea) {
+        textarea.addEventListener('input', function() {
+            var card = this.closest('.frase-card');
+            var idx = card.dataset.index;
+
+            if (debounceTimers[idx]) clearTimeout(debounceTimers[idx]);
+            debounceTimers[idx] = setTimeout(function() {
+                var preguntaId = parseInt(card.dataset.preguntaId);
+                var text = textarea.value.trim();
+                if (!text || savedTexts[preguntaId] === text) return;
+
+                guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
+                    evaluacion_token: '{{ token }}',
+                    pregunta_id: preguntaId,
+                    prueba_id: {{ prueba.id }},
+                    tipo: 'TEXTO',
+                    texto_respuesta: text
+                }).then(function() {
+                    respondidas.add(preguntaId);
+                    savedTexts[preguntaId] = text;
+                    mostrarGuardado(card.querySelector('.save-ind'));
+                    if (respondidas.size >= total) {
+                        document.getElementById('btn-next-test').style.display = 'block';
+                    }
+                });
+            }, 3000);
+        });
+    });
+
+    // Save on page unload
+    window.addEventListener('beforeunload', function() {
+        saveCurrentFrase();
+    });
+})();
+</script>
+{% endblock %}

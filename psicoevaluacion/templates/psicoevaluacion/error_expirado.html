@@ -1,6 +1,23 @@
-<!DOCTYPE html>
-<html><head><title>Enlace Expirado</title></head>
-<body>
-<h1>Enlace expirado</h1>
-<p>El enlace de evaluación ha expirado. Contacte al evaluador para obtener uno nuevo.</p>
-</body></html>
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}Enlace Expirado{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body text-center py-5 px-4">
+                <div class="mb-4" style="font-size: 3rem; color: #e74c3c;">&#9888;</div>
+                <h2 class="mb-3">Enlace expirado</h2>
+                <p class="text-muted mb-4">
+                    El enlace de evaluacion ha expirado o ya no es valido.
+                </p>
+                <hr class="my-4">
+                <p class="text-muted">
+                    Por favor contacte al evaluador para obtener un nuevo enlace de acceso.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

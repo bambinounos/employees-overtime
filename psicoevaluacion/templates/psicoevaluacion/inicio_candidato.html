@@ -1,6 +1,67 @@
-<!DOCTYPE html>
-<html><head><title>Evaluación Psicológica</title></head>
-<body>
-<h1>Bienvenido/a, {{ evaluacion.nombres }}</h1>
-<p>Evaluación para el cargo: {{ evaluacion.cargo_postulado }}</p>
-</body></html>
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}Bienvenido - Evaluacion Psicologica{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-body text-center py-5">
+                <h2 class="mb-3">Bienvenido/a, {{ evaluacion.nombres }}</h2>
+                {% if evaluacion.cargo_postulado %}
+                <p class="text-muted mb-0">Evaluacion para el cargo: <strong>{{ evaluacion.cargo_postulado }}</strong></p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Pruebas a realizar</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Prueba</th>
+                            <th class="text-right">Duracion aprox.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pruebas_info %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ p.nombre }}</td>
+                            <td class="text-right text-muted">{{ p.duracion }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Instrucciones generales</h5>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li>Asegurese de contar con una conexion a internet estable.</li>
+                    <li>Busque un lugar tranquilo y sin interrupciones.</li>
+                    <li>Responda con sinceridad; no hay respuestas correctas o incorrectas en la mayoria de las pruebas.</li>
+                    <li>Algunas pruebas tienen limite de tiempo. Se le indicara cuando sea el caso.</li>
+                    <li>Sus respuestas se guardan automaticamente. Si pierde la conexion, puede retomar donde quedo.</li>
+                    <li>Una vez iniciada la evaluacion, procure completarla en una sola sesion.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="text-center mb-5">
+            <a href="{% url 'psicoevaluacion:verificar_candidato' token=evaluacion.token %}"
+               class="btn btn-success btn-lg px-5">
+                Comenzar evaluacion
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,30 @@
-<!DOCTYPE html>
-<html><head><title>Evaluación Finalizada</title></head>
-<body>
-<h1>Gracias por completar la evaluación</h1>
-<p>Sus resultados serán revisados por nuestro equipo.</p>
-</body></html>
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}Evaluacion Finalizada{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-body text-center py-5 px-4">
+                <div class="mb-4" style="font-size: 3rem; color: #27ae60;">&#10004;</div>
+                <h2 class="mb-3">Evaluacion finalizada</h2>
+                <p class="lead text-muted mb-4">
+                    Gracias, <strong>{{ evaluacion.nombres }}</strong>, por completar la evaluacion.
+                </p>
+                {% if evaluacion.fecha_finalizacion %}
+                <p class="text-muted small">
+                    Completada el {{ evaluacion.fecha_finalizacion|date:"d/m/Y" }}
+                    a las {{ evaluacion.fecha_finalizacion|time:"H:i" }}
+                </p>
+                {% endif %}
+                <hr class="my-4">
+                <p class="text-muted">
+                    Sus resultados seran revisados por nuestro equipo de evaluacion.
+                    Sera contactado/a proximamente.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

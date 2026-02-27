@@ -1,0 +1,287 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pregunta-card {
+        display: none;
+        min-height: 280px;
+    }
+    .pregunta-card.active {
+        display: block;
+    }
+    .likert-group .btn-outline-primary {
+        border-radius: 50px;
+        min-width: 48px;
+        min-height: 48px;
+        margin: 0 4px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .likert-group .btn-outline-primary.selected,
+    .likert-group .btn-outline-primary:active {
+        background-color: #2c3e50;
+        border-color: #2c3e50;
+        color: white;
+    }
+    .likert-labels {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+    .dot-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: center;
+    }
+    .dot-nav .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #dee2e6;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid transparent;
+    }
+    .dot-nav .dot.answered {
+        background: #27ae60;
+    }
+    .dot-nav .dot.current {
+        border-color: #2c3e50;
+        transform: scale(1.3);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <!-- Instructions collapsible -->
+        <div class="mb-3">
+            <a data-toggle="collapse" href="#instrucciones" class="text-muted small">
+                Ver instrucciones de esta prueba &#9660;
+            </a>
+            <div class="collapse" id="instrucciones">
+                <div class="card card-body mt-2 bg-light small">
+                    {{ prueba.instrucciones|linebreaksbr }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Question container -->
+        <div id="preguntas-container">
+            {% for pregunta in preguntas %}
+            <div class="card pregunta-card mb-3" data-index="{{ forloop.counter0 }}"
+                 data-pregunta-id="{{ pregunta.id }}">
+                <div class="card-body py-4 px-4">
+                    <p class="text-muted small mb-2">Pregunta {{ forloop.counter }} de {{ preguntas|length }}</p>
+                    <h5 class="mb-4">{{ pregunta.texto }}</h5>
+
+                    <div class="text-center">
+                        <div class="likert-labels d-flex justify-content-between mb-2 px-2">
+                            <span>Muy en desacuerdo</span>
+                            <span>Muy de acuerdo</span>
+                        </div>
+                        <div class="likert-group d-flex justify-content-center">
+                            {% for opcion in pregunta.opciones.all %}
+                            <button type="button"
+                                    class="btn btn-outline-primary likert-btn"
+                                    data-valor="{{ opcion.valor }}"
+                                    data-opcion-id="{{ opcion.id }}">
+                                {{ opcion.valor }}
+                            </button>
+                            {% empty %}
+                            {% for val in "12345" %}
+                            <button type="button"
+                                    class="btn btn-outline-primary likert-btn"
+                                    data-valor="{{ val }}"
+                                    data-opcion-id="">
+                                {{ val }}
+                            </button>
+                            {% endfor %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Save indicator -->
+        <div class="text-center mb-3">
+            <span id="save-indicator" class="save-indicator">&#10004; Guardado</span>
+        </div>
+
+        <!-- Navigation -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <button id="btn-anterior" class="btn btn-outline-secondary" disabled>
+                &laquo; Anterior
+            </button>
+            <span id="pregunta-counter" class="text-muted small"></span>
+            <button id="btn-siguiente" class="btn btn-outline-secondary">
+                Siguiente &raquo;
+            </button>
+        </div>
+
+        <!-- Dot navigation -->
+        <div class="card mb-4">
+            <div class="card-body py-3">
+                <div class="dot-nav" id="dot-nav"></div>
+            </div>
+        </div>
+
+        <!-- Next test button -->
+        <div class="text-center mb-4" id="btn-next-test-container" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var currentIndex = 0;
+    var preguntas = document.querySelectorAll('.pregunta-card');
+    var total = preguntas.length;
+    var respondidas = new Set({{ respondidas_json|safe }});
+    var startTimes = {};
+
+    // Build dot nav
+    var dotNav = document.getElementById('dot-nav');
+    for (var i = 0; i < total; i++) {
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.dataset.index = i;
+        var pregId = preguntas[i].dataset.preguntaId;
+        if (respondidas.has(parseInt(pregId))) {
+            dot.classList.add('answered');
+        }
+        dot.addEventListener('click', function() {
+            goTo(parseInt(this.dataset.index));
+        });
+        dotNav.appendChild(dot);
+    }
+
+    function goTo(index) {
+        if (index < 0 || index >= total) return;
+        preguntas[currentIndex].classList.remove('active');
+        currentIndex = index;
+        preguntas[currentIndex].classList.add('active');
+        updateNav();
+    }
+
+    function updateNav() {
+        document.getElementById('btn-anterior').disabled = (currentIndex === 0);
+        document.getElementById('btn-siguiente').disabled = (currentIndex === total - 1);
+        document.getElementById('pregunta-counter').textContent =
+            (currentIndex + 1) + ' / ' + total;
+
+        // Update dots
+        var dots = dotNav.querySelectorAll('.dot');
+        dots.forEach(function(d, i) {
+            d.classList.toggle('current', i === currentIndex);
+        });
+
+        // Show next test button if all answered
+        if (respondidas.size >= total) {
+            document.getElementById('btn-next-test-container').style.display = 'block';
+        }
+
+        // Track time
+        startTimes[currentIndex] = Date.now();
+    }
+
+    // Init
+    preguntas[0].classList.add('active');
+    updateNav();
+
+    // Navigation buttons
+    document.getElementById('btn-anterior').addEventListener('click', function() {
+        goTo(currentIndex - 1);
+    });
+    document.getElementById('btn-siguiente').addEventListener('click', function() {
+        goTo(currentIndex + 1);
+    });
+
+    // Likert button clicks
+    document.querySelectorAll('.likert-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var card = this.closest('.pregunta-card');
+            var preguntaId = parseInt(card.dataset.preguntaId);
+            var valor = parseInt(this.dataset.valor);
+            var opcionId = this.dataset.opcionId ? parseInt(this.dataset.opcionId) : null;
+
+            // Visual selection
+            card.querySelectorAll('.likert-btn').forEach(function(b) {
+                b.classList.remove('selected');
+            });
+            this.classList.add('selected');
+
+            // Calculate time
+            var tiempo = null;
+            if (startTimes[currentIndex]) {
+                tiempo = Math.round((Date.now() - startTimes[currentIndex]) / 1000);
+            }
+
+            // Save via AJAX
+            var saveData = {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: preguntaId,
+                valor: valor,
+                tiempo_respuesta_seg: tiempo
+            };
+            if (opcionId) saveData.opcion_id = opcionId;
+
+            guardarRespuesta('/psicoevaluacion/api/respuesta/psicometrica/', saveData)
+                .then(function() {
+                    respondidas.add(preguntaId);
+                    // Update dot
+                    var idx = parseInt(card.dataset.index);
+                    dotNav.querySelectorAll('.dot')[idx].classList.add('answered');
+                    mostrarGuardado(document.getElementById('save-indicator'));
+
+                    // Check completion
+                    if (respondidas.size >= total) {
+                        document.getElementById('btn-next-test-container').style.display = 'block';
+                    }
+
+                    // Auto-advance after 500ms
+                    if (currentIndex < total - 1) {
+                        setTimeout(function() { goTo(currentIndex + 1); }, 500);
+                    }
+                });
+        });
+    });
+
+    // Restore previous selections on page load
+    if (respondidas.size > 0) {
+        // Find first unanswered to start there
+        for (var i = 0; i < total; i++) {
+            var pid = parseInt(preguntas[i].dataset.preguntaId);
+            if (!respondidas.has(pid)) {
+                goTo(i);
+                break;
+            }
+        }
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowLeft') goTo(currentIndex - 1);
+        if (e.key === 'ArrowRight') goTo(currentIndex + 1);
+        if (e.key >= '1' && e.key <= '5') {
+            var card = preguntas[currentIndex];
+            var btns = card.querySelectorAll('.likert-btn');
+            var val = parseInt(e.key);
+            btns.forEach(function(b) {
+                if (parseInt(b.dataset.valor) === val) b.click();
+            });
+        }
+    });
+})();
+</script>
+{% endblock %}

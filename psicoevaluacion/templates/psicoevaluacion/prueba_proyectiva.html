@@ -1,0 +1,323 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .canvas-container {
+        position: relative;
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        touch-action: none;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .canvas-container canvas {
+        display: block;
+        width: 100%;
+        cursor: crosshair;
+    }
+    .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        align-items: center;
+    }
+    .toolbar .btn-tool {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 2px solid #dee2e6;
+        cursor: pointer;
+        transition: all 0.2s;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .toolbar .btn-tool:hover {
+        border-color: #2c3e50;
+    }
+    .toolbar .btn-tool.active {
+        border-color: #2c3e50;
+        box-shadow: 0 0 0 2px rgba(44,62,80,0.3);
+    }
+    .color-btn {
+        width: 28px !important;
+        height: 28px !important;
+    }
+    .separator {
+        width: 1px;
+        height: 30px;
+        background: #dee2e6;
+        margin: 0 4px;
+    }
+    .size-btn {
+        background: white !important;
+    }
+    .size-dot {
+        border-radius: 50%;
+        background: #2c3e50;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="mb-2">{{ prueba.nombre }}</h5>
+                <p class="text-muted mb-0">{{ prueba.instrucciones|linebreaksbr }}</p>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar" id="toolbar">
+            <span class="text-muted small mr-2">Color:</span>
+            <button class="btn-tool color-btn active" data-color="#000000" style="background:#000000;" title="Negro"></button>
+            <button class="btn-tool color-btn" data-color="#e74c3c" style="background:#e74c3c;" title="Rojo"></button>
+            <button class="btn-tool color-btn" data-color="#2980b9" style="background:#2980b9;" title="Azul"></button>
+            <button class="btn-tool color-btn" data-color="#27ae60" style="background:#27ae60;" title="Verde"></button>
+            <button class="btn-tool color-btn" data-color="#8e44ad" style="background:#8e44ad;" title="Morado"></button>
+
+            <div class="separator"></div>
+
+            <span class="text-muted small mr-2">Grosor:</span>
+            <button class="btn-tool size-btn active" data-size="2" title="Fino">
+                <span class="size-dot" style="width:4px;height:4px;"></span>
+            </button>
+            <button class="btn-tool size-btn" data-size="5" title="Medio">
+                <span class="size-dot" style="width:8px;height:8px;"></span>
+            </button>
+            <button class="btn-tool size-btn" data-size="10" title="Grueso">
+                <span class="size-dot" style="width:14px;height:14px;"></span>
+            </button>
+
+            <div class="separator"></div>
+
+            <button class="btn-tool" id="btn-eraser" title="Borrador" style="background:white;font-size:14px;">&#9003;</button>
+            <button class="btn-tool" id="btn-undo" title="Deshacer" style="background:white;font-size:14px;">&#8630;</button>
+            <button class="btn-tool" id="btn-clear" title="Limpiar todo" style="background:white;font-size:14px;">&#10006;</button>
+        </div>
+
+        <!-- Canvas -->
+        <div class="canvas-container" id="canvas-container">
+            <canvas id="drawing-canvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="text-center mt-3 mb-4">
+            <span id="save-indicator" class="save-indicator mr-3">&#10004; Guardado</span>
+            <button id="btn-finalizar" class="btn btn-success btn-lg px-5">
+                Finalizar dibujo
+            </button>
+        </div>
+
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var canvas = document.getElementById('drawing-canvas');
+    var ctx = canvas.getContext('2d');
+    var container = document.getElementById('canvas-container');
+
+    // State
+    var isDrawing = false;
+    var currentColor = '#000000';
+    var currentSize = 2;
+    var isEraser = false;
+    var history = [];
+    var currentStroke = [];
+    var allStrokes = [];
+    var startTime = Date.now();
+
+    // Save initial state
+    saveState();
+
+    function getPos(e) {
+        var rect = canvas.getBoundingClientRect();
+        var scaleX = canvas.width / rect.width;
+        var scaleY = canvas.height / rect.height;
+        var clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    function startDraw(e) {
+        e.preventDefault();
+        isDrawing = true;
+        var pos = getPos(e);
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+        currentStroke = [{
+            x: pos.x, y: pos.y, t: Date.now() - startTime,
+            pressure: e.pressure || 0.5
+        }];
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        var pos = getPos(e);
+
+        ctx.lineWidth = currentSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (isEraser) {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.strokeStyle = 'rgba(0,0,0,1)';
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = currentColor;
+        }
+
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+
+        currentStroke.push({
+            x: pos.x, y: pos.y, t: Date.now() - startTime,
+            pressure: e.pressure || 0.5
+        });
+    }
+
+    function endDraw(e) {
+        if (!isDrawing) return;
+        isDrawing = false;
+        ctx.globalCompositeOperation = 'source-over';
+        saveState();
+
+        if (currentStroke.length > 1) {
+            allStrokes.push({
+                color: isEraser ? 'eraser' : currentColor,
+                size: currentSize,
+                points: currentStroke
+            });
+        }
+        currentStroke = [];
+    }
+
+    // Pointer events for touch + mouse
+    canvas.addEventListener('pointerdown', startDraw);
+    canvas.addEventListener('pointermove', draw);
+    canvas.addEventListener('pointerup', endDraw);
+    canvas.addEventListener('pointerleave', endDraw);
+
+    // Color buttons
+    document.querySelectorAll('.color-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.color-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            currentColor = this.dataset.color;
+            isEraser = false;
+            document.getElementById('btn-eraser').classList.remove('active');
+        });
+    });
+
+    // Size buttons
+    document.querySelectorAll('.size-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.size-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            currentSize = parseInt(this.dataset.size);
+        });
+    });
+
+    // Eraser
+    document.getElementById('btn-eraser').addEventListener('click', function() {
+        isEraser = !isEraser;
+        this.classList.toggle('active');
+    });
+
+    // Undo
+    document.getElementById('btn-undo').addEventListener('click', function() {
+        if (history.length > 1) {
+            history.pop();
+            var img = new Image();
+            img.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = history[history.length - 1];
+            if (allStrokes.length > 0) allStrokes.pop();
+        }
+    });
+
+    // Clear
+    document.getElementById('btn-clear').addEventListener('click', function() {
+        if (!confirm('Limpiar todo el dibujo?')) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        history = [];
+        allStrokes = [];
+        saveState();
+    });
+
+    function saveState() {
+        history.push(canvas.toDataURL());
+        if (history.length > 50) history.shift();
+    }
+
+    // Finalize drawing
+    document.getElementById('btn-finalizar').addEventListener('click', function() {
+        var btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+
+        var imageData = canvas.toDataURL('image/png');
+        var tiempoTotal = Math.round((Date.now() - startTime) / 1000);
+
+        // Use first pregunta if available, otherwise null
+        var preguntaId = null;
+        {% if preguntas %}
+        preguntaId = {{ preguntas.0.id }};
+        {% endif %}
+
+        guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
+            evaluacion_token: '{{ token }}',
+            pregunta_id: preguntaId,
+            prueba_id: {{ prueba.id }},
+            tipo: 'DIBUJO',
+            imagen_canvas: imageData,
+            datos_trazo: {
+                strokes: allStrokes,
+                total_strokes: allStrokes.length,
+                canvas_size: { width: 800, height: 600 }
+            },
+            tiempo_total_seg: tiempoTotal
+        }).then(function() {
+            btn.textContent = 'Dibujo guardado';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-secondary');
+            mostrarGuardado(document.getElementById('save-indicator'));
+            document.getElementById('btn-next-test').style.display = 'block';
+        }).catch(function() {
+            btn.disabled = false;
+            btn.textContent = 'Reintentar';
+        });
+    });
+})();
+</script>
+{% endblock %}

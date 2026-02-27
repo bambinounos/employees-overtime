@@ -1,0 +1,197 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .color-card {
+        width: 80px;
+        height: 80px;
+        border-radius: 12px;
+        cursor: grab;
+        transition: transform 0.2s;
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .color-card:active {
+        cursor: grabbing;
+        transform: scale(1.05);
+    }
+    .color-card.sortable-ghost {
+        opacity: 0.4;
+    }
+    .ranking-slot {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 2px dashed #dee2e6;
+        min-height: 96px;
+    }
+    .ranking-slot .position {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #6c757d;
+        min-width: 30px;
+    }
+    .sortable-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        padding: 1rem;
+        min-height: 110px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 2px dashed #dee2e6;
+    }
+    .ronda-info {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="mb-2">{{ prueba.nombre }}</h5>
+                <p class="text-muted mb-0">{{ prueba.instrucciones|linebreaksbr }}</p>
+            </div>
+        </div>
+
+        <div class="text-center mb-3">
+            <span class="ronda-info" id="ronda-label">Ronda 1 de 2</span>
+        </div>
+
+        <p class="text-center text-muted mb-3">
+            Arrastre los colores en el orden que mas le agrade, del que mas le gusta (1) al que menos le gusta (8).
+        </p>
+
+        <!-- Color source - ranking area -->
+        <div id="ranking-container">
+            <div class="sortable-list" id="color-list">
+                <!-- Colors added by JS -->
+            </div>
+        </div>
+
+        <div class="text-center mt-4 mb-3">
+            <span id="save-indicator" class="save-indicator mr-3">&#10004; Guardado</span>
+            <button id="btn-confirmar" class="btn btn-primary btn-lg px-5">
+                Confirmar orden
+            </button>
+        </div>
+
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+(function() {
+    var LUSCHER_COLORS = [
+        { id: 1, name: 'Azul', hex: '#004983' },
+        { id: 2, name: 'Verde', hex: '#1B813E' },
+        { id: 3, name: 'Rojo', hex: '#E03C31' },
+        { id: 4, name: 'Amarillo', hex: '#FFD700' },
+        { id: 5, name: 'Violeta', hex: '#6A0DAD' },
+        { id: 6, name: 'Marron', hex: '#8B4513' },
+        { id: 7, name: 'Negro', hex: '#1a1a1a' },
+        { id: 0, name: 'Gris', hex: '#808080' }
+    ];
+
+    var ronda = 1;
+    var resultados = { ronda1: [], ronda2: [] };
+    var colorList = document.getElementById('color-list');
+
+    function shuffle(arr) {
+        var a = arr.slice();
+        for (var i = a.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+        }
+        return a;
+    }
+
+    function renderColors(colors) {
+        colorList.innerHTML = '';
+        colors.forEach(function(c) {
+            var div = document.createElement('div');
+            div.className = 'color-card';
+            div.style.backgroundColor = c.hex;
+            div.dataset.colorId = c.id;
+            div.title = c.name;
+            colorList.appendChild(div);
+        });
+    }
+
+    // Initial render shuffled
+    renderColors(shuffle(LUSCHER_COLORS));
+
+    // Make sortable
+    var sortable = Sortable.create(colorList, {
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+    });
+
+    document.getElementById('btn-confirmar').addEventListener('click', function() {
+        var order = [];
+        colorList.querySelectorAll('.color-card').forEach(function(card) {
+            order.push(parseInt(card.dataset.colorId));
+        });
+
+        if (ronda === 1) {
+            resultados.ronda1 = order;
+            ronda = 2;
+            document.getElementById('ronda-label').textContent = 'Ronda 2 de 2';
+            // Shuffle and re-render
+            renderColors(shuffle(LUSCHER_COLORS));
+            sortable = Sortable.create(colorList, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+            });
+        } else {
+            resultados.ronda2 = order;
+            var btn = this;
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+
+            // Use first pregunta if available
+            var preguntaId = null;
+            {% if preguntas %}
+            preguntaId = {{ preguntas.0.id }};
+            {% endif %}
+
+            guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: preguntaId,
+                prueba_id: {{ prueba.id }},
+                tipo: 'TEXTO',
+                texto_respuesta: JSON.stringify(resultados)
+            }).then(function() {
+                btn.textContent = 'Guardado';
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-secondary');
+                mostrarGuardado(document.getElementById('save-indicator'));
+                document.getElementById('btn-next-test').style.display = 'block';
+            }).catch(function() {
+                btn.disabled = false;
+                btn.textContent = 'Reintentar';
+            });
+        }
+    });
+})();
+</script>
+{% endblock %}

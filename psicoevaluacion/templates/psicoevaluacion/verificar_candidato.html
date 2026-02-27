@@ -1,6 +1,39 @@
-<!DOCTYPE html>
-<html><head><title>Verificar Datos</title></head>
-<body>
-<h1>Verificar datos</h1>
-<p>{{ evaluacion.nombres }} — {{ evaluacion.cedula }}</p>
-</body></html>
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}Verificar Identidad - Evaluacion Psicologica{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body py-5 px-4">
+                <h3 class="text-center mb-4">Confirmar identidad</h3>
+
+                <p class="text-center text-muted mb-4">
+                    Hola <strong>{{ evaluacion.nombres }}</strong>, por favor ingrese su numero de cedula para confirmar su identidad y comenzar la evaluacion.
+                </p>
+
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="cedula">Numero de cedula</label>
+                        <input type="text" class="form-control form-control-lg text-center"
+                               id="cedula" name="cedula"
+                               placeholder="Ej: 1234567890"
+                               autocomplete="off" autofocus required>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-lg btn-block mt-4">
+                        Confirmar y comenzar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

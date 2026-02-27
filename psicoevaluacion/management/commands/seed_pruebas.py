@@ -9,11 +9,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write('Cargando banco de pruebas psicológicas v2...')
 
-        # Crear perfil objetivo por defecto
-        PerfilObjetivo.objects.get_or_create(
-            nombre="Perfil Estándar",
-            defaults={'activo': True},
-        )
+        self._seed_perfiles()
 
         self._seed_bigfive()
         self._seed_compromiso()
@@ -35,6 +31,172 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'Banco v2 cargado: {total_preguntas} preguntas, {total_opciones} opciones'
         ))
+
+    # ──────────────────────────────────────────────
+    # PERFILES OBJETIVO
+    # ──────────────────────────────────────────────
+    def _seed_perfiles(self):
+        perfiles = [
+            {
+                'nombre': 'Perfil Estándar',
+                'min_responsabilidad': 4.0,
+                'min_amabilidad': 3.0,
+                'max_neuroticismo': 3.0,
+                'min_apertura': 2.5,
+                'min_extroversion': 2.0,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 3.5,
+                'min_memoria': 60.0,
+                'min_matrices': 50.0,
+                'min_situacional': 60.0,
+            },
+            {
+                # Guardias, vigilantes, escoltas — alta obediencia y responsabilidad,
+                # estabilidad emocional, buena memoria operativa
+                'nombre': 'Guardia de Seguridad',
+                'min_responsabilidad': 4.2,
+                'min_amabilidad': 2.5,
+                'max_neuroticismo': 2.5,
+                'min_apertura': 2.0,
+                'min_extroversion': 2.0,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 4.2,
+                'min_memoria': 70.0,
+                'min_matrices': 45.0,
+                'min_situacional': 65.0,
+            },
+            {
+                # Call center, recepción, servicio postventa — calidez, paciencia,
+                # orientación al servicio
+                'nombre': 'Atención al Cliente',
+                'min_responsabilidad': 3.5,
+                'min_amabilidad': 4.0,
+                'max_neuroticismo': 2.8,
+                'min_apertura': 3.0,
+                'min_extroversion': 3.5,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 3.0,
+                'min_memoria': 50.0,
+                'min_matrices': 45.0,
+                'min_situacional': 60.0,
+            },
+            {
+                # Planta, manufactura, logística — cumplimiento de normas,
+                # constancia, baja conflictividad
+                'nombre': 'Operario / Producción',
+                'min_responsabilidad': 4.0,
+                'min_amabilidad': 3.0,
+                'max_neuroticismo': 3.0,
+                'min_apertura': 2.0,
+                'min_extroversion': 2.0,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 4.0,
+                'min_memoria': 55.0,
+                'min_matrices': 40.0,
+                'min_situacional': 55.0,
+            },
+            {
+                # Asistentes, secretarias, auxiliares contables — organización,
+                # capacidad analítica, cumplimiento
+                'nombre': 'Administrativo / Oficina',
+                'min_responsabilidad': 4.0,
+                'min_amabilidad': 3.5,
+                'max_neuroticismo': 3.0,
+                'min_apertura': 3.0,
+                'min_extroversion': 2.5,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 3.5,
+                'min_memoria': 60.0,
+                'min_matrices': 55.0,
+                'min_situacional': 55.0,
+            },
+            {
+                # Ejecutivos comerciales, asesores, representantes — persuasión,
+                # iniciativa, resiliencia al rechazo
+                'nombre': 'Ventas / Comercial',
+                'min_responsabilidad': 3.5,
+                'min_amabilidad': 3.5,
+                'max_neuroticismo': 3.0,
+                'min_apertura': 3.5,
+                'min_extroversion': 4.0,
+                'min_compromiso_organizacional': 3.0,
+                'min_obediencia': 2.5,
+                'min_memoria': 50.0,
+                'min_matrices': 50.0,
+                'min_situacional': 60.0,
+            },
+            {
+                # Jefes de área, coordinadores, líderes de turno — alto en todo,
+                # especialmente responsabilidad y compromiso
+                'nombre': 'Supervisor / Líder de Equipo',
+                'min_responsabilidad': 4.3,
+                'min_amabilidad': 3.5,
+                'max_neuroticismo': 2.5,
+                'min_apertura': 3.0,
+                'min_extroversion': 3.0,
+                'min_compromiso_organizacional': 4.0,
+                'min_obediencia': 3.5,
+                'min_memoria': 65.0,
+                'min_matrices': 55.0,
+                'min_situacional': 70.0,
+            },
+            {
+                # Choferes, repartidores, mensajeros — alta responsabilidad,
+                # obediencia a normas, estabilidad emocional, buena memoria
+                'nombre': 'Conductor / Transporte',
+                'min_responsabilidad': 4.2,
+                'min_amabilidad': 2.5,
+                'max_neuroticismo': 2.5,
+                'min_apertura': 2.0,
+                'min_extroversion': 2.0,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 4.0,
+                'min_memoria': 65.0,
+                'min_matrices': 40.0,
+                'min_situacional': 60.0,
+            },
+            {
+                # Cajeros, bodegueros, encargados de inventario — honestidad,
+                # precisión, obediencia, estabilidad
+                'nombre': 'Cajero / Manejo de Valores',
+                'min_responsabilidad': 4.3,
+                'min_amabilidad': 3.0,
+                'max_neuroticismo': 2.5,
+                'min_apertura': 2.0,
+                'min_extroversion': 2.5,
+                'min_compromiso_organizacional': 4.0,
+                'min_obediencia': 4.0,
+                'min_memoria': 60.0,
+                'min_matrices': 50.0,
+                'min_situacional': 65.0,
+            },
+            {
+                # Profesionales con título, analistas, ingenieros junior —
+                # capacidad analítica alta, apertura, responsabilidad
+                'nombre': 'Profesional / Analista',
+                'min_responsabilidad': 4.0,
+                'min_amabilidad': 3.0,
+                'max_neuroticismo': 3.0,
+                'min_apertura': 3.5,
+                'min_extroversion': 2.5,
+                'min_compromiso_organizacional': 3.5,
+                'min_obediencia': 3.0,
+                'min_memoria': 65.0,
+                'min_matrices': 65.0,
+                'min_situacional': 60.0,
+            },
+        ]
+
+        creados = 0
+        for p in perfiles:
+            nombre = p.pop('nombre')
+            _, created = PerfilObjetivo.objects.get_or_create(
+                nombre=nombre, defaults={**p, 'activo': True})
+            if created:
+                creados += 1
+
+        self.stdout.write(f'  Perfiles objetivo: {creados} creados, '
+                          f'{len(perfiles) - creados} ya existían')
 
     # ──────────────────────────────────────────────
     # LIKERT 1-5 helper
