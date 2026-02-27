@@ -61,7 +61,7 @@ class EvaluacionAdmin(admin.ModelAdmin):
                     'fecha_creacion', 'fecha_expiracion')
     list_filter = ('estado', 'fecha_creacion')
     search_fields = ('nombres', 'cedula', 'correo')
-    readonly_fields = ('uuid', 'token', 'fecha_creacion')
+    readonly_fields = ('uuid', 'token', 'fecha_creacion', 'link_evaluacion')
 
     @admin.display(description='Estado')
     def estado_color(self, obj):
@@ -77,6 +77,23 @@ class EvaluacionAdmin(admin.ModelAdmin):
         return format_html(
             '<span style="color: {}; font-weight: bold;">{}</span>',
             color, obj.get_estado_display()
+        )
+
+    @admin.display(description='Link de evaluación')
+    def link_evaluacion(self, obj):
+        if not obj.token:
+            return '-'
+        url = f"/psicoevaluacion/evaluar/{obj.token}/"
+        return format_html(
+            '<a href="{}" target="_blank" style="font-size: 14px;">{}</a>'
+            '&nbsp;&nbsp;'
+            '<button type="button" onclick="'
+            'var u=window.location.origin+&quot;{}&quot;;'
+            'navigator.clipboard.writeText(u);'
+            'this.innerText=&quot;Copiado!&quot;;'
+            'setTimeout(function(){{this.innerText=&quot;Copiar&quot;}}.bind(this),2000);"'
+            ' style="cursor:pointer; padding: 2px 8px;">Copiar</button>',
+            url, url, url
         )
 
 
