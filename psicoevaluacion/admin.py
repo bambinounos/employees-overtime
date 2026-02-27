@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 
 from employees.models import Employee
@@ -62,10 +63,11 @@ class PreguntaAdmin(admin.ModelAdmin):
 @admin.register(Evaluacion)
 class EvaluacionAdmin(admin.ModelAdmin):
     list_display = ('nombres', 'cedula', 'cargo_postulado', 'estado_color',
-                    'fecha_creacion', 'fecha_expiracion')
+                    'fecha_creacion', 'fecha_expiracion', 'acciones_proyectivas')
     list_filter = ('estado', 'fecha_creacion')
     search_fields = ('nombres', 'cedula', 'correo')
-    readonly_fields = ('uuid', 'token', 'fecha_creacion', 'link_evaluacion')
+    readonly_fields = ('uuid', 'token', 'fecha_creacion', 'link_evaluacion',
+                       'acciones_proyectivas_detail')
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "empleado":
@@ -105,13 +107,39 @@ class EvaluacionAdmin(admin.ModelAdmin):
             url, url, url
         )
 
+    @admin.display(description='Proyectivas')
+    def acciones_proyectivas(self, obj):
+        if obj.estado not in ('COMPLETADA', 'REVISADA'):
+            return '-'
+        revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.pk])
+        descargar_url = reverse('psicoevaluacion:descargar_proyectivas', args=[obj.pk])
+        return format_html(
+            '<a href="{}" style="margin-right:8px;">Revisar/IA</a>'
+            '<a href="{}">ZIP</a>',
+            revisar_url, descargar_url
+        )
+
+    @admin.display(description='Acciones proyectivas')
+    def acciones_proyectivas_detail(self, obj):
+        if not obj.pk:
+            return '-'
+        revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.pk])
+        descargar_url = reverse('psicoevaluacion:descargar_proyectivas', args=[obj.pk])
+        return format_html(
+            '<a href="{}" style="font-size:14px; margin-right:12px;">'
+            'Revisar y Calificar con IA</a>'
+            '<a href="{}" style="font-size:14px;">'
+            'Descargar ZIP</a>',
+            revisar_url, descargar_url
+        )
+
 
 @admin.register(ResultadoFinal)
 class ResultadoFinalAdmin(admin.ModelAdmin):
     list_display = ('evaluacion', 'veredicto_automatico', 'veredicto_final',
                     'puntaje_responsabilidad', 'puntaje_compromiso_total',
                     'puntaje_obediencia', 'puntaje_memoria', 'puntaje_matrices',
-                    'evaluacion_confiable')
+                    'evaluacion_confiable', 'link_proyectivas')
     list_filter = ('veredicto_automatico', 'veredicto_final', 'evaluacion_confiable')
     readonly_fields = (
         'puntaje_responsabilidad', 'puntaje_amabilidad', 'puntaje_neuroticismo',
@@ -124,7 +152,25 @@ class ResultadoFinalAdmin(admin.ModelAdmin):
         'puntaje_deseabilidad_social', 'indice_consistencia', 'evaluacion_confiable',
         'indice_responsabilidad_total', 'indice_lealtad', 'indice_obediencia_total',
         'veredicto_automatico', 'fecha_calculo',
+        'link_proyectivas_detail',
     )
+
+    @admin.display(description='Proyectivas')
+    def link_proyectivas(self, obj):
+        url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.evaluacion_id])
+        return format_html('<a href="{}">Revisar/IA</a>', url)
+
+    @admin.display(description='Calificar proyectivas')
+    def link_proyectivas_detail(self, obj):
+        revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.evaluacion_id])
+        descargar_url = reverse('psicoevaluacion:descargar_proyectivas', args=[obj.evaluacion_id])
+        return format_html(
+            '<a href="{}" style="font-size:14px; margin-right:12px;">'
+            'Revisar y Calificar con IA</a>'
+            '<a href="{}" style="font-size:14px;">'
+            'Descargar ZIP</a>',
+            revisar_url, descargar_url
+        )
 
 
 @admin.register(RespuestaPsicometrica)
