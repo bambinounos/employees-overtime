@@ -32,6 +32,15 @@ class PerfilObjetivo(models.Model):
     min_situacional = models.FloatField(default=60.0,
         help_text="% mínimo en prueba situacional")
 
+    METODO_VEREDICTO_CHOICES = [
+        ('CONTEO_FALLOS', 'Conteo de fallos (0=APTO, 1=REVISIÓN, 2+=NO APTO)'),
+        ('ESTRICTO', 'Estricto (cualquier fallo = NO APTO)'),
+    ]
+
+    metodo_veredicto = models.CharField(
+        max_length=15, choices=METODO_VEREDICTO_CHOICES,
+        default='CONTEO_FALLOS',
+        help_text="Método para determinar el veredicto automático")
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -429,3 +438,61 @@ class ResultadoFinal(models.Model):
 
     def __str__(self):
         return f"{self.evaluacion.nombres} - {self.veredicto_final or self.veredicto_automatico}"
+
+
+class ConfiguracionIA(models.Model):
+    """Singleton: configuración de proveedores de IA para calificación proyectiva."""
+    PROVEEDOR_CHOICES = [
+        ('ANTHROPIC', 'Anthropic (Claude)'),
+        ('GOOGLE', 'Google (Gemini)'),
+    ]
+
+    proveedor_activo = models.CharField(
+        max_length=10, choices=PROVEEDOR_CHOICES, default='ANTHROPIC')
+
+    # Anthropic
+    anthropic_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="API key de Anthropic")
+    anthropic_model = models.CharField(
+        max_length=100, default='claude-sonnet-4-20250514',
+        help_text="Modelo Anthropic a usar")
+
+    # Google
+    google_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="API key de Google AI")
+    google_model = models.CharField(
+        max_length=100, default='gemini-2.0-flash',
+        help_text="Modelo Gemini a usar")
+
+    class Meta:
+        verbose_name = "Configuración IA"
+        verbose_name_plural = "Configuración IA"
+
+    def __str__(self):
+        return f"Configuración IA ({self.get_proveedor_activo_display()})"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def is_configured(self):
+        if self.proveedor_activo == 'ANTHROPIC':
+            return bool(self.anthropic_api_key)
+        return bool(self.google_api_key)
+
+    def get_active_key(self):
+        if self.proveedor_activo == 'ANTHROPIC':
+            return self.anthropic_api_key
+        return self.google_api_key
+
+    def get_active_model(self):
+        if self.proveedor_activo == 'ANTHROPIC':
+            return self.anthropic_model
+        return self.google_model

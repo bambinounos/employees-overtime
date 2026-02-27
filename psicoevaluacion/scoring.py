@@ -268,9 +268,17 @@ def calcular_resultado_final(evaluacion):
 
 def determinar_veredicto(resultado, perfil):
     """
-    APTO: Cumple TODOS los umbrales mínimos en pruebas psicométricas
-    NO_APTO: Falla en 2+ criterios críticos
-    REVISION: Falla en 1 criterio, tiene proyectivas pendientes, o evaluación no confiable
+    Determina veredicto según el método configurado en el perfil.
+
+    CONTEO_FALLOS (default):
+        APTO: 0 fallos y sin proyectivas pendientes
+        NO_APTO: 2+ fallos
+        REVISION: 1 fallo, proyectivas pendientes, o evaluación no confiable
+
+    ESTRICTO:
+        APTO: 0 fallos y sin proyectivas pendientes
+        NO_APTO: cualquier fallo
+        (no existe REVISION por fallos, solo por confiabilidad o proyectivas pendientes)
     """
     # Si evaluación no es confiable, forzar REVISION
     if not resultado.evaluacion_confiable:
@@ -295,6 +303,16 @@ def determinar_veredicto(resultado, perfil):
     proyectivas_pendientes = resultado.evaluacion.respuestas_proyectivas.filter(
         revisado=False).exists()
 
+    metodo = getattr(perfil, 'metodo_veredicto', 'CONTEO_FALLOS')
+
+    if metodo == 'ESTRICTO':
+        if fallos > 0:
+            return 'NO_APTO'
+        if proyectivas_pendientes:
+            return 'REVISION'
+        return 'APTO'
+
+    # CONTEO_FALLOS (default)
     if fallos == 0 and not proyectivas_pendientes:
         return 'APTO'
     elif fallos >= 2:

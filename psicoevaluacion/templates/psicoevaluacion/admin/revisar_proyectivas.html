@@ -1,6 +1,298 @@
 <!DOCTYPE html>
-<html><head><title>Revisar Proyectivas</title></head>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revisar Proyectivas - {{ evaluacion.nombres }}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { font-size: 1.5rem; margin-bottom: 8px; }
+        .subtitle { color: #666; margin-bottom: 24px; font-size: 0.95rem; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card h2 { font-size: 1.15rem; margin-bottom: 12px; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+        .drawing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .drawing-item img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
+        .drawing-item .label { font-weight: 600; margin-bottom: 8px; }
+        .frase-group { margin-bottom: 16px; }
+        .frase-group h3 { font-size: 0.95rem; color: #555; margin-bottom: 6px; }
+        .frase-item { padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+        .frase-item .pregunta { color: #888; }
+        .frase-item .respuesta { font-weight: 500; }
+        .actions { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-success { background: #16a34a; color: #fff; }
+        .btn-secondary { background: #6b7280; color: #fff; }
+        .scores-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
+        .score-item { display: flex; flex-direction: column; }
+        .score-item label { font-size: 0.85rem; color: #555; margin-bottom: 4px; font-weight: 600; }
+        .score-item input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; width: 100%; }
+        .score-item .interp { font-size: 0.8rem; color: #666; margin-top: 4px; max-height: 80px; overflow-y: auto; }
+        .score-item .confidence { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-top: 4px; }
+        .confidence-ALTA { background: #dcfce7; color: #166534; }
+        .confidence-MEDIA { background: #fef9c3; color: #854d0e; }
+        .confidence-BAJA { background: #fee2e2; color: #991b1b; }
+        .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 0.9rem; }
+        .alert-info { background: #dbeafe; color: #1e40af; }
+        .alert-success { background: #dcfce7; color: #166534; }
+        .alert-error { background: #fee2e2; color: #991b1b; }
+        .spinner { display: none; width: 18px; height: 18px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .back-link { display: inline-block; margin-bottom: 16px; color: #2563eb; text-decoration: none; font-size: 0.9rem; }
+        .color-data { padding: 8px; background: #f9fafb; border-radius: 4px; font-size: 0.85rem; }
+        .resultado-actual { padding: 12px; background: #f0f9ff; border-radius: 6px; margin-top: 12px; }
+        .resultado-actual strong { color: #1e40af; }
+    </style>
+</head>
 <body>
-<h1>Revisar pruebas proyectivas</h1>
-<p>{{ evaluacion.nombres }}</p>
-</body></html>
+<div class="container">
+    <a href="{% url 'psicoevaluacion:detalle_evaluacion' evaluacion.pk %}" class="back-link">&larr; Volver al detalle</a>
+
+    <h1>Revisar Pruebas Proyectivas</h1>
+    <p class="subtitle">{{ evaluacion.nombres }} &mdash; C.I. {{ evaluacion.cedula }} &mdash; {{ evaluacion.cargo_postulado }}</p>
+
+    <!-- Actions -->
+    <div class="actions">
+        <a href="{% url 'psicoevaluacion:descargar_proyectivas' evaluacion.pk %}" class="btn btn-secondary">
+            Descargar ZIP
+        </a>
+        {% if ia_configurada %}
+        <button id="btn-ia" class="btn btn-primary" onclick="calificarConIA()">
+            <span class="spinner" id="spinner-ia"></span>
+            Calificar con IA
+        </button>
+        {% else %}
+        <button class="btn btn-primary" disabled title="Configure una API key en Admin > Configuracion IA">
+            Calificar con IA (no configurada)
+        </button>
+        {% endif %}
+        <button id="btn-aplicar" class="btn btn-success" onclick="aplicarCalificacion()">
+            Aplicar y Guardar
+        </button>
+    </div>
+
+    <div id="alert-container"></div>
+
+    <!-- Dibujos -->
+    {% if dibujos %}
+    <div class="card">
+        <h2>Dibujos Proyectivos</h2>
+        <div class="drawing-grid">
+            {% for d in dibujos %}
+            <div class="drawing-item">
+                <div class="label">{{ d.prueba.nombre }}</div>
+                {% if d.imagen_canvas %}
+                <img src="{{ d.imagen_canvas }}" alt="{{ d.prueba.nombre }}">
+                {% else %}
+                <p style="color:#999;">Sin imagen</p>
+                {% endif %}
+                {% if d.tiempo_total_seg %}
+                <p style="font-size:0.8rem; color:#888; margin-top:4px;">Tiempo: {{ d.tiempo_total_seg }}s</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Frases -->
+    {% if frases_agrupadas %}
+    <div class="card">
+        <h2>Frases Incompletas (Sacks)</h2>
+        {% for dimension, respuestas in frases_agrupadas.items %}
+        <div class="frase-group">
+            <h3>{{ dimension }}</h3>
+            {% for r in respuestas %}
+            <div class="frase-item">
+                <span class="pregunta">"{{ r.pregunta.texto }}"</span> &rarr;
+                <span class="respuesta">"{{ r.texto_respuesta }}"</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Colores -->
+    {% if colores %}
+    <div class="card">
+        <h2>Test de Colores (L&uuml;scher)</h2>
+        {% for c in colores %}
+        <div class="color-data">
+            {% if c.texto_respuesta %}
+            <p><strong>Respuesta:</strong> {{ c.texto_respuesta }}</p>
+            {% endif %}
+            {% if c.datos_trazo %}
+            <p><strong>Datos:</strong> {{ c.datos_trazo }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Scores -->
+    <div class="card">
+        <h2>Puntuaciones Proyectivas</h2>
+        {% if resultado %}
+        <div class="resultado-actual">
+            <strong>Valores actuales:</strong>
+            Arbol: {{ resultado.puntaje_arbol|default_if_none:"--" }} |
+            Persona/Lluvia: {{ resultado.puntaje_persona_lluvia|default_if_none:"--" }} |
+            Frases: {{ resultado.puntaje_frases|default_if_none:"--" }} |
+            Colores: {{ resultado.puntaje_colores|default_if_none:"--" }} |
+            Veredicto: {{ resultado.veredicto_automatico }}
+        </div>
+        {% endif %}
+        <div class="scores-grid">
+            <div class="score-item">
+                <label>Arbol (1-10)</label>
+                <input type="number" id="score-arbol" min="1" max="10" step="1"
+                       value="{{ resultado.puntaje_arbol|default_if_none:'' }}">
+                <div class="interp" id="interp-arbol"></div>
+            </div>
+            <div class="score-item">
+                <label>Persona bajo la Lluvia (1-10)</label>
+                <input type="number" id="score-persona" min="1" max="10" step="1"
+                       value="{{ resultado.puntaje_persona_lluvia|default_if_none:'' }}">
+                <div class="interp" id="interp-persona"></div>
+            </div>
+            <div class="score-item">
+                <label>Frases Incompletas (1-10)</label>
+                <input type="number" id="score-frases" min="1" max="10" step="1"
+                       value="{{ resultado.puntaje_frases|default_if_none:'' }}">
+                <div class="interp" id="interp-frases"></div>
+            </div>
+            <div class="score-item">
+                <label>Colores (1-10)</label>
+                <input type="number" id="score-colores" min="1" max="10" step="1"
+                       value="">
+                <div class="interp" id="interp-colores"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+const PK = {{ evaluacion.pk }};
+
+// Store interpretations for later apply
+let iaResults = {};
+
+function showAlert(msg, type) {
+    const c = document.getElementById('alert-container');
+    c.innerHTML = '<div class="alert alert-' + type + '">' + msg + '</div>';
+    if (type === 'success') setTimeout(() => c.innerHTML = '', 5000);
+}
+
+function calificarConIA() {
+    const btn = document.getElementById('btn-ia');
+    const spinner = document.getElementById('spinner-ia');
+    btn.disabled = true;
+    spinner.style.display = 'inline-block';
+    showAlert('Calificando con IA... esto puede tomar un momento.', 'info');
+
+    fetch('{% url "psicoevaluacion:calificar_con_ia" evaluacion.pk %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
+        body: '{}'
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+        if (data.error) {
+            showAlert('Error: ' + data.error, 'error');
+            return;
+        }
+        iaResults = data.resultados || {};
+        applyIASuggestions(iaResults);
+        showAlert('Sugerencias de IA aplicadas. Revise y ajuste las puntuaciones antes de guardar.', 'success');
+    })
+    .catch(err => {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+        showAlert('Error de conexion: ' + err, 'error');
+    });
+}
+
+function applyIASuggestions(r) {
+    if (r.arbol) {
+        document.getElementById('score-arbol').value = r.arbol.puntuacion;
+        showInterp('interp-arbol', r.arbol);
+    }
+    if (r.persona_lluvia) {
+        document.getElementById('score-persona').value = r.persona_lluvia.puntuacion;
+        showInterp('interp-persona', r.persona_lluvia);
+    }
+    if (r.frases) {
+        document.getElementById('score-frases').value = r.frases.puntuacion;
+        showInterp('interp-frases', r.frases);
+    }
+    if (r.colores) {
+        document.getElementById('score-colores').value = r.colores.puntuacion;
+        showInterp('interp-colores', r.colores);
+    }
+}
+
+function showInterp(elemId, result) {
+    const el = document.getElementById(elemId);
+    let html = result.interpretacion || '';
+    if (result.confianza) {
+        html += ' <span class="confidence confidence-' + result.confianza + '">' + result.confianza + '</span>';
+    }
+    el.innerHTML = html;
+}
+
+function aplicarCalificacion() {
+    const payload = {};
+    const arbol = document.getElementById('score-arbol').value;
+    const persona = document.getElementById('score-persona').value;
+    const frases = document.getElementById('score-frases').value;
+    const colores = document.getElementById('score-colores').value;
+
+    if (arbol) payload.puntaje_arbol = parseFloat(arbol);
+    if (persona) payload.puntaje_persona_lluvia = parseFloat(persona);
+    if (frases) payload.puntaje_frases = parseFloat(frases);
+    if (colores) payload.puntaje_colores = parseFloat(colores);
+
+    // Include interpretations from IA
+    if (iaResults.arbol) payload.interpretacion_arbol = iaResults.arbol.interpretacion;
+    if (iaResults.persona_lluvia) payload.interpretacion_persona_lluvia = iaResults.persona_lluvia.interpretacion;
+    if (iaResults.frases) payload.interpretacion_frases = iaResults.frases.interpretacion;
+    if (iaResults.colores) payload.interpretacion_colores = iaResults.colores.interpretacion;
+
+    if (Object.keys(payload).length === 0) {
+        showAlert('Ingrese al menos una puntuacion.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btn-aplicar');
+    btn.disabled = true;
+
+    fetch('{% url "psicoevaluacion:aplicar_calificacion_ia" evaluacion.pk %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.error) {
+            showAlert('Error: ' + data.error, 'error');
+            return;
+        }
+        showAlert('Puntuaciones guardadas. Veredicto automatico: ' + data.veredicto_automatico, 'success');
+    })
+    .catch(err => {
+        btn.disabled = false;
+        showAlert('Error de conexion: ' + err, 'error');
+    });
+}
+</script>
+</body>
+</html>

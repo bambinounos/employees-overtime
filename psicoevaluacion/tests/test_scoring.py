@@ -720,6 +720,110 @@ class DeterminarVeredictoConfiabilidadTest(TestCase):
 # V2: RESULTADO FINAL CON DESEABILIDAD + CONSISTENCIA
 # ──────────────────────────────────────────────
 
+# ──────────────────────────────────────────────
+# V3: VEREDICTO ESTRICTO
+# ──────────────────────────────────────────────
+
+class DeterminarVeredictoEstrictoTest(TestCase):
+
+    def setUp(self):
+        self.perfil = PerfilObjetivo.objects.create(
+            nombre="Estricto",
+            metodo_veredicto='ESTRICTO',
+            min_responsabilidad=4.0,
+            min_amabilidad=3.0,
+            max_neuroticismo=3.0,
+            min_compromiso_organizacional=3.5,
+            min_obediencia=3.5,
+            min_memoria=60.0,
+            min_matrices=50.0,
+        )
+
+    def _make_resultado(self, **kwargs):
+        ev = Evaluacion(nombres='Test', cedula='111', correo='t@t.com')
+        ev.save()
+        defaults = {
+            'evaluacion': ev,
+            'puntaje_responsabilidad': 4.5,
+            'puntaje_amabilidad': 4.0,
+            'puntaje_neuroticismo': 2.0,
+            'puntaje_apertura': 3.5,
+            'puntaje_extroversion': 3.0,
+            'puntaje_compromiso_total': 4.0,
+            'puntaje_obediencia': 4.0,
+            'puntaje_memoria': 80.0,
+            'puntaje_matrices': 70.0,
+        }
+        defaults.update(kwargs)
+        return ResultadoFinal.objects.create(**defaults)
+
+    def test_apto_cumple_todo_estricto(self):
+        resultado = self._make_resultado()
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'APTO')
+
+    def test_no_apto_con_1_fallo_estricto(self):
+        """En modo estricto, 1 fallo = NO_APTO (no REVISION)."""
+        resultado = self._make_resultado(
+            puntaje_responsabilidad=3.0,  # Falla (min 4.0)
+        )
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'NO_APTO')
+
+    def test_no_apto_con_multiples_fallos_estricto(self):
+        resultado = self._make_resultado(
+            puntaje_responsabilidad=2.0,
+            puntaje_compromiso_total=1.0,
+        )
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'NO_APTO')
+
+    def test_revision_proyectivas_pendientes_estricto(self):
+        """En modo estricto, proyectivas pendientes = REVISION (no NO_APTO)."""
+        ev = Evaluacion(nombres='Test', cedula='111', correo='t@t.com')
+        ev.save()
+        prueba = Prueba.objects.create(
+            tipo='ARBOL', nombre='Arbol', instrucciones='i', es_proyectiva=True,
+        )
+        RespuestaProyectiva.objects.create(
+            evaluacion=ev, prueba=prueba, tipo='DIBUJO', revisado=False,
+        )
+        resultado = ResultadoFinal.objects.create(
+            evaluacion=ev,
+            puntaje_responsabilidad=4.5,
+            puntaje_neuroticismo=2.0,
+            puntaje_compromiso_total=4.0,
+            puntaje_obediencia=4.0,
+            puntaje_memoria=80.0,
+            puntaje_matrices=70.0,
+        )
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'REVISION')
+
+    def test_revision_cuando_no_confiable_estricto(self):
+        resultado = self._make_resultado(evaluacion_confiable=False)
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'REVISION')
+
+    def test_conteo_fallos_sigue_funcionando(self):
+        """Verificar que CONTEO_FALLOS no se rompio."""
+        perfil_conteo = PerfilObjetivo.objects.create(
+            nombre="Conteo",
+            metodo_veredicto='CONTEO_FALLOS',
+            min_responsabilidad=4.0,
+            max_neuroticismo=3.0,
+            min_compromiso_organizacional=3.5,
+            min_obediencia=3.5,
+            min_memoria=60.0,
+            min_matrices=50.0,
+        )
+        resultado = self._make_resultado(
+            puntaje_responsabilidad=3.0,  # 1 fallo
+        )
+        veredicto = determinar_veredicto(resultado, perfil_conteo)
+        self.assertEqual(veredicto, 'REVISION')  # 1 fallo = REVISION en conteo
+
+
 class CalcResultadoFinalV2Test(TestCase):
 
     def test_deseabilidad_se_calcula(self):

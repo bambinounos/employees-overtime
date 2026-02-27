@@ -6,6 +6,7 @@ from .models import (
     PerfilObjetivo, Prueba, Pregunta, Opcion, Evaluacion,
     RespuestaPsicometrica, RespuestaProyectiva, RespuestaMemoria,
     RespuestaMatriz, RespuestaSituacional, ResultadoFinal,
+    ConfiguracionIA,
 )
 
 
@@ -23,9 +24,11 @@ class OpcionInline(admin.TabularInline):
 
 @admin.register(PerfilObjetivo)
 class PerfilObjetivoAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'activo', 'min_responsabilidad', 'min_compromiso_organizacional',
+    list_display = ('nombre', 'activo', 'metodo_veredicto', 'min_responsabilidad',
+                    'min_compromiso_organizacional',
                     'min_obediencia', 'min_memoria', 'min_matrices')
-    list_editable = ('activo', 'min_responsabilidad', 'min_compromiso_organizacional',
+    list_editable = ('activo', 'metodo_veredicto', 'min_responsabilidad',
+                     'min_compromiso_organizacional',
                      'min_obediencia', 'min_memoria', 'min_matrices')
 
 
@@ -152,3 +155,26 @@ class RespuestaMatrizAdmin(admin.ModelAdmin):
 class RespuestaSituacionalAdmin(admin.ModelAdmin):
     list_display = ('evaluacion', 'pregunta', 'valor', 'fecha_respuesta')
     list_filter = ('pregunta__dimension',)
+
+
+@admin.register(ConfiguracionIA)
+class ConfiguracionIAAdmin(admin.ModelAdmin):
+    fieldsets = (
+        ('Proveedor activo', {
+            'fields': ('proveedor_activo',),
+        }),
+        ('Anthropic (Claude)', {
+            'fields': ('anthropic_api_key', 'anthropic_model'),
+            'classes': ('collapse',),
+        }),
+        ('Google (Gemini)', {
+            'fields': ('google_api_key', 'google_model'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return not ConfiguracionIA.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

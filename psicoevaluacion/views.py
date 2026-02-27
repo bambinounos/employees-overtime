@@ -1,6 +1,9 @@
+import io
 import json
+import logging
+import zipfile
 
-from django.http import JsonResponse, Http404
+from django.http import JsonResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
@@ -11,11 +14,14 @@ from .models import (
     Evaluacion, Prueba, Pregunta, Opcion,
     RespuestaPsicometrica, RespuestaProyectiva,
     RespuestaMemoria, RespuestaMatriz, RespuestaSituacional,
+    ResultadoFinal,
 )
 import random
 
 from .utils import seleccionar_preguntas_evaluacion
 from .scoring import calcular_resultado_final
+
+logger = logging.getLogger(__name__)
 
 
 # --- Helpers ---
@@ -588,8 +594,188 @@ def detalle_evaluacion(request, pk):
 @login_required
 def revisar_proyectivas(request, pk):
     evaluacion = get_object_or_404(Evaluacion, pk=pk)
+    proyectivas = evaluacion.respuestas_proyectivas.select_related(
+        'prueba', 'pregunta'
+    ).all()
+
+    dibujos = [r for r in proyectivas if r.tipo == 'DIBUJO']
+    frases = [r for r in proyectivas if r.tipo == 'TEXTO' and r.prueba.tipo == 'FRASES']
+    colores = [r for r in proyectivas if r.prueba.tipo == 'COLORES']
+
+    # Group frases by dimension
+    frases_agrupadas = {}
+    for r in frases:
+        dim = r.pregunta.get_dimension_display() if r.pregunta else "General"
+        frases_agrupadas.setdefault(dim, []).append(r)
+
+    resultado = getattr(evaluacion, 'resultado', None)
+
+    from .models import ConfiguracionIA
+    ia_configurada = ConfiguracionIA.load().is_configured()
+
     return render(request, 'psicoevaluacion/admin/revisar_proyectivas.html', {
         'evaluacion': evaluacion,
+        'dibujos': dibujos,
+        'frases_agrupadas': frases_agrupadas,
+        'colores': colores,
+        'resultado': resultado,
+        'ia_configurada': ia_configurada,
+    })
+
+
+@login_required
+def descargar_proyectivas(request, pk):
+    """Descarga ZIP con todos los datos proyectivos de la evaluación."""
+    import base64
+
+    evaluacion = get_object_or_404(Evaluacion, pk=pk)
+    proyectivas = evaluacion.respuestas_proyectivas.select_related(
+        'prueba', 'pregunta'
+    ).all()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        metadata = {
+            'evaluacion_id': evaluacion.pk,
+            'candidato': evaluacion.nombres,
+            'cedula': evaluacion.cedula,
+            'fecha': str(evaluacion.fecha_creacion),
+        }
+        zf.writestr('metadata.json', json.dumps(metadata, ensure_ascii=False, indent=2))
+
+        for resp in proyectivas:
+            tipo_prueba = resp.prueba.tipo
+            folder = tipo_prueba
+
+            if resp.tipo == 'DIBUJO' and resp.imagen_canvas:
+                img_data = resp.imagen_canvas
+                # Strip data URI prefix
+                if img_data.startswith("data:"):
+                    _, img_data = img_data.split(",", 1)
+                try:
+                    img_bytes = base64.b64decode(img_data)
+                    zf.writestr(f'{folder}/dibujo.png', img_bytes)
+                except Exception:
+                    zf.writestr(f'{folder}/dibujo_base64.txt', resp.imagen_canvas)
+
+                if resp.datos_trazo:
+                    zf.writestr(
+                        f'{folder}/datos_trazo.json',
+                        json.dumps(resp.datos_trazo, ensure_ascii=False, indent=2)
+                    )
+
+            elif resp.tipo == 'TEXTO':
+                pregunta_txt = resp.pregunta.texto if resp.pregunta else "sin_pregunta"
+                idx = resp.pregunta.orden if resp.pregunta else resp.pk
+                entry = {
+                    'pregunta': pregunta_txt,
+                    'respuesta': resp.texto_respuesta,
+                    'dimension': resp.pregunta.dimension if resp.pregunta else '',
+                }
+                zf.writestr(
+                    f'{folder}/respuesta_{idx}.json',
+                    json.dumps(entry, ensure_ascii=False, indent=2)
+                )
+
+            elif tipo_prueba == 'COLORES':
+                data = {
+                    'datos_trazo': resp.datos_trazo,
+                    'texto': resp.texto_respuesta,
+                }
+                zf.writestr(
+                    f'{folder}/datos.json',
+                    json.dumps(data, ensure_ascii=False, indent=2)
+                )
+
+    buf.seek(0)
+    filename = f"proyectivas_{evaluacion.cedula}_{evaluacion.pk}.zip"
+    response = HttpResponse(buf.read(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_POST
+def calificar_con_ia(request, pk):
+    """POST: Llama IA para calificar proyectivas, retorna sugerencias JSON."""
+    from .ai_grading import grade_all_projectives
+
+    evaluacion = get_object_or_404(Evaluacion, pk=pk)
+    try:
+        resultados = grade_all_projectives(evaluacion)
+    except ValueError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    except Exception as e:
+        logger.exception("Error en calificación IA para evaluación %s", pk)
+        return JsonResponse({'error': f'Error inesperado: {e}'}, status=500)
+
+    return JsonResponse({'resultados': resultados})
+
+
+@login_required
+@require_POST
+def aplicar_calificacion_ia(request, pk):
+    """POST: Guarda scores en ResultadoFinal, marca proyectivas como revisadas, recalcula veredicto."""
+    evaluacion = get_object_or_404(Evaluacion, pk=pk)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+
+    resultado, _ = ResultadoFinal.objects.get_or_create(evaluacion=evaluacion)
+
+    # Apply scores
+    if data.get('puntaje_arbol') is not None:
+        resultado.puntaje_arbol = float(data['puntaje_arbol'])
+    if data.get('puntaje_persona_lluvia') is not None:
+        resultado.puntaje_persona_lluvia = float(data['puntaje_persona_lluvia'])
+    if data.get('puntaje_frases') is not None:
+        resultado.puntaje_frases = float(data['puntaje_frases'])
+    if data.get('puntaje_colores') is not None:
+        puntaje_colores = data['puntaje_colores']
+        if isinstance(puntaje_colores, dict):
+            resultado.puntaje_colores = puntaje_colores
+        else:
+            resultado.puntaje_colores = {
+                'puntuacion': float(puntaje_colores),
+                'interpretacion': data.get('interpretacion_colores', ''),
+            }
+
+    # Store interpretations in observaciones
+    interpretaciones = []
+    for key in ('interpretacion_arbol', 'interpretacion_persona_lluvia',
+                'interpretacion_frases', 'interpretacion_colores'):
+        if data.get(key):
+            interpretaciones.append(f"**{key.replace('interpretacion_', '').title()}**: {data[key]}")
+    if interpretaciones:
+        existing = resultado.observaciones or ''
+        separator = '\n\n---\n\n' if existing else ''
+        resultado.observaciones = existing + separator + '\n'.join(interpretaciones)
+
+    resultado.save()
+
+    # Mark projective responses as reviewed
+    evaluacion.respuestas_proyectivas.update(
+        revisado=True,
+        fecha_revision=timezone.now(),
+    )
+
+    # Recalculate verdict
+    from .scoring import determinar_veredicto
+    from .models import PerfilObjetivo
+    perfil = evaluacion.perfil_objetivo or PerfilObjetivo.objects.filter(activo=True).first()
+    if perfil:
+        resultado.veredicto_automatico = determinar_veredicto(resultado, perfil)
+        resultado.save(update_fields=['veredicto_automatico'])
+
+    return JsonResponse({
+        'status': 'ok',
+        'veredicto_automatico': resultado.veredicto_automatico,
+        'puntaje_arbol': resultado.puntaje_arbol,
+        'puntaje_persona_lluvia': resultado.puntaje_persona_lluvia,
+        'puntaje_frases': resultado.puntaje_frases,
+        'puntaje_colores': resultado.puntaje_colores,
     })
 
 
