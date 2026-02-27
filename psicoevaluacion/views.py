@@ -709,11 +709,14 @@ def descargar_proyectivas(request, pk):
 @require_POST
 def calificar_con_ia(request, pk):
     """POST: Llama IA para calificar proyectivas, retorna sugerencias JSON."""
-    from .ai_grading import grade_all_projectives
-
     evaluacion = get_object_or_404(Evaluacion, pk=pk)
     try:
+        from .ai_grading import grade_all_projectives
         resultados = grade_all_projectives(evaluacion)
+    except ImportError as e:
+        return JsonResponse(
+            {'error': f'Dependencia faltante: {e}. Ejecute: pip install httpx'},
+            status=500)
     except ValueError as e:
         return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
