@@ -800,7 +800,24 @@ def calcular_resultados(request, pk):
 
 @login_required
 def generar_reporte(request, pk):
-    return JsonResponse({'status': 'not_implemented'}, status=501)
+    evaluacion = get_object_or_404(Evaluacion, pk=pk)
+    resultado = getattr(evaluacion, 'resultado', None)
+
+    try:
+        from .report_pdf import generar_informe_pdf
+        pdf_bytes = generar_informe_pdf(evaluacion, resultado)
+    except ImportError as e:
+        return JsonResponse(
+            {'error': f'Dependencia faltante: {e}. Ejecute: pip install reportlab'},
+            status=500)
+    except Exception as e:
+        logger.exception("Error generando reporte PDF para evaluación %s", pk)
+        return JsonResponse({'error': f'Error generando PDF: {e}'}, status=500)
+
+    filename = f"informe_{evaluacion.cedula}_{evaluacion.pk}.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required

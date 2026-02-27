@@ -107,16 +107,18 @@ class EvaluacionAdmin(admin.ModelAdmin):
             url, url, url
         )
 
-    @admin.display(description='Proyectivas')
+    @admin.display(description='Acciones')
     def acciones_proyectivas(self, obj):
         if obj.estado not in ('COMPLETADA', 'REVISADA'):
             return '-'
         revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.pk])
         descargar_url = reverse('psicoevaluacion:descargar_proyectivas', args=[obj.pk])
+        reporte_url = reverse('psicoevaluacion:generar_reporte', args=[obj.pk])
         return format_html(
             '<a href="{}" style="margin-right:8px;">Revisar/IA</a>'
-            '<a href="{}">ZIP</a>',
-            revisar_url, descargar_url
+            '<a href="{}" style="margin-right:8px;">ZIP</a>'
+            '<a href="{}">PDF</a>',
+            revisar_url, descargar_url, reporte_url
         )
 
     @admin.display(description='Acciones proyectivas')
@@ -125,12 +127,15 @@ class EvaluacionAdmin(admin.ModelAdmin):
             return '-'
         revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.pk])
         descargar_url = reverse('psicoevaluacion:descargar_proyectivas', args=[obj.pk])
+        reporte_url = reverse('psicoevaluacion:generar_reporte', args=[obj.pk])
         return format_html(
             '<a href="{}" style="font-size:14px; margin-right:12px;">'
             'Revisar y Calificar con IA</a>'
+            '<a href="{}" style="font-size:14px; margin-right:12px;">'
+            'Descargar ZIP</a>'
             '<a href="{}" style="font-size:14px;">'
-            'Descargar ZIP</a>',
-            revisar_url, descargar_url
+            'Descargar Informe PDF</a>',
+            revisar_url, descargar_url, reporte_url
         )
 
 
@@ -155,21 +160,29 @@ class ResultadoFinalAdmin(admin.ModelAdmin):
         'link_proyectivas_detail',
     )
 
-    @admin.display(description='Proyectivas')
+    @admin.display(description='Acciones')
     def link_proyectivas(self, obj):
-        url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.evaluacion_id])
-        return format_html('<a href="{}">Revisar/IA</a>', url)
+        revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.evaluacion_id])
+        reporte_url = reverse('psicoevaluacion:generar_reporte', args=[obj.evaluacion_id])
+        return format_html(
+            '<a href="{}" style="margin-right:8px;">Revisar/IA</a>'
+            '<a href="{}">PDF</a>',
+            revisar_url, reporte_url
+        )
 
-    @admin.display(description='Calificar proyectivas')
+    @admin.display(description='Acciones')
     def link_proyectivas_detail(self, obj):
         revisar_url = reverse('psicoevaluacion:revisar_proyectivas', args=[obj.evaluacion_id])
         descargar_url = reverse('psicoevaluacion:descargar_proyectivas', args=[obj.evaluacion_id])
+        reporte_url = reverse('psicoevaluacion:generar_reporte', args=[obj.evaluacion_id])
         return format_html(
             '<a href="{}" style="font-size:14px; margin-right:12px;">'
             'Revisar y Calificar con IA</a>'
+            '<a href="{}" style="font-size:14px; margin-right:12px;">'
+            'Descargar ZIP</a>'
             '<a href="{}" style="font-size:14px;">'
-            'Descargar ZIP</a>',
-            revisar_url, descargar_url
+            'Descargar Informe PDF</a>',
+            revisar_url, descargar_url, reporte_url
         )
 
 

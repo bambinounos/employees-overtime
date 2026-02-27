@@ -60,6 +60,9 @@
         <a href="{% url 'psicoevaluacion:descargar_proyectivas' evaluacion.pk %}" class="btn btn-secondary">
             Descargar ZIP
         </a>
+        <a href="{% url 'psicoevaluacion:generar_reporte' evaluacion.pk %}" class="btn btn-secondary">
+            Descargar Informe PDF
+        </a>
         {% if ia_configurada %}
         <button id="btn-ia" class="btn btn-primary" onclick="calificarConIA()">
             <span class="spinner" id="spinner-ia"></span>

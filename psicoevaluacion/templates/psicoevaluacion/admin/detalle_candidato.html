@@ -67,6 +67,11 @@
             Descargar ZIP Proyectivas
         </a>
         {% endif %}
+        {% if resultado %}
+        <a href="{% url 'psicoevaluacion:generar_reporte' evaluacion.pk %}" class="btn btn-warning">
+            Descargar Informe PDF
+        </a>
+        {% endif %}
     </div>
 
     {% if proyectivas_pendientes %}
