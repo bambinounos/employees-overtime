@@ -76,6 +76,7 @@
     </div>
 
     <div id="alert-container"></div>
+    <form style="display:none">{% csrf_token %}</form>
 
     <!-- Dibujos -->
     {% if dibujos %}
@@ -177,7 +178,11 @@
 </div>
 
 <script>
-const CSRF_TOKEN = '{{ csrf_token }}';
+function getCookie(name) {
+    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+}
+const CSRF_TOKEN = getCookie('csrftoken') || '{{ csrf_token }}';
 const PK = {{ evaluacion.pk }};
 
 // Store interpretations for later apply
