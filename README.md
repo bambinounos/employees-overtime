@@ -60,7 +60,27 @@ El sistema permite automatizar cálculos de bonos basados en reglas configurable
     *   Exportación a CSV.
 *   **Ranking de Empleados:** Tabla comparativa ordenada por cualquier KPI seleccionado.
 
-### 5. Configuración y Administración
+### 5. Módulo de Evaluación Psicológica (PsicoEval v2)
+*   **Batería Psicométrica Completa:** 343 preguntas distribuidas en 11 pruebas:
+    *   Big Five (OCEAN) — 120 ítems
+    *   Compromiso Organizacional (Allen & Meyer) — 48 ítems
+    *   Escala de Obediencia/Conformidad — 40 ítems
+    *   Prueba Situacional — 30 escenarios
+    *   Frases Incompletas (Sacks) — 50 frases
+    *   Matrices Progresivas — 30 patrones
+    *   Test de Memoria de Trabajo — 10 niveles
+    *   Escala de Deseabilidad Social — 12 ítems (detección de falseo)
+    *   Pruebas proyectivas: Árbol (Koch), Persona bajo la Lluvia, Colores (Lüscher)
+*   **Banco Ampliado + Selección Aleatoria:** Cada evaluación selecciona un subconjunto balanceado por dimensión, impidiendo filtración de respuestas entre candidatos.
+*   **Control de Confiabilidad:**
+    *   Escala de Deseabilidad Social para detectar respuestas socialmente deseables.
+    *   Pares de consistencia (8 pares) para detectar respuestas aleatorias o incongruentes.
+    *   Veredicto automático forzado a REVISION cuando la evaluación no es confiable.
+*   **Evaluación Automatizada:** Cálculo de puntajes por dimensión, índices compuestos (responsabilidad, lealtad, obediencia) y veredicto automático (APTO / NO APTO / REVISION) basado en perfiles objetivo configurables.
+*   **Pruebas Proyectivas:** Soporte para dibujos en canvas con datos de trazo y texto libre, con revisión manual del evaluador.
+*   **Gestión de Sesiones:** Links de evaluación con token, expiración configurable, seguimiento de progreso y control de IP/user agent.
+
+### 6. Configuración y Administración
 *   **Panel de Administración (Django Admin):** Interfaz completa para gestionar todos los modelos.
 *   **Configuración de Empresa:** Ajuste de horas base y modalidad de cálculo (Mensual/Semanal/Diaria).
 *   **Personalización del Sitio:** Carga de Favicon personalizado.
@@ -108,7 +128,7 @@ Para desplegar la aplicación en un entorno de producción o desarrollo:
     ```bash
     python3 -m venv venv
     source venv/bin/activate
-    pip install django django-year-calendar djangorestframework psycopg2-binary python-dateutil wsgidav vobject Pillow
+    pip install -r requirements.txt
     ```
 
 3.  **Configurar Base de Datos:**
@@ -138,7 +158,13 @@ Para desplegar la aplicación en un entorno de producción o desarrollo:
     ```
     *Si obtienes un error relacionado con `msgfmt`, asegúrate de haber instalado `gettext` como se indicó en los requisitos.*
 
-6.  **Ejecutar Servidor:**
+6.  **Cargar Banco de Pruebas Psicológicas:**
+    ```bash
+    python3 manage.py seed_pruebas
+    ```
+    *Idempotente: se puede ejecutar múltiples veces sin duplicar datos.*
+
+7.  **Ejecutar Servidor:**
     ```bash
     python3 manage.py runserver 0.0.0.0:8000
     ```
