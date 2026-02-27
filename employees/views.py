@@ -281,7 +281,8 @@ def strategic_dashboard(request):
         ranking_records = EmployeePerformanceRecord.objects.filter(
             kpi=ipac_kpi,
             date__year=year,
-            date__month=month
+            date__month=month,
+            employee__end_date__isnull=True,
         ).select_related('employee').order_by('-actual_value')[:5] # Top 5 employees
 
     # --- 3. Warning KPIs ---
@@ -290,7 +291,8 @@ def strategic_dashboard(request):
         kpi__in=warning_kpis,
         target_met=False,
         date__year=year,
-        date__month=month
+        date__month=month,
+        employee__end_date__isnull=True,
     ).select_related('employee', 'kpi').order_by('employee__name')
 
     # --- 4. Trend Data (for chart) ---
@@ -351,7 +353,8 @@ def employee_ranking(request):
                 period = latest_date.strftime('%B %Y')
                 records_query = EmployeePerformanceRecord.objects.filter(
                     kpi=selected_kpi,
-                    date=latest_date
+                    date=latest_date,
+                    employee__end_date__isnull=True,
                 ).select_related('employee').order_by('-actual_value')
 
                 # Adjust sorting for KPIs where lower is better

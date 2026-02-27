@@ -41,6 +41,16 @@ class EmployeeAdmin(admin.ModelAdmin):
     def is_active_status(self, obj):
         return obj.is_active
 
+    def get_search_results(self, request, queryset, search_term):
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
+        # When used as autocomplete from other admin pages, exclude inactive employees
+        referer = request.META.get('HTTP_REFERER', '')
+        if '/autocomplete/' in request.path:
+            # Allow inactive employees when editing an employee's own page
+            if '/employees/employee/' not in referer:
+                queryset = queryset.filter(end_date__isnull=True)
+        return queryset, use_distinct
+
     def save_model(self, request, obj, form, change):
         """
         When creating a new employee, ensure the end_date is None unless a value
@@ -222,6 +232,11 @@ class ManualKpiEntryAdmin(admin.ModelAdmin):
     search_fields = ('employee__name', 'kpi__name', 'notes')
     autocomplete_fields = ['employee', 'kpi']
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "employee":
+            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 # --- Sales & Commissions Admin (v1.1) ---
 
@@ -264,6 +279,11 @@ class DolibarrUserIdentityAdmin(admin.ModelAdmin):
     list_filter = ('dolibarr_instance',)
     search_fields = ('employee__name', 'dolibarr_login')
     autocomplete_fields = ['employee']
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "employee":
+            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(SalesRecord)

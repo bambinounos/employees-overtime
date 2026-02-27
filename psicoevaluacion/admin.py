@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
+from employees.models import Employee
 from .models import (
     PerfilObjetivo, Prueba, Pregunta, Opcion, Evaluacion,
     RespuestaPsicometrica, RespuestaProyectiva, RespuestaMemoria,
@@ -62,6 +63,11 @@ class EvaluacionAdmin(admin.ModelAdmin):
     list_filter = ('estado', 'fecha_creacion')
     search_fields = ('nombres', 'cedula', 'correo')
     readonly_fields = ('uuid', 'token', 'fecha_creacion', 'link_evaluacion')
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "empleado":
+            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='Estado')
     def estado_color(self, obj):
