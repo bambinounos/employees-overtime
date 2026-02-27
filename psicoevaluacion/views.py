@@ -575,7 +575,12 @@ def api_guardar_proyectiva(request):
 
 @login_required
 def dashboard_evaluador(request):
-    return render(request, 'psicoevaluacion/admin/dashboard.html')
+    evaluaciones = Evaluacion.objects.select_related(
+        'perfil_objetivo'
+    ).order_by('-fecha_creacion')
+    return render(request, 'psicoevaluacion/admin/dashboard.html', {
+        'evaluaciones': evaluaciones,
+    })
 
 
 @login_required
@@ -586,8 +591,14 @@ def crear_evaluacion(request):
 @login_required
 def detalle_evaluacion(request, pk):
     evaluacion = get_object_or_404(Evaluacion, pk=pk)
+    resultado = getattr(evaluacion, 'resultado', None)
+    tiene_proyectivas = evaluacion.respuestas_proyectivas.exists()
+    proyectivas_pendientes = evaluacion.respuestas_proyectivas.filter(revisado=False).exists()
     return render(request, 'psicoevaluacion/admin/detalle_candidato.html', {
         'evaluacion': evaluacion,
+        'resultado': resultado,
+        'tiene_proyectivas': tiene_proyectivas,
+        'proyectivas_pendientes': proyectivas_pendientes,
     })
 
 

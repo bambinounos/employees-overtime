@@ -1,6 +1,225 @@
 <!DOCTYPE html>
-<html><head><title>Detalle Evaluación</title></head>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle - {{ evaluacion.nombres }}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { font-size: 1.5rem; margin-bottom: 4px; }
+        .subtitle { color: #666; margin-bottom: 20px; font-size: 0.9rem; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card h2 { font-size: 1.1rem; margin-bottom: 12px; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .info-item label { font-size: 0.8rem; color: #888; display: block; }
+        .info-item span { font-size: 0.95rem; font-weight: 500; }
+        .badge { padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; display: inline-block; }
+        .badge-PENDIENTE { background: #fff3cd; color: #856404; }
+        .badge-EN_CURSO { background: #d1ecf1; color: #0c5460; }
+        .badge-COMPLETADA { background: #d4edda; color: #155724; }
+        .badge-REVISADA { background: #e2d5f1; color: #4a235a; }
+        .badge-EXPIRADA { background: #e2e3e5; color: #383d41; }
+        .badge-CANCELADA { background: #f8d7da; color: #721c24; }
+        .badge-APTO { background: #d4edda; color: #155724; }
+        .badge-NO_APTO { background: #f8d7da; color: #721c24; }
+        .badge-REVISION { background: #fff3cd; color: #856404; }
+        .scores-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .score-box { background: #f8f9fa; border-radius: 6px; padding: 12px; text-align: center; }
+        .score-box .value { font-size: 1.4rem; font-weight: 700; color: #2563eb; }
+        .score-box .label { font-size: 0.78rem; color: #666; margin-top: 2px; }
+        .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-success { background: #16a34a; color: #fff; }
+        .btn-secondary { background: #6b7280; color: #fff; }
+        .btn-warning { background: #f59e0b; color: #fff; }
+        .back-link { display: inline-block; margin-bottom: 16px; color: #2563eb; text-decoration: none; font-size: 0.9rem; }
+        .alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 0.88rem; }
+        .alert-warning { background: #fff3cd; color: #856404; }
+        .alert-info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
 <body>
-<h1>{{ evaluacion.nombres }}</h1>
-<p>Estado: {{ evaluacion.estado }}</p>
-</body></html>
+<div class="container">
+    <a href="{% url 'psicoevaluacion:dashboard_evaluador' %}" class="back-link">&larr; Volver al panel</a>
+
+    <h1>{{ evaluacion.nombres }}</h1>
+    <p class="subtitle">
+        <span class="badge badge-{{ evaluacion.estado }}">{{ evaluacion.get_estado_display }}</span>
+        {% if resultado %}
+            <span class="badge badge-{{ resultado.veredicto_final|default:resultado.veredicto_automatico }}">
+                {{ resultado.veredicto_final|default:resultado.veredicto_automatico }}
+            </span>
+        {% endif %}
+    </p>
+
+    <!-- Actions -->
+    <div class="actions">
+        {% if tiene_proyectivas %}
+        <a href="{% url 'psicoevaluacion:revisar_proyectivas' evaluacion.pk %}" class="btn btn-primary">
+            Revisar Proyectivas
+            {% if proyectivas_pendientes %} (pendientes){% endif %}
+        </a>
+        <a href="{% url 'psicoevaluacion:descargar_proyectivas' evaluacion.pk %}" class="btn btn-secondary">
+            Descargar ZIP Proyectivas
+        </a>
+        {% endif %}
+    </div>
+
+    {% if proyectivas_pendientes %}
+    <div class="alert alert-warning">
+        Hay pruebas proyectivas sin revisar. Esto afecta el veredicto automatico.
+    </div>
+    {% endif %}
+
+    <!-- Candidate Info -->
+    <div class="card">
+        <h2>Datos del Candidato</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <label>Cedula</label>
+                <span>{{ evaluacion.cedula }}</span>
+            </div>
+            <div class="info-item">
+                <label>Correo</label>
+                <span>{{ evaluacion.correo }}</span>
+            </div>
+            <div class="info-item">
+                <label>Telefono</label>
+                <span>{{ evaluacion.telefono|default:"-" }}</span>
+            </div>
+            <div class="info-item">
+                <label>Cargo postulado</label>
+                <span>{{ evaluacion.cargo_postulado|default:"-" }}</span>
+            </div>
+            <div class="info-item">
+                <label>Perfil objetivo</label>
+                <span>{{ evaluacion.perfil_objetivo|default:"Sin perfil" }}</span>
+            </div>
+            <div class="info-item">
+                <label>Fecha creacion</label>
+                <span>{{ evaluacion.fecha_creacion|date:"d/m/Y H:i" }}</span>
+            </div>
+            <div class="info-item">
+                <label>Fecha inicio</label>
+                <span>{{ evaluacion.fecha_inicio|date:"d/m/Y H:i"|default:"-" }}</span>
+            </div>
+            <div class="info-item">
+                <label>Fecha finalizacion</label>
+                <span>{{ evaluacion.fecha_finalizacion|date:"d/m/Y H:i"|default:"-" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scores -->
+    {% if resultado %}
+    <div class="card">
+        <h2>Puntajes Psicometricos</h2>
+        <div class="scores-grid">
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_responsabilidad|floatformat:1|default:"--" }}</div>
+                <div class="label">Responsabilidad</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_amabilidad|floatformat:1|default:"--" }}</div>
+                <div class="label">Amabilidad</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_neuroticismo|floatformat:1|default:"--" }}</div>
+                <div class="label">Neuroticismo</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_apertura|floatformat:1|default:"--" }}</div>
+                <div class="label">Apertura</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_extroversion|floatformat:1|default:"--" }}</div>
+                <div class="label">Extroversion</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_compromiso_total|floatformat:1|default:"--" }}</div>
+                <div class="label">Compromiso Total</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_obediencia|floatformat:1|default:"--" }}</div>
+                <div class="label">Obediencia</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_memoria|floatformat:0|default:"--" }}%</div>
+                <div class="label">Memoria</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_matrices|floatformat:0|default:"--" }}%</div>
+                <div class="label">Matrices</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_situacional|floatformat:0|default:"--" }}%</div>
+                <div class="label">Situacional</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Puntajes Proyectivos</h2>
+        <div class="scores-grid">
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_arbol|floatformat:0|default:"--" }}</div>
+                <div class="label">Arbol</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_persona_lluvia|floatformat:0|default:"--" }}</div>
+                <div class="label">Persona/Lluvia</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_frases|floatformat:0|default:"--" }}</div>
+                <div class="label">Frases</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_colores|default:"--" }}</div>
+                <div class="label">Colores</div>
+            </div>
+        </div>
+        {% if tiene_proyectivas %}
+        <div style="margin-top: 16px;">
+            <a href="{% url 'psicoevaluacion:revisar_proyectivas' evaluacion.pk %}" class="btn btn-primary">
+                Revisar y Calificar Proyectivas
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Confiabilidad</h2>
+        <div class="scores-grid">
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_deseabilidad_social|floatformat:1|default:"--" }}</div>
+                <div class="label">Deseabilidad Social</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.indice_consistencia|floatformat:0|default:"--" }}%</div>
+                <div class="label">Consistencia</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{% if resultado.evaluacion_confiable %}Si{% else %}No{% endif %}</div>
+                <div class="label">Confiable</div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        Aun no hay resultados calculados para esta evaluacion.
+    </div>
+    {% endif %}
+
+    {% if evaluacion.notas_evaluador %}
+    <div class="card">
+        <h2>Notas del Evaluador</h2>
+        <p>{{ evaluacion.notas_evaluador }}</p>
+    </div>
+    {% endif %}
+</div>
+</body>
+</html>
