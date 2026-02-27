@@ -206,7 +206,14 @@ function calificarConIA() {
         headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
         body: '{}'
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) {
+            return r.text().then(txt => {
+                throw new Error('HTTP ' + r.status + ': ' + txt.substring(0, 300));
+            });
+        }
+        return r.json();
+    })
     .then(data => {
         btn.disabled = false;
         spinner.style.display = 'none';
@@ -221,7 +228,7 @@ function calificarConIA() {
     .catch(err => {
         btn.disabled = false;
         spinner.style.display = 'none';
-        showAlert('Error de conexion: ' + err, 'error');
+        showAlert('Error: ' + err.message, 'error');
     });
 }
 
@@ -284,7 +291,14 @@ function aplicarCalificacion() {
         headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) {
+            return r.text().then(txt => {
+                throw new Error('HTTP ' + r.status + ': ' + txt.substring(0, 300));
+            });
+        }
+        return r.json();
+    })
     .then(data => {
         btn.disabled = false;
         if (data.error) {
@@ -295,7 +309,7 @@ function aplicarCalificacion() {
     })
     .catch(err => {
         btn.disabled = false;
-        showAlert('Error de conexion: ' + err, 'error');
+        showAlert('Error: ' + err.message, 'error');
     });
 }
 </script>
