@@ -167,6 +167,30 @@
         </div>
     </div>
 
+    {% if resultado.puntaje_atencion_detalle != None %}
+    <div class="card">
+        <h2>Atencion al Detalle</h2>
+        <div class="scores-grid">
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_atencion_comparacion|floatformat:0|default:"--" }}%</div>
+                <div class="label">Comparacion</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_atencion_verificacion|floatformat:0|default:"--" }}%</div>
+                <div class="label">Verificacion</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_atencion_secuencias|floatformat:0|default:"--" }}%</div>
+                <div class="label">Secuencias</div>
+            </div>
+            <div class="score-box">
+                <div class="value">{{ resultado.puntaje_atencion_detalle|floatformat:0|default:"--" }}%</div>
+                <div class="label">Compuesto</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card">
         <h2>Puntajes Proyectivos</h2>
         <div class="scores-grid">

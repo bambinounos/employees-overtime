@@ -1,0 +1,457 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .seccion-card { display: none; }
+    .seccion-card.active { display: block; }
+
+    /* Comparison section */
+    .doc-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .doc-panel { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px; font-size: 0.9rem; }
+    .doc-panel h6 { font-size: 0.85rem; color: #666; margin-bottom: 12px; text-transform: uppercase; }
+    .doc-field { padding: 6px 8px; margin-bottom: 4px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .doc-field:hover { background: #f0f4ff; }
+    .doc-field.marked { background: #fff3cd; border: 1px solid #ffc107; }
+    .doc-field .field-label { font-weight: 600; color: #555; font-size: 0.8rem; }
+    .doc-field .field-value { color: #333; }
+
+    /* Verification section */
+    .verif-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .verif-table th { background: #2c3e50; color: white; padding: 8px 12px; text-align: left; font-size: 0.82rem; }
+    .verif-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+    .verif-table tr:hover { background: #f8f9fa; }
+    .verif-cell { cursor: pointer; transition: background 0.15s; }
+    .verif-cell.flagged { background: #fff3cd; font-weight: 600; }
+    .verif-cell.flagged::after { content: ' ⚠'; color: #dc3545; }
+
+    /* Sequence section */
+    .seq-container { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .seq-item { display: inline-flex; align-items: center; justify-content: center;
+                width: 48px; height: 48px; border: 2px solid #dee2e6; border-radius: 8px;
+                font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+                background: white; }
+    .seq-item:hover { border-color: #2c3e50; background: #f0f4ff; }
+    .seq-item.selected { border-color: #dc3545; background: #fff5f5; color: #dc3545; }
+
+    .pregunta-atencion { display: none; }
+    .pregunta-atencion.active { display: block; }
+
+    .instrucciones-seccion { background: #e8f4fd; border-radius: 8px; padding: 12px 16px;
+                             font-size: 0.88rem; color: #0c5460; margin-bottom: 16px; }
+
+    @media (max-width: 768px) {
+        .doc-compare { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="mb-3">
+            <a data-toggle="collapse" href="#instrucciones" class="text-muted small">
+                Ver instrucciones &#9660;
+            </a>
+            <div class="collapse" id="instrucciones">
+                <div class="card card-body mt-2 bg-light small">
+                    {{ prueba.instrucciones|linebreaksbr }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Section tabs -->
+        <ul class="nav nav-tabs mb-3" id="seccion-tabs">
+            <li class="nav-item">
+                <a class="nav-link active" href="#" data-seccion="comparacion">Comparacion</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-seccion="verificacion">Verificacion</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-seccion="secuencia">Secuencias</a>
+            </li>
+        </ul>
+
+        <!-- SECTION 1: Document Comparison -->
+        <div class="seccion-card active" data-seccion="comparacion">
+            <div class="instrucciones-seccion">
+                Compare los dos documentos. Haga clic en los campos del documento COPIA que contengan diferencias respecto al ORIGINAL.
+            </div>
+
+            {% for pregunta in preguntas %}
+                {% if pregunta.dimension == 'AT_COMP' %}
+                <div class="pregunta-atencion pregunta-comp" data-pregunta-id="{{ pregunta.id }}"
+                     data-subtipo="COMPARACION">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">Ejercicio de comparacion</p>
+                            <h6 class="mb-3">{{ pregunta.texto }}</h6>
+                            <div class="doc-compare" id="compare-{{ pregunta.id }}">
+                                <!-- Populated by JS from pregunta data -->
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="save-indicator" id="save-comp-{{ pregunta.id }}">&#10004; Guardado</span>
+                                <button class="btn btn-primary btn-sm btn-confirmar-atencion"
+                                        data-pregunta-id="{{ pregunta.id }}" data-subtipo="COMPARACION">
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            <div class="d-flex justify-content-between mb-3">
+                <button class="btn btn-outline-secondary btn-comp-prev" disabled>&laquo; Anterior</button>
+                <span class="text-muted align-self-center comp-counter"></span>
+                <button class="btn btn-outline-secondary btn-comp-next">Siguiente &raquo;</button>
+            </div>
+        </div>
+
+        <!-- SECTION 2: Data Verification -->
+        <div class="seccion-card" data-seccion="verificacion">
+            <div class="instrucciones-seccion">
+                Revise la tabla de datos. Haga clic en las celdas que contengan inconsistencias o errores respecto a los datos de referencia.
+            </div>
+
+            {% for pregunta in preguntas %}
+                {% if pregunta.dimension == 'AT_VERI' %}
+                <div class="pregunta-atencion pregunta-veri" data-pregunta-id="{{ pregunta.id }}"
+                     data-subtipo="VERIFICACION">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">Ejercicio de verificacion</p>
+                            <h6 class="mb-3">{{ pregunta.texto }}</h6>
+                            <div id="verif-{{ pregunta.id }}">
+                                <!-- Populated by JS -->
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="save-indicator" id="save-veri-{{ pregunta.id }}">&#10004; Guardado</span>
+                                <button class="btn btn-primary btn-sm btn-confirmar-atencion"
+                                        data-pregunta-id="{{ pregunta.id }}" data-subtipo="VERIFICACION">
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            <div class="d-flex justify-content-between mb-3">
+                <button class="btn btn-outline-secondary btn-veri-prev" disabled>&laquo; Anterior</button>
+                <span class="text-muted align-self-center veri-counter"></span>
+                <button class="btn btn-outline-secondary btn-veri-next">Siguiente &raquo;</button>
+            </div>
+        </div>
+
+        <!-- SECTION 3: Sequence Error Detection -->
+        <div class="seccion-card" data-seccion="secuencia">
+            <div class="instrucciones-seccion">
+                Observe cada secuencia e identifique el elemento que contiene un error. Haga clic en el elemento incorrecto.
+            </div>
+
+            {% for pregunta in preguntas %}
+                {% if pregunta.dimension == 'AT_SECU' %}
+                <div class="pregunta-atencion pregunta-secu" data-pregunta-id="{{ pregunta.id }}"
+                     data-subtipo="SECUENCIA">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">Secuencia con error</p>
+                            <h6 class="mb-3">{{ pregunta.texto }}</h6>
+                            <div class="seq-container" id="seq-{{ pregunta.id }}">
+                                <!-- Populated by JS -->
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="save-indicator" id="save-secu-{{ pregunta.id }}">&#10004; Guardado</span>
+                                <button class="btn btn-primary btn-sm btn-confirmar-atencion"
+                                        data-pregunta-id="{{ pregunta.id }}" data-subtipo="SECUENCIA">
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            <div class="d-flex justify-content-between mb-3">
+                <button class="btn btn-outline-secondary btn-secu-prev" disabled>&laquo; Anterior</button>
+                <span class="text-muted align-self-center secu-counter"></span>
+                <button class="btn btn-outline-secondary btn-secu-next">Siguiente &raquo;</button>
+            </div>
+        </div>
+
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var preguntasData = {{ preguntas_json|safe }};
+    var respondidas = new Set({{ respondidas_json|safe }});
+    var startTimes = {};
+    var selecciones = {}; // preguntaId -> selected values
+
+    // Build lookup by id
+    var preguntaById = {};
+    preguntasData.forEach(function(p) { preguntaById[p.id] = p; });
+
+    // ── Section navigation ──
+    var tabs = document.querySelectorAll('#seccion-tabs .nav-link');
+    var secciones = document.querySelectorAll('.seccion-card');
+
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function(e) {
+            e.preventDefault();
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            secciones.forEach(function(s) { s.classList.remove('active'); });
+            this.classList.add('active');
+            var sec = this.dataset.seccion;
+            document.querySelector('.seccion-card[data-seccion="' + sec + '"]').classList.add('active');
+        });
+    });
+
+    // ── Generic sub-question pagination ──
+    function setupPagination(prefix, containerClass) {
+        var items = document.querySelectorAll('.' + containerClass);
+        if (items.length === 0) return { show: function(){}, current: 0, total: 0 };
+
+        var current = 0;
+        var total = items.length;
+        var prevBtn = document.querySelector('.btn-' + prefix + '-prev');
+        var nextBtn = document.querySelector('.btn-' + prefix + '-next');
+        var counter = document.querySelector('.' + prefix + '-counter');
+
+        function show(idx) {
+            items[current].classList.remove('active');
+            current = idx;
+            items[current].classList.add('active');
+            if (prevBtn) prevBtn.disabled = (current === 0);
+            if (nextBtn) nextBtn.disabled = (current === total - 1);
+            if (counter) counter.textContent = (current + 1) + ' / ' + total;
+            var pid = items[current].dataset.preguntaId;
+            startTimes[pid] = Date.now();
+        }
+
+        if (items.length > 0) {
+            items[0].classList.add('active');
+            show(0);
+        }
+
+        if (prevBtn) prevBtn.addEventListener('click', function() { if (current > 0) show(current - 1); });
+        if (nextBtn) nextBtn.addEventListener('click', function() { if (current < total - 1) show(current + 1); });
+
+        return { show: show, getCurrent: function() { return current; }, total: total, items: items };
+    }
+
+    var compNav = setupPagination('comp', 'pregunta-comp');
+    var veriNav = setupPagination('veri', 'pregunta-veri');
+    var secuNav = setupPagination('secu', 'pregunta-secu');
+
+    var totalPreguntas = compNav.total + veriNav.total + secuNav.total;
+
+    // ── Render comparison exercises ──
+    document.querySelectorAll('.pregunta-comp').forEach(function(el) {
+        var pid = parseInt(el.dataset.preguntaId);
+        var pdata = preguntaById[pid];
+        if (!pdata || !pdata.secuencia_correcta) return;
+
+        // secuencia_correcta format for COMPARACION:
+        // { original: {field: value, ...}, copia: {field: value, ...}, diffs: ["field1", "field2"] }
+        // The "texto" field describes the exercise.
+        // We use secuencia_correcta to store exercise data as JSON.
+        var exData = pdata.secuencia_correcta;
+        if (!exData || !exData.original || !exData.copia) return;
+
+        var container = document.getElementById('compare-' + pid);
+        selecciones[pid] = new Set();
+
+        var originalHtml = '<div class="doc-panel"><h6>Documento Original</h6>';
+        var copiaHtml = '<div class="doc-panel"><h6>Documento Copia</h6>';
+
+        var fields = Object.keys(exData.original);
+        fields.forEach(function(field) {
+            originalHtml += '<div class="doc-field"><span class="field-label">' + field +
+                ':</span> <span class="field-value">' + exData.original[field] + '</span></div>';
+
+            copiaHtml += '<div class="doc-field" data-field="' + field +
+                '" data-pregunta="' + pid + '"><span class="field-label">' + field +
+                ':</span> <span class="field-value">' + exData.copia[field] + '</span></div>';
+        });
+
+        originalHtml += '</div>';
+        copiaHtml += '</div>';
+        container.innerHTML = originalHtml + copiaHtml;
+
+        // Click handlers for copia fields
+        container.querySelectorAll('.doc-field[data-field]').forEach(function(fieldEl) {
+            fieldEl.addEventListener('click', function() {
+                var f = this.dataset.field;
+                var p = parseInt(this.dataset.pregunta);
+                if (this.classList.contains('marked')) {
+                    this.classList.remove('marked');
+                    selecciones[p].delete(f);
+                } else {
+                    this.classList.add('marked');
+                    selecciones[p].add(f);
+                }
+            });
+        });
+    });
+
+    // ── Render verification exercises ──
+    document.querySelectorAll('.pregunta-veri').forEach(function(el) {
+        var pid = parseInt(el.dataset.preguntaId);
+        var pdata = preguntaById[pid];
+        if (!pdata || !pdata.secuencia_correcta) return;
+
+        // secuencia_correcta format for VERIFICACION:
+        // { columns: ["Col1","Col2",...], rows: [{Col1: val, Col2: val, ...}, ...], errors: ["row-col"] }
+        var exData = pdata.secuencia_correcta;
+        if (!exData || !exData.columns || !exData.rows) return;
+
+        var container = document.getElementById('verif-' + pid);
+        selecciones[pid] = new Set();
+
+        var html = '<table class="verif-table"><thead><tr>';
+        exData.columns.forEach(function(col) {
+            html += '<th>' + col + '</th>';
+        });
+        html += '</tr></thead><tbody>';
+
+        exData.rows.forEach(function(row, ri) {
+            html += '<tr>';
+            exData.columns.forEach(function(col) {
+                var cellId = ri + '-' + col;
+                html += '<td class="verif-cell" data-cell="' + cellId +
+                    '" data-pregunta="' + pid + '">' + (row[col] || '') + '</td>';
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        container.querySelectorAll('.verif-cell').forEach(function(cell) {
+            cell.addEventListener('click', function() {
+                var cid = this.dataset.cell;
+                var p = parseInt(this.dataset.pregunta);
+                if (this.classList.contains('flagged')) {
+                    this.classList.remove('flagged');
+                    selecciones[p].delete(cid);
+                } else {
+                    this.classList.add('flagged');
+                    selecciones[p].add(cid);
+                }
+            });
+        });
+    });
+
+    // ── Render sequence exercises ──
+    document.querySelectorAll('.pregunta-secu').forEach(function(el) {
+        var pid = parseInt(el.dataset.preguntaId);
+        var pdata = preguntaById[pid];
+        if (!pdata || !pdata.secuencia_correcta) return;
+
+        // secuencia_correcta format for SECUENCIA:
+        // { sequence: [val1, val2, ...], error_index: N }
+        // The sequence contains one error at error_index.
+        var exData = pdata.secuencia_correcta;
+        if (!exData || !exData.sequence) return;
+
+        var container = document.getElementById('seq-' + pid);
+        selecciones[pid] = null;
+
+        var html = '';
+        exData.sequence.forEach(function(val, idx) {
+            html += '<div class="seq-item" data-idx="' + idx +
+                '" data-pregunta="' + pid + '">' + val + '</div>';
+        });
+        container.innerHTML = html;
+
+        container.querySelectorAll('.seq-item').forEach(function(item) {
+            item.addEventListener('click', function() {
+                var p = parseInt(this.dataset.pregunta);
+                // Deselect previous
+                container.querySelectorAll('.seq-item').forEach(function(i) {
+                    i.classList.remove('selected');
+                });
+                this.classList.add('selected');
+                selecciones[p] = parseInt(this.dataset.idx);
+            });
+        });
+    });
+
+    // ── Confirm button handler ──
+    document.querySelectorAll('.btn-confirmar-atencion').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var pid = parseInt(this.dataset.preguntaId);
+            var subtipo = this.dataset.subtipo;
+            var tiempo = startTimes[pid] ? Math.round((Date.now() - startTimes[pid]) / 1000) : null;
+
+            var respuesta;
+            if (subtipo === 'COMPARACION' || subtipo === 'VERIFICACION') {
+                respuesta = selecciones[pid] ? Array.from(selecciones[pid]) : [];
+            } else {
+                respuesta = selecciones[pid];
+            }
+
+            if ((subtipo === 'COMPARACION' || subtipo === 'VERIFICACION') &&
+                (!respuesta || respuesta.length === 0)) {
+                // Allow empty submission (candidate found no errors)
+                respuesta = [];
+            }
+
+            this.disabled = true;
+            this.textContent = 'Guardando...';
+            var thisBtn = this;
+
+            guardarRespuesta('/psicoevaluacion/api/respuesta/atencion/', {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: pid,
+                subtipo: subtipo,
+                respuesta_json: respuesta,
+                tiempo_respuesta_seg: tiempo
+            }).then(function() {
+                respondidas.add(pid);
+                thisBtn.textContent = 'Confirmado';
+                thisBtn.classList.remove('btn-primary');
+                thisBtn.classList.add('btn-success');
+
+                var saveEl = document.getElementById('save-' + subtipo.toLowerCase().substring(0, 4) + '-' + pid);
+                mostrarGuardado(saveEl);
+
+                if (respondidas.size >= totalPreguntas) {
+                    document.getElementById('btn-next-test').style.display = 'block';
+                }
+
+                // Auto-advance
+                var card = thisBtn.closest('.pregunta-atencion');
+                var nav = null;
+                if (card.classList.contains('pregunta-comp')) nav = compNav;
+                else if (card.classList.contains('pregunta-veri')) nav = veriNav;
+                else if (card.classList.contains('pregunta-secu')) nav = secuNav;
+
+                if (nav && nav.getCurrent() < nav.total - 1) {
+                    setTimeout(function() { nav.show(nav.getCurrent() + 1); }, 600);
+                }
+            });
+        });
+    });
+
+    // Check if already all answered
+    if (respondidas.size >= totalPreguntas) {
+        document.getElementById('btn-next-test').style.display = 'block';
+    }
+})();
+</script>
+{% endblock %}

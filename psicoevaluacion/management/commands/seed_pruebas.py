@@ -22,6 +22,7 @@ class Command(BaseCommand):
         self._seed_colores()
         self._seed_situacional()
         self._seed_deseabilidad()
+        self._seed_atencion_detalle()
 
         self._vincular_pares_consistencia()
         self._actualizar_banco_metadata()
@@ -1233,6 +1234,421 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────────
     # VINCULAR PARES DE CONSISTENCIA (8 pares = 16 preguntas)
     # ──────────────────────────────────────────────
+    def _seed_atencion_detalle(self):
+        prueba, _ = Prueba.objects.get_or_create(
+            tipo='ATENCION',
+            defaults={
+                'nombre': 'Atencion al Detalle',
+                'descripcion': 'Evalua la capacidad de detectar errores, inconsistencias y diferencias en documentos, datos y secuencias.',
+                'instrucciones': (
+                    'Esta prueba evalua su capacidad de atencion al detalle en tres secciones:\n\n'
+                    '1. COMPARACION DE DOCUMENTOS: Compare dos versiones de un documento e identifique las diferencias.\n'
+                    '2. VERIFICACION DE DATOS: Revise tablas de datos y encuentre las inconsistencias.\n'
+                    '3. SECUENCIAS CON ERROR: Identifique el elemento incorrecto en cada secuencia.\n\n'
+                    'Lea cuidadosamente cada ejercicio antes de responder.'
+                ),
+                'tiempo_limite_minutos': 20,
+                'orden': 11,
+                'activa': True,
+                'es_proyectiva': False,
+            }
+        )
+
+        orden = 1
+
+        # ── COMPARACION DE DOCUMENTOS (10 exercises, apply 3) ──
+        comparaciones = [
+            {
+                'texto': 'Compare los datos personales del empleado en ambos documentos.',
+                'original': {
+                    'Nombre': 'Carlos Alberto Mendoza',
+                    'Cedula': '1234567890',
+                    'Cargo': 'Analista de Sistemas',
+                    'Salario': '$2,500.00',
+                    'Fecha ingreso': '15/03/2022',
+                    'Departamento': 'Tecnologia',
+                },
+                'copia': {
+                    'Nombre': 'Carlos Alberto Mendoza',
+                    'Cedula': '1234567890',
+                    'Cargo': 'Analista de Sistemas',
+                    'Salario': '$2,500.00',
+                    'Fecha ingreso': '15/03/2023',
+                    'Departamento': 'Tecnologia',
+                },
+                'diffs': ['Fecha ingreso'],
+            },
+            {
+                'texto': 'Compare la informacion de contacto del cliente.',
+                'original': {
+                    'Empresa': 'Soluciones Globales S.A.',
+                    'RUC': '1790456789001',
+                    'Direccion': 'Av. Amazonas N34-56',
+                    'Telefono': '02-2345678',
+                    'Email': 'info@solucionesglobales.com',
+                    'Ciudad': 'Quito',
+                },
+                'copia': {
+                    'Empresa': 'Soluciones Globales S.A.',
+                    'RUC': '1790456798001',
+                    'Direccion': 'Av. Amazonas N34-56',
+                    'Telefono': '02-2345678',
+                    'Email': 'info@solucionesglobales.com',
+                    'Ciudad': 'Quito',
+                },
+                'diffs': ['RUC'],
+            },
+            {
+                'texto': 'Compare los datos del pedido de compra.',
+                'original': {
+                    'Numero pedido': 'OC-2024-0892',
+                    'Proveedor': 'Distribuidora Nacional',
+                    'Producto': 'Resma papel A4 75g',
+                    'Cantidad': '150 unidades',
+                    'Precio unitario': '$3.75',
+                    'Total': '$562.50',
+                    'Fecha entrega': '28/02/2024',
+                },
+                'copia': {
+                    'Numero pedido': 'OC-2024-0892',
+                    'Proveedor': 'Distribuidora Nacional',
+                    'Producto': 'Resma papel A4 75g',
+                    'Cantidad': '150 unidades',
+                    'Precio unitario': '$3.75',
+                    'Total': '$565.50',
+                    'Fecha entrega': '28/02/2024',
+                },
+                'diffs': ['Total'],
+            },
+            {
+                'texto': 'Compare los datos del contrato de servicio.',
+                'original': {
+                    'Contrato': 'SRV-2024-045',
+                    'Cliente': 'Municipio de Ambato',
+                    'Servicio': 'Mantenimiento de redes',
+                    'Duracion': '12 meses',
+                    'Valor mensual': '$1,800.00',
+                    'Valor total': '$21,600.00',
+                    'Inicio': '01/04/2024',
+                },
+                'copia': {
+                    'Contrato': 'SRV-2024-045',
+                    'Cliente': 'Municipio de Ambato',
+                    'Servicio': 'Mantenimiento de redes',
+                    'Duracion': '12 meses',
+                    'Valor mensual': '$1,800.00',
+                    'Valor total': '$21,600.00',
+                    'Inicio': '01/04/2025',
+                },
+                'diffs': ['Inicio'],
+            },
+            {
+                'texto': 'Compare la ficha de inventario.',
+                'original': {
+                    'Codigo': 'INV-PC-0234',
+                    'Descripcion': 'Laptop Dell Latitude 5540',
+                    'Serie': 'DL5540-AB9C12',
+                    'Ubicacion': 'Piso 3 - Oficina 302',
+                    'Responsable': 'Maria Torres',
+                    'Estado': 'Operativo',
+                },
+                'copia': {
+                    'Codigo': 'INV-PC-0234',
+                    'Descripcion': 'Laptop Dell Latitude 5540',
+                    'Serie': 'DL5540-AB9C21',
+                    'Ubicacion': 'Piso 3 - Oficina 302',
+                    'Responsable': 'Maria Torres',
+                    'Estado': 'Operativo',
+                },
+                'diffs': ['Serie'],
+            },
+            {
+                'texto': 'Compare los datos de la factura comercial.',
+                'original': {
+                    'Factura': 'FAC-001-00234',
+                    'Fecha': '10/01/2024',
+                    'Cliente': 'Pedro Salazar',
+                    'Subtotal': '$450.00',
+                    'IVA 15%': '$67.50',
+                    'Total': '$517.50',
+                },
+                'copia': {
+                    'Factura': 'FAC-001-00234',
+                    'Fecha': '10/01/2024',
+                    'Cliente': 'Pedro Salazar',
+                    'Subtotal': '$450.00',
+                    'IVA 15%': '$67.50',
+                    'Total': '$517.00',
+                },
+                'diffs': ['Total'],
+            },
+            {
+                'texto': 'Compare los datos del formulario de registro.',
+                'original': {
+                    'Apellidos': 'Gutierrez Paredes',
+                    'Nombres': 'Ana Lucia',
+                    'Fecha nacimiento': '22/08/1990',
+                    'Lugar': 'Guayaquil',
+                    'Estado civil': 'Casada',
+                    'Profesion': 'Ingeniera Civil',
+                },
+                'copia': {
+                    'Apellidos': 'Gutierrez Paredes',
+                    'Nombres': 'Ana Lucia',
+                    'Fecha nacimiento': '22/08/1990',
+                    'Lugar': 'Guayaquil',
+                    'Estado civil': 'Soltera',
+                    'Profesion': 'Ingeniera Civil',
+                },
+                'diffs': ['Estado civil'],
+            },
+            {
+                'texto': 'Compare el registro de asistencia.',
+                'original': {
+                    'Empleado': 'Juan Perez',
+                    'Lunes': '08:00 - 17:00',
+                    'Martes': '08:15 - 17:00',
+                    'Miercoles': '08:00 - 17:00',
+                    'Jueves': '08:00 - 17:30',
+                    'Viernes': '08:00 - 16:00',
+                    'Total horas': '44.25',
+                },
+                'copia': {
+                    'Empleado': 'Juan Perez',
+                    'Lunes': '08:00 - 17:00',
+                    'Martes': '08:15 - 17:00',
+                    'Miercoles': '08:00 - 17:00',
+                    'Jueves': '08:00 - 17:30',
+                    'Viernes': '08:00 - 16:00',
+                    'Total horas': '44.75',
+                },
+                'diffs': ['Total horas'],
+            },
+            {
+                'texto': 'Compare los datos de la poliza de seguro.',
+                'original': {
+                    'Poliza': 'VID-2024-00891',
+                    'Asegurado': 'Roberto Cardenas',
+                    'Cedula': '0912345678',
+                    'Cobertura': '$50,000.00',
+                    'Prima mensual': '$45.00',
+                    'Vigencia': '01/01/2024 - 31/12/2024',
+                },
+                'copia': {
+                    'Poliza': 'VID-2024-00891',
+                    'Asegurado': 'Roberto Cardenas',
+                    'Cedula': '0912345687',
+                    'Cobertura': '$50,000.00',
+                    'Prima mensual': '$45.00',
+                    'Vigencia': '01/01/2024 - 31/12/2024',
+                },
+                'diffs': ['Cedula'],
+            },
+            {
+                'texto': 'Compare la cotizacion de servicios.',
+                'original': {
+                    'Cotizacion': 'COT-2024-156',
+                    'Servicio': 'Auditoria contable',
+                    'Horas estimadas': '120',
+                    'Tarifa por hora': '$35.00',
+                    'Subtotal': '$4,200.00',
+                    'Descuento 10%': '$420.00',
+                    'Total': '$3,780.00',
+                },
+                'copia': {
+                    'Cotizacion': 'COT-2024-156',
+                    'Servicio': 'Auditoria contable',
+                    'Horas estimadas': '120',
+                    'Tarifa por hora': '$35.00',
+                    'Subtotal': '$4,200.00',
+                    'Descuento 10%': '$420.00',
+                    'Total': '$3,880.00',
+                },
+                'diffs': ['Total'],
+            },
+        ]
+
+        for comp in comparaciones:
+            Pregunta.objects.get_or_create(
+                prueba=prueba,
+                texto=comp['texto'],
+                defaults={
+                    'tipo_escala': 'OPCION_MULTIPLE',
+                    'dimension': 'AT_COMP',
+                    'orden': orden,
+                    'secuencia_correcta': {
+                        'original': comp['original'],
+                        'copia': comp['copia'],
+                        'diffs': comp['diffs'],
+                    },
+                }
+            )
+            orden += 1
+
+        # ── VERIFICACION DE DATOS (8 exercises, apply 3) ──
+        verificaciones = [
+            {
+                'texto': 'Identifique las celdas con datos inconsistentes en esta tabla de nomina.',
+                'columns': ['Empleado', 'Salario base', 'Dias trabajados', 'Pago calculado'],
+                'rows': [
+                    {'Empleado': 'Gomez Luis', 'Salario base': '$1,200.00', 'Dias trabajados': '30', 'Pago calculado': '$1,200.00'},
+                    {'Empleado': 'Martinez Ana', 'Salario base': '$1,500.00', 'Dias trabajados': '25', 'Pago calculado': '$1,500.00'},
+                    {'Empleado': 'Ruiz Pedro', 'Salario base': '$1,800.00', 'Dias trabajados': '30', 'Pago calculado': '$1,800.00'},
+                ],
+                'errors': ['1-Pago calculado'],
+            },
+            {
+                'texto': 'Verifique la tabla de inventario contra los precios de lista.',
+                'columns': ['Producto', 'Precio lista', 'Cantidad', 'Subtotal'],
+                'rows': [
+                    {'Producto': 'Toner HP 85A', 'Precio lista': '$45.00', 'Cantidad': '10', 'Subtotal': '$450.00'},
+                    {'Producto': 'Papel bond A4', 'Precio lista': '$3.50', 'Cantidad': '100', 'Subtotal': '$350.00'},
+                    {'Producto': 'Grapadora', 'Precio lista': '$12.00', 'Cantidad': '5', 'Subtotal': '$65.00'},
+                ],
+                'errors': ['2-Subtotal'],
+            },
+            {
+                'texto': 'Verifique la tabla de calificaciones de estudiantes.',
+                'columns': ['Estudiante', 'Parcial 1', 'Parcial 2', 'Promedio'],
+                'rows': [
+                    {'Estudiante': 'Flores Maria', 'Parcial 1': '8.5', 'Parcial 2': '9.0', 'Promedio': '8.75'},
+                    {'Estudiante': 'Lopez Carlos', 'Parcial 1': '7.0', 'Parcial 2': '8.0', 'Promedio': '7.0'},
+                    {'Estudiante': 'Paz Andrea', 'Parcial 1': '9.5', 'Parcial 2': '9.5', 'Promedio': '9.5'},
+                ],
+                'errors': ['1-Promedio'],
+            },
+            {
+                'texto': 'Verifique los totales de ventas mensuales.',
+                'columns': ['Vendedor', 'Enero', 'Febrero', 'Marzo', 'Total Q1'],
+                'rows': [
+                    {'Vendedor': 'Region Norte', 'Enero': '$12,000', 'Febrero': '$15,000', 'Marzo': '$13,000', 'Total Q1': '$40,000'},
+                    {'Vendedor': 'Region Sur', 'Enero': '$8,000', 'Febrero': '$9,500', 'Marzo': '$10,000', 'Total Q1': '$27,500'},
+                    {'Vendedor': 'Region Costa', 'Enero': '$11,000', 'Febrero': '$12,000', 'Marzo': '$14,000', 'Total Q1': '$36,000'},
+                ],
+                'errors': ['2-Total Q1'],
+            },
+            {
+                'texto': 'Verifique la tabla de asistencia semanal.',
+                'columns': ['Empleado', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Total dias'],
+                'rows': [
+                    {'Empleado': 'Torres R.', 'Lun': 'X', 'Mar': 'X', 'Mie': 'X', 'Jue': 'X', 'Vie': 'X', 'Total dias': '5'},
+                    {'Empleado': 'Vera M.', 'Lun': 'X', 'Mar': '-', 'Mie': 'X', 'Jue': 'X', 'Vie': 'X', 'Total dias': '5'},
+                    {'Empleado': 'Meza J.', 'Lun': 'X', 'Mar': 'X', 'Mie': '-', 'Jue': 'X', 'Vie': 'X', 'Total dias': '4'},
+                ],
+                'errors': ['1-Total dias'],
+            },
+            {
+                'texto': 'Verifique la tabla de conversion de moneda.',
+                'columns': ['Moneda', 'Monto original', 'Tasa', 'Monto convertido'],
+                'rows': [
+                    {'Moneda': 'EUR', 'Monto original': '1,000', 'Tasa': '1.08', 'Monto convertido': '$1,080.00'},
+                    {'Moneda': 'GBP', 'Monto original': '500', 'Tasa': '1.26', 'Monto convertido': '$630.00'},
+                    {'Moneda': 'JPY', 'Monto original': '100,000', 'Tasa': '0.0067', 'Monto convertido': '$670.00'},
+                    {'Moneda': 'COP', 'Monto original': '4,000,000', 'Tasa': '0.00025', 'Monto convertido': '$1,200.00'},
+                ],
+                'errors': ['3-Monto convertido'],
+            },
+            {
+                'texto': 'Verifique los datos de vuelos reservados.',
+                'columns': ['Pasajero', 'Vuelo', 'Origen', 'Destino', 'Fecha', 'Asiento'],
+                'rows': [
+                    {'Pasajero': 'Gomez M.', 'Vuelo': 'AV-234', 'Origen': 'UIO', 'Destino': 'GYE', 'Fecha': '15/03', 'Asiento': '12A'},
+                    {'Pasajero': 'Paz L.', 'Vuelo': 'LA-890', 'Origen': 'GYE', 'Destino': 'UIO', 'Fecha': '15/03', 'Asiento': '8C'},
+                    {'Pasajero': 'Luna A.', 'Vuelo': 'AV-234', 'Origen': 'UIO', 'Destino': 'GYE', 'Fecha': '15/03', 'Asiento': '12A'},
+                ],
+                'errors': ['2-Asiento'],
+            },
+            {
+                'texto': 'Verifique la tabla de stock contra pedidos.',
+                'columns': ['Producto', 'Stock', 'Pedido', 'Disponible despues'],
+                'rows': [
+                    {'Producto': 'Camiseta M', 'Stock': '150', 'Pedido': '80', 'Disponible despues': '70'},
+                    {'Producto': 'Camiseta L', 'Stock': '200', 'Pedido': '120', 'Disponible despues': '80'},
+                    {'Producto': 'Camiseta XL', 'Stock': '100', 'Pedido': '45', 'Disponible despues': '55'},
+                ],
+                'errors': ['1-Disponible despues'],
+            },
+        ]
+
+        for veri in verificaciones:
+            Pregunta.objects.get_or_create(
+                prueba=prueba,
+                texto=veri['texto'],
+                defaults={
+                    'tipo_escala': 'OPCION_MULTIPLE',
+                    'dimension': 'AT_VERI',
+                    'orden': orden,
+                    'secuencia_correcta': {
+                        'columns': veri['columns'],
+                        'rows': veri['rows'],
+                        'errors': veri['errors'],
+                    },
+                }
+            )
+            orden += 1
+
+        # ── SECUENCIAS CON ERROR (20 exercises, apply 10) ──
+        secuencias = [
+            {'texto': 'Encuentre el numero incorrecto en esta secuencia aritmetica (+3).',
+             'sequence': [2, 5, 8, 11, 15, 17, 20], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto en esta secuencia (*2).',
+             'sequence': [1, 2, 4, 8, 15, 32, 64], 'error_index': 4},
+            {'texto': 'Encuentre la letra incorrecta en esta secuencia alfabetica.',
+             'sequence': ['A', 'C', 'E', 'G', 'J', 'K', 'M'], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto en la serie de Fibonacci.',
+             'sequence': [1, 1, 2, 3, 5, 9, 13, 21], 'error_index': 5},
+            {'texto': 'Encuentre el numero incorrecto (-5 descendente).',
+             'sequence': [100, 95, 90, 85, 79, 75, 70], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (cuadrados perfectos).',
+             'sequence': [1, 4, 9, 16, 24, 36, 49], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (+2, +3, +2, +3...).',
+             'sequence': [1, 3, 6, 8, 11, 14, 15], 'error_index': 5},
+            {'texto': 'Encuentre el numero incorrecto (numeros primos).',
+             'sequence': [2, 3, 5, 7, 11, 13, 15, 19], 'error_index': 6},
+            {'texto': 'Encuentre el numero incorrecto (+4 progresivo).',
+             'sequence': [3, 7, 11, 15, 18, 23, 27], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (potencias de 3).',
+             'sequence': [1, 3, 9, 27, 82, 243], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (+1, +2, +3, +4...).',
+             'sequence': [1, 2, 4, 7, 11, 17, 22], 'error_index': 5},
+            {'texto': 'Encuentre el numero incorrecto (triangulares).',
+             'sequence': [1, 3, 6, 10, 14, 21, 28], 'error_index': 4},
+            {'texto': 'Encuentre el dia incorrecto en la secuencia semanal.',
+             'sequence': ['Lun', 'Mar', 'Mie', 'Vie', 'Vie', 'Sab', 'Dom'], 'error_index': 3},
+            {'texto': 'Encuentre el mes incorrecto en la secuencia.',
+             'sequence': ['Ene', 'Feb', 'Mar', 'May', 'May', 'Jun', 'Jul'], 'error_index': 3},
+            {'texto': 'Encuentre el numero incorrecto (multiplos de 7).',
+             'sequence': [7, 14, 21, 28, 34, 42, 49], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (*3 progresivo).',
+             'sequence': [2, 6, 18, 54, 162, 484], 'error_index': 5},
+            {'texto': 'Encuentre el codigo incorrecto en la secuencia.',
+             'sequence': ['A01', 'B02', 'C03', 'D04', 'E06', 'F06'], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (+6 progresivo).',
+             'sequence': [4, 10, 16, 22, 27, 34, 40], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (suma digitos anterior).',
+             'sequence': [10, 11, 12, 14, 18, 27, 36], 'error_index': 4},
+            {'texto': 'Encuentre el numero incorrecto (-3 descendente).',
+             'sequence': [30, 27, 24, 21, 17, 15, 12], 'error_index': 4},
+        ]
+
+        for seq in secuencias:
+            Pregunta.objects.get_or_create(
+                prueba=prueba,
+                texto=seq['texto'],
+                defaults={
+                    'tipo_escala': 'OPCION_MULTIPLE',
+                    'dimension': 'AT_SECU',
+                    'orden': orden,
+                    'secuencia_correcta': {
+                        'sequence': seq['sequence'],
+                        'error_index': seq['error_index'],
+                    },
+                }
+            )
+            orden += 1
+
+        self.stdout.write(f'  Atencion al Detalle: {orden - 1} ejercicios creados')
+
     def _vincular_pares_consistencia(self):
         """
         Vincula pares de preguntas que miden lo mismo con wording distinto.
@@ -1312,6 +1728,7 @@ class Command(BaseCommand):
             'COLORES': (1, 0),
             'SITUACIONAL': (30, 15),
             'DESEABILIDAD': (12, 0),
+            'ATENCION': (38, 16),
         }
 
         for tipo, (banco, aplicar) in config.items():

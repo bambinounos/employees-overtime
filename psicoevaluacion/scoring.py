@@ -1,6 +1,6 @@
 from statistics import mean
 
-from .models import ResultadoFinal, PerfilObjetivo, RespuestaPsicometrica
+from .models import ResultadoFinal, PerfilObjetivo, RespuestaPsicometrica, RespuestaAtencion
 
 
 def calcular_bigfive(respuestas):
@@ -174,6 +174,107 @@ def calcular_consistencia(evaluacion):
     return mean(pares_evaluados) * 100
 
 
+def _score_comparacion(respuestas):
+    """
+    Score for document comparison using F1 (precision × recall balance).
+    Each question stores correct_diffs in pregunta.secuencia_correcta (as JSON list)
+    and candidate's found diffs in respuesta_json.
+    Returns 0-100%.
+    """
+    if not respuestas:
+        return 0
+
+    total_precision = 0
+    total_recall = 0
+    count = 0
+
+    for r in respuestas:
+        correctas = set()
+        encontradas = set()
+
+        # Ground truth: stored in pregunta.secuencia_correcta as list of diff keys
+        if r.pregunta and r.pregunta.secuencia_correcta:
+            correctas = {str(x) for x in r.pregunta.secuencia_correcta}
+
+        # Candidate answer
+        if r.respuesta_json and isinstance(r.respuesta_json, list):
+            encontradas = {str(x) for x in r.respuesta_json}
+
+        if not correctas:
+            continue
+
+        true_positives = len(correctas & encontradas)
+        precision = true_positives / len(encontradas) if encontradas else 0
+        recall = true_positives / len(correctas) if correctas else 0
+
+        total_precision += precision
+        total_recall += recall
+        count += 1
+
+    if count == 0:
+        return 0
+
+    avg_precision = total_precision / count
+    avg_recall = total_recall / count
+
+    if avg_precision + avg_recall == 0:
+        return 0
+
+    f1 = 2 * (avg_precision * avg_recall) / (avg_precision + avg_recall)
+    return f1 * 100
+
+
+def _score_verificacion(respuestas):
+    """
+    Score for data verification: % of correctly identified inconsistencies.
+    Returns 0-100%.
+    """
+    if not respuestas:
+        return 0
+
+    total = len(respuestas)
+    puntaje_sum = sum(r.puntaje_parcial for r in respuestas)
+    return (puntaje_sum / total) * 100
+
+
+def _score_secuencias(respuestas):
+    """
+    Score for sequence error detection: % correct.
+    Returns 0-100%.
+    """
+    if not respuestas:
+        return 0
+
+    total = len(respuestas)
+    correctas = sum(1 for r in respuestas if r.es_correcta)
+    return (correctas / total) * 100
+
+
+def calcular_atencion_detalle(respuestas):
+    """
+    Calcula puntaje compuesto de Atención al Detalle.
+    Pesos: Comparación 40%, Verificación 35%, Secuencias 25%.
+    Returns dict with subsection scores and composite.
+    """
+    comparacion = [r for r in respuestas if r.subtipo == 'COMPARACION']
+    verificacion = [r for r in respuestas if r.subtipo == 'VERIFICACION']
+    secuencias = [r for r in respuestas if r.subtipo == 'SECUENCIA']
+
+    score_comp = _score_comparacion(comparacion)
+    score_veri = _score_verificacion(verificacion)
+    score_secu = _score_secuencias(secuencias)
+
+    # Weighted composite
+    compuesto = score_comp * 0.40 + score_veri * 0.35 + score_secu * 0.25
+
+    return {
+        'comparacion': score_comp,
+        'verificacion': score_veri,
+        'secuencias': score_secu,
+        'total': compuesto,
+    }
+
+
 def calcular_resultado_final(evaluacion):
     """Orquestador principal: calcula todos los puntajes y genera ResultadoFinal."""
     resultado, _ = ResultadoFinal.objects.get_or_create(evaluacion=evaluacion)
@@ -231,17 +332,29 @@ def calcular_resultado_final(evaluacion):
         evaluacion.respuestas_situacionales.select_related('pregunta').all())
     resultado.puntaje_situacional = sit.get('total', 0)
 
+    # 6b. Atención al Detalle
+    atencion_respuestas = list(
+        evaluacion.respuestas_atencion.select_related('pregunta').all())
+    if atencion_respuestas:
+        aten = calcular_atencion_detalle(atencion_respuestas)
+        resultado.puntaje_atencion_detalle = aten['total']
+        resultado.puntaje_atencion_comparacion = aten['comparacion']
+        resultado.puntaje_atencion_verificacion = aten['verificacion']
+        resultado.puntaje_atencion_secuencias = aten['secuencias']
+
     # 7. Índices combinados
     resp = resultado.puntaje_responsabilidad or 0
     sit_total = resultado.puntaje_situacional or 0
     mem_pct = resultado.puntaje_memoria or 0
     comp_total = resultado.puntaje_compromiso_total or 0
     obed = resultado.puntaje_obediencia or 0
+    aten_pct = resultado.puntaje_atencion_detalle or 0
 
     resultado.indice_responsabilidad_total = (
-        resp * 0.5 +
-        (sit_total / 20) * 0.3 +
-        (mem_pct / 20) * 0.2
+        resp * 0.40 +
+        (sit_total / 20) * 0.25 +
+        (mem_pct / 20) * 0.15 +
+        (aten_pct / 20) * 0.20
     )
 
     resultado.indice_lealtad = (
@@ -298,6 +411,9 @@ def determinar_veredicto(resultado, perfil):
         fallos += 1
     if (resultado.puntaje_neuroticismo or 0) > perfil.max_neuroticismo:
         fallos += 1
+    if resultado.puntaje_atencion_detalle is not None:
+        if resultado.puntaje_atencion_detalle < perfil.min_atencion_detalle:
+            fallos += 1
 
     # Verificar si hay proyectivas sin revisar
     proyectivas_pendientes = resultado.evaluacion.respuestas_proyectivas.filter(

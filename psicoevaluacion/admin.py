@@ -6,8 +6,8 @@ from employees.models import Employee
 from .models import (
     PerfilObjetivo, Prueba, Pregunta, Opcion, Evaluacion,
     RespuestaPsicometrica, RespuestaProyectiva, RespuestaMemoria,
-    RespuestaMatriz, RespuestaSituacional, ResultadoFinal,
-    ConfiguracionIA,
+    RespuestaMatriz, RespuestaSituacional, RespuestaAtencion,
+    ResultadoFinal, ConfiguracionIA,
 )
 
 
@@ -27,10 +27,12 @@ class OpcionInline(admin.TabularInline):
 class PerfilObjetivoAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'activo', 'metodo_veredicto', 'min_responsabilidad',
                     'min_compromiso_organizacional',
-                    'min_obediencia', 'min_memoria', 'min_matrices')
+                    'min_obediencia', 'min_memoria', 'min_matrices',
+                    'min_atencion_detalle')
     list_editable = ('activo', 'metodo_veredicto', 'min_responsabilidad',
                      'min_compromiso_organizacional',
-                     'min_obediencia', 'min_memoria', 'min_matrices')
+                     'min_obediencia', 'min_memoria', 'min_matrices',
+                     'min_atencion_detalle')
 
 
 @admin.register(Prueba)
@@ -214,6 +216,13 @@ class RespuestaMatrizAdmin(admin.ModelAdmin):
 class RespuestaSituacionalAdmin(admin.ModelAdmin):
     list_display = ('evaluacion', 'pregunta', 'valor', 'fecha_respuesta')
     list_filter = ('pregunta__dimension',)
+
+
+@admin.register(RespuestaAtencion)
+class RespuestaAtencionAdmin(admin.ModelAdmin):
+    list_display = ('evaluacion', 'pregunta', 'subtipo', 'es_correcta',
+                    'puntaje_parcial', 'fecha_respuesta')
+    list_filter = ('subtipo', 'es_correcta')
 
 
 @admin.register(ConfiguracionIA)

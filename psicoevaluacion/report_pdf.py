@@ -168,6 +168,22 @@ def generar_informe_pdf(evaluacion, resultado):
     ]
     elements.append(_make_table(other_data))
 
+    # ── Atención al Detalle ──
+    if resultado.puntaje_atencion_detalle is not None:
+        elements.append(Paragraph('Atencion al Detalle', styles['SectionTitle']))
+        aten_data = [
+            ['Subseccion', 'Puntaje', 'Descripcion'],
+            ['Comparacion de documentos',
+             _fmt(resultado.puntaje_atencion_comparacion, 0, '%'), 'F1 score'],
+            ['Verificacion de datos',
+             _fmt(resultado.puntaje_atencion_verificacion, 0, '%'), '% aciertos'],
+            ['Secuencias con error',
+             _fmt(resultado.puntaje_atencion_secuencias, 0, '%'), '% aciertos'],
+            ['Compuesto (40/35/25)',
+             _fmt(resultado.puntaje_atencion_detalle, 0, '%'), 'Ponderado'],
+        ]
+        elements.append(_make_table(aten_data))
+
     # ── Proyectivas ──
     elements.append(Paragraph('Pruebas Proyectivas', styles['SectionTitle']))
     proy_data = [

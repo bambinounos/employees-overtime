@@ -14,7 +14,7 @@ from .models import (
     Evaluacion, Prueba, Pregunta, Opcion,
     RespuestaPsicometrica, RespuestaProyectiva,
     RespuestaMemoria, RespuestaMatriz, RespuestaSituacional,
-    ResultadoFinal,
+    RespuestaAtencion, ResultadoFinal,
 )
 import random
 
@@ -46,6 +46,7 @@ TEMPLATE_MAP = {
     'ARBOL': 'psicoevaluacion/prueba_proyectiva.html',
     'PERSONA_LLUVIA': 'psicoevaluacion/prueba_proyectiva.html',
     'COLORES': 'psicoevaluacion/prueba_colores.html',
+    'ATENCION': 'psicoevaluacion/prueba_atencion.html',
 }
 
 
@@ -64,6 +65,8 @@ def _serializar_preguntas(preguntas, tipo):
             'es_inversa': p.es_inversa,
         }
         if tipo == 'MEMORIA':
+            item['secuencia_correcta'] = p.secuencia_correcta
+        if tipo == 'ATENCION':
             item['secuencia_correcta'] = p.secuencia_correcta
         if tipo in ('BIGFIVE', 'COMPROMISO', 'OBEDIENCIA', 'DESEABILIDAD',
                      'SITUACIONAL', 'MATRICES'):
@@ -107,6 +110,10 @@ def _get_respuestas_existentes(evaluacion, prueba):
     elif tipo == 'COLORES':
         return list(evaluacion.respuestas_proyectivas.filter(
             prueba=prueba
+        ).values_list('pregunta_id', flat=True))
+    elif tipo == 'ATENCION':
+        return list(evaluacion.respuestas_atencion.filter(
+            pregunta__prueba=prueba
         ).values_list('pregunta_id', flat=True))
     return []
 
@@ -197,6 +204,7 @@ def inicio_evaluacion(request, token):
         'ARBOL': '10-15 min',
         'PERSONA_LLUVIA': '10-15 min',
         'COLORES': '5 min',
+        'ATENCION': '15-20 min',
     }
     pruebas_info = []
     for p in pruebas:
@@ -567,6 +575,85 @@ def api_guardar_proyectiva(request):
     return JsonResponse({
         'status': 'ok',
         'pregunta_id': pregunta_id,
+        'created': created,
+    })
+
+
+@require_POST
+def api_guardar_atencion(request):
+    data, error = _validar_api_request(request)
+    if error:
+        return error
+
+    evaluacion = data['_evaluacion']
+    pregunta_id = data.get('pregunta_id')
+    subtipo = data.get('subtipo')
+    respuesta_json = data.get('respuesta_json')
+    tiempo = data.get('tiempo_respuesta_seg')
+
+    if not pregunta_id or not subtipo:
+        return JsonResponse(
+            {'error': 'pregunta_id y subtipo requeridos'}, status=400)
+
+    try:
+        pregunta = Pregunta.objects.get(id=pregunta_id)
+    except Pregunta.DoesNotExist:
+        return JsonResponse({'error': 'Pregunta no encontrada'}, status=404)
+
+    # Calculate correctness based on subtipo
+    es_correcta = False
+    puntaje_parcial = 0.0
+    correctas_set = set()
+
+    if pregunta.secuencia_correcta:
+        correctas_set = {str(x) for x in pregunta.secuencia_correcta}
+
+    if subtipo == 'COMPARACION':
+        # F1-based: compare found differences vs actual differences
+        encontradas = set()
+        if respuesta_json and isinstance(respuesta_json, list):
+            encontradas = {str(x) for x in respuesta_json}
+        if correctas_set:
+            tp = len(correctas_set & encontradas)
+            precision = tp / len(encontradas) if encontradas else 0
+            recall = tp / len(correctas_set) if correctas_set else 0
+            if precision + recall > 0:
+                puntaje_parcial = 2 * (precision * recall) / (precision + recall)
+            es_correcta = encontradas == correctas_set
+
+    elif subtipo == 'VERIFICACION':
+        # Check if identified inconsistencies match expected
+        encontradas = set()
+        if respuesta_json and isinstance(respuesta_json, list):
+            encontradas = {str(x) for x in respuesta_json}
+        if correctas_set:
+            tp = len(correctas_set & encontradas)
+            puntaje_parcial = tp / len(correctas_set) if correctas_set else 0
+            es_correcta = encontradas == correctas_set
+
+    elif subtipo == 'SECUENCIA':
+        # Check if identified error position matches
+        if respuesta_json is not None and correctas_set:
+            es_correcta = str(respuesta_json) in correctas_set
+            puntaje_parcial = 1.0 if es_correcta else 0.0
+
+    _, created = RespuestaAtencion.objects.update_or_create(
+        evaluacion=evaluacion,
+        pregunta=pregunta,
+        defaults={
+            'subtipo': subtipo,
+            'respuesta_json': respuesta_json,
+            'es_correcta': es_correcta,
+            'puntaje_parcial': puntaje_parcial,
+            'tiempo_respuesta_seg': tiempo,
+        }
+    )
+
+    return JsonResponse({
+        'status': 'ok',
+        'pregunta_id': pregunta_id,
+        'es_correcta': es_correcta,
+        'puntaje_parcial': puntaje_parcial,
         'created': created,
     })
 

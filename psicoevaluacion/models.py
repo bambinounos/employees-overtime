@@ -31,6 +31,8 @@ class PerfilObjetivo(models.Model):
         help_text="% mínimo en matrices (inteligencia)")
     min_situacional = models.FloatField(default=60.0,
         help_text="% mínimo en prueba situacional")
+    min_atencion_detalle = models.FloatField(default=60.0,
+        help_text="% mínimo en atención al detalle")
 
     METODO_VEREDICTO_CHOICES = [
         ('CONTEO_FALLOS', 'Conteo de fallos (0=APTO, 1=REVISIÓN, 2+=NO APTO)'),
@@ -65,6 +67,7 @@ class Prueba(models.Model):
         ('COLORES', 'Test de Colores (Lüscher)'),
         ('SITUACIONAL', 'Prueba Situacional'),
         ('DESEABILIDAD', 'Escala de Deseabilidad Social'),
+        ('ATENCION', 'Atención al Detalle'),
     ]
 
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, unique=True)
@@ -130,6 +133,10 @@ class Pregunta(models.Model):
         ('COL_PREF', 'Colores: Preferencia'),
         # Deseabilidad Social
         ('DS_DESB', 'Deseabilidad Social'),
+        # Atención al Detalle
+        ('AT_COMP', 'Atención: Comparación de documentos'),
+        ('AT_VERI', 'Atención: Verificación de datos'),
+        ('AT_SECU', 'Atención: Secuencias con error'),
         # Otros
         ('GENERAL', 'General'),
     ]
@@ -365,6 +372,39 @@ class RespuestaSituacional(models.Model):
         verbose_name = "Respuesta Situacional"
 
 
+class RespuestaAtencion(models.Model):
+    """Respuestas al test de atención al detalle (3 subsecciones)."""
+    SUBTIPO_CHOICES = [
+        ('COMPARACION', 'Comparación de documentos'),
+        ('VERIFICACION', 'Verificación de datos cruzados'),
+        ('SECUENCIA', 'Secuencias con error'),
+    ]
+
+    evaluacion = models.ForeignKey(Evaluacion, on_delete=models.CASCADE,
+        related_name='respuestas_atencion')
+    pregunta = models.ForeignKey(Pregunta, on_delete=models.CASCADE)
+    subtipo = models.CharField(max_length=15, choices=SUBTIPO_CHOICES)
+
+    # For COMPARACION: JSON list of differences found [{campo, original, copia}]
+    # For VERIFICACION: JSON list of inconsistencies found [{campo, valor_encontrado, valor_esperado}]
+    # For SECUENCIA: the value the candidate identified as the error
+    respuesta_json = models.JSONField(null=True, blank=True,
+        help_text="Respuesta estructurada del candidato")
+
+    # Correctness fields
+    es_correcta = models.BooleanField(default=False,
+        help_text="True si la respuesta es completamente correcta")
+    puntaje_parcial = models.FloatField(default=0,
+        help_text="Puntaje parcial (0-1) para respuestas parcialmente correctas")
+
+    tiempo_respuesta_seg = models.IntegerField(null=True, blank=True)
+    fecha_respuesta = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['evaluacion', 'pregunta']
+        verbose_name = "Respuesta Atención al Detalle"
+
+
 class ResultadoFinal(models.Model):
     """Resultado consolidado de la evaluación"""
     VEREDICTO_CHOICES = [
@@ -396,6 +436,16 @@ class ResultadoFinal(models.Model):
     puntaje_matrices = models.FloatField(null=True,
         help_text="Porcentaje de aciertos")
     puntaje_situacional = models.FloatField(null=True)
+
+    # Atención al Detalle
+    puntaje_atencion_detalle = models.FloatField(null=True, blank=True,
+        help_text="Puntaje compuesto atención al detalle (0-100%)")
+    puntaje_atencion_comparacion = models.FloatField(null=True, blank=True,
+        help_text="F1 score comparación de documentos (0-100%)")
+    puntaje_atencion_verificacion = models.FloatField(null=True, blank=True,
+        help_text="% aciertos verificación de datos (0-100%)")
+    puntaje_atencion_secuencias = models.FloatField(null=True, blank=True,
+        help_text="% aciertos en secuencias con error (0-100%)")
 
     # Proyectivas (evaluación manual)
     puntaje_arbol = models.FloatField(null=True)

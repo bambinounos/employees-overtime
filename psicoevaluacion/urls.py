@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/respuesta/matriz/', views.api_guardar_matriz, name='api_matriz'),
     path('api/respuesta/proyectiva/', views.api_guardar_proyectiva, name='api_proyectiva'),
     path('api/respuesta/situacional/', views.api_guardar_situacional, name='api_situacional'),
+    path('api/respuesta/atencion/', views.api_guardar_atencion, name='api_atencion'),
 
     # --- Panel del evaluador (requiere login) ---
     path('panel/dashboard/', views.dashboard_evaluador, name='dashboard_evaluador'),

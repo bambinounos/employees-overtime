@@ -11,6 +11,8 @@ from psicoevaluacion.scoring import (
     calcular_memoria, calcular_matrices, calcular_situacional,
     calcular_resultado_final, determinar_veredicto,
     calcular_deseabilidad_social, calcular_consistencia,
+    calcular_atencion_detalle, _score_comparacion, _score_verificacion,
+    _score_secuencias,
 )
 from psicoevaluacion.utils import seleccionar_preguntas_evaluacion
 
@@ -980,3 +982,231 @@ class SeleccionarPreguntasTest(TestCase):
             dim_counts[p.dimension] = dim_counts.get(p.dimension, 0) + 1
         for dim in dims:
             self.assertEqual(dim_counts.get(dim, 0), 2)
+
+
+# ──────────────────────────────────────────────
+# ATENCION AL DETALLE TESTS
+# ──────────────────────────────────────────────
+
+def _mock_respuesta_atencion(subtipo, es_correcta=False, puntaje_parcial=0.0,
+                              respuesta_json=None, secuencia_correcta=None):
+    r = MagicMock()
+    r.subtipo = subtipo
+    r.es_correcta = es_correcta
+    r.puntaje_parcial = puntaje_parcial
+    r.respuesta_json = respuesta_json
+    r.pregunta = MagicMock()
+    r.pregunta.secuencia_correcta = secuencia_correcta
+    return r
+
+
+class ScoreComparacionTest(TestCase):
+
+    def test_perfect_match(self):
+        """All differences found, no false positives → F1 = 100%."""
+        r = _mock_respuesta_atencion(
+            'COMPARACION',
+            respuesta_json=['Fecha ingreso'],
+            secuencia_correcta=['Fecha ingreso'],
+        )
+        score = _score_comparacion([r])
+        self.assertEqual(score, 100.0)
+
+    def test_no_answers(self):
+        """No differences found → 0%."""
+        r = _mock_respuesta_atencion(
+            'COMPARACION',
+            respuesta_json=[],
+            secuencia_correcta=['Fecha ingreso'],
+        )
+        score = _score_comparacion([r])
+        self.assertEqual(score, 0.0)
+
+    def test_partial_recall(self):
+        """Found 1 of 2 diffs, no false positives → recall=0.5, precision=1.0, F1=0.667."""
+        r = _mock_respuesta_atencion(
+            'COMPARACION',
+            respuesta_json=['campo1'],
+            secuencia_correcta=['campo1', 'campo2'],
+        )
+        score = _score_comparacion([r])
+        # F1 = 2 * (1.0 * 0.5) / (1.0 + 0.5) = 2*0.5/1.5 = 0.667
+        self.assertAlmostEqual(score, 66.67, places=1)
+
+    def test_false_positive(self):
+        """Found 1 correct + 1 wrong → precision=0.5, recall=1.0, F1=0.667."""
+        r = _mock_respuesta_atencion(
+            'COMPARACION',
+            respuesta_json=['campo1', 'campo_falso'],
+            secuencia_correcta=['campo1'],
+        )
+        score = _score_comparacion([r])
+        self.assertAlmostEqual(score, 66.67, places=1)
+
+    def test_empty_list(self):
+        score = _score_comparacion([])
+        self.assertEqual(score, 0)
+
+
+class ScoreVerificacionTest(TestCase):
+
+    def test_all_correct(self):
+        respuestas = [
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
+        ]
+        score = _score_verificacion(respuestas)
+        self.assertEqual(score, 100.0)
+
+    def test_all_wrong(self):
+        respuestas = [
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=0.0),
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=0.0),
+        ]
+        score = _score_verificacion(respuestas)
+        self.assertEqual(score, 0.0)
+
+    def test_partial(self):
+        respuestas = [
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=0.5),
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=0.0),
+        ]
+        score = _score_verificacion(respuestas)
+        self.assertEqual(score, 50.0)
+
+    def test_empty(self):
+        self.assertEqual(_score_verificacion([]), 0)
+
+
+class ScoreSecuenciasTest(TestCase):
+
+    def test_all_correct(self):
+        respuestas = [
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=True),
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=True),
+        ]
+        score = _score_secuencias(respuestas)
+        self.assertEqual(score, 100.0)
+
+    def test_all_wrong(self):
+        respuestas = [
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=False),
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=False),
+        ]
+        score = _score_secuencias(respuestas)
+        self.assertEqual(score, 0.0)
+
+    def test_partial(self):
+        respuestas = [
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=True),
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=False),
+        ]
+        score = _score_secuencias(respuestas)
+        self.assertEqual(score, 50.0)
+
+    def test_empty(self):
+        self.assertEqual(_score_secuencias([]), 0)
+
+
+class CalcAtencionDetalleTest(TestCase):
+
+    def test_composite_weighted(self):
+        """Test that composite score uses 40/35/25 weights."""
+        respuestas = [
+            # COMPARACION: perfect → 100%
+            _mock_respuesta_atencion(
+                'COMPARACION', respuesta_json=['a'],
+                secuencia_correcta=['a']),
+            # VERIFICACION: perfect → 100%
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
+            # SECUENCIA: wrong → 0%
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=False),
+        ]
+        result = calcular_atencion_detalle(respuestas)
+        # comp=100, veri=100, secu=0
+        # total = 100*0.40 + 100*0.35 + 0*0.25 = 40 + 35 = 75
+        self.assertEqual(result['comparacion'], 100.0)
+        self.assertEqual(result['verificacion'], 100.0)
+        self.assertEqual(result['secuencias'], 0.0)
+        self.assertEqual(result['total'], 75.0)
+
+    def test_all_zero(self):
+        respuestas = [
+            _mock_respuesta_atencion('COMPARACION', respuesta_json=[],
+                                      secuencia_correcta=['a']),
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=0.0),
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=False),
+        ]
+        result = calcular_atencion_detalle(respuestas)
+        self.assertEqual(result['total'], 0.0)
+
+    def test_all_perfect(self):
+        respuestas = [
+            _mock_respuesta_atencion('COMPARACION', respuesta_json=['a'],
+                                      secuencia_correcta=['a']),
+            _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
+            _mock_respuesta_atencion('SECUENCIA', es_correcta=True),
+        ]
+        result = calcular_atencion_detalle(respuestas)
+        self.assertEqual(result['total'], 100.0)
+
+    def test_empty_respuestas(self):
+        result = calcular_atencion_detalle([])
+        self.assertEqual(result['total'], 0.0)
+
+
+class DeterminarVeredictoAtencionTest(TestCase):
+
+    def setUp(self):
+        self.perfil = PerfilObjetivo.objects.create(
+            nombre="Test Atencion",
+            min_responsabilidad=4.0,
+            max_neuroticismo=3.0,
+            min_compromiso_organizacional=3.5,
+            min_obediencia=3.5,
+            min_memoria=60.0,
+            min_matrices=50.0,
+            min_atencion_detalle=60.0,
+        )
+
+    def _make_resultado(self, **kwargs):
+        ev = Evaluacion(nombres='Test', cedula='111', correo='t@t.com')
+        ev.save()
+        defaults = {
+            'evaluacion': ev,
+            'puntaje_responsabilidad': 4.5,
+            'puntaje_neuroticismo': 2.0,
+            'puntaje_compromiso_total': 4.0,
+            'puntaje_obediencia': 4.0,
+            'puntaje_memoria': 80.0,
+            'puntaje_matrices': 70.0,
+            'puntaje_atencion_detalle': 75.0,
+        }
+        defaults.update(kwargs)
+        return ResultadoFinal.objects.create(**defaults)
+
+    def test_apto_atencion_sobre_minimo(self):
+        resultado = self._make_resultado(puntaje_atencion_detalle=75.0)
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'APTO')
+
+    def test_fallo_atencion_bajo_minimo(self):
+        resultado = self._make_resultado(puntaje_atencion_detalle=40.0)
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        # 1 fallo (atencion) → REVISION en CONTEO_FALLOS
+        self.assertEqual(veredicto, 'REVISION')
+
+    def test_no_apto_atencion_mas_otro_fallo(self):
+        resultado = self._make_resultado(
+            puntaje_atencion_detalle=40.0,
+            puntaje_responsabilidad=2.0,
+        )
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'NO_APTO')
+
+    def test_atencion_none_no_cuenta_como_fallo(self):
+        """If atencion not taken (None), don't count as failure."""
+        resultado = self._make_resultado(puntaje_atencion_detalle=None)
+        veredicto = determinar_veredicto(resultado, self.perfil)
+        self.assertEqual(veredicto, 'APTO')
