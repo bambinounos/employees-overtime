@@ -116,7 +116,7 @@
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         startTimes[current] = Date.now();
         if (respondidas.size >= total) {
-            document.getElementById('btn-next-test').style.display = 'block';
+            mostrarBotonSiguiente();
         }
     }
 
@@ -178,11 +178,17 @@
                 mostrarGuardado(document.getElementById('save-ind-' + idx));
 
                 if (respondidas.size >= total) {
-                    document.getElementById('btn-next-test').style.display = 'block';
+                    mostrarBotonSiguiente();
                 }
                 if (current < total - 1) {
                     setTimeout(function() { show(current + 1); }, 600);
                 }
+            }).catch(function(err) {
+                console.error('Error guardando respuesta:', err);
+                thisBtn.disabled = false;
+                thisBtn.textContent = 'Reintentar';
+                thisBtn.classList.remove('btn-success');
+                thisBtn.classList.add('btn-danger');
             });
         });
     });

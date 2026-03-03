@@ -312,7 +312,7 @@
             btn.classList.remove('btn-success');
             btn.classList.add('btn-secondary');
             mostrarGuardado(document.getElementById('save-indicator'));
-            document.getElementById('btn-next-test').style.display = 'block';
+            mostrarBotonSiguiente();
         }).catch(function() {
             btn.disabled = false;
             btn.textContent = 'Reintentar';

@@ -114,7 +114,7 @@
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         startTimes[current] = Date.now();
         if (respondidas.size >= total) {
-            document.getElementById('btn-next-test').style.display = 'block';
+            mostrarBotonSiguiente();
         }
     }
 
@@ -162,11 +162,14 @@
                 mostrarGuardado(card.querySelector('.save-ind'));
 
                 if (respondidas.size >= total) {
-                    document.getElementById('btn-next-test').style.display = 'block';
+                    mostrarBotonSiguiente();
                 }
                 if (current < total - 1) {
                     setTimeout(function() { show(current + 1); }, 500);
                 }
+            }).catch(function(err) {
+                console.error('Error guardando respuesta:', err);
+                alert('Error al guardar. Intente de nuevo.');
             });
         });
     });

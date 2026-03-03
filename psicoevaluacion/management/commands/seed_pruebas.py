@@ -1248,7 +1248,7 @@ class Command(BaseCommand):
                     'Lea cuidadosamente cada ejercicio antes de responder.'
                 ),
                 'tiempo_limite_minutos': 20,
-                'orden': 11,
+                'orden': 12,
                 'activa': True,
                 'es_proyectiva': False,
             }

@@ -188,7 +188,7 @@
 
         // Show next test button if all answered
         if (respondidas.size >= total) {
-            document.getElementById('btn-next-test-container').style.display = 'block';
+            mostrarBotonSiguiente();
         }
 
         // Track time
@@ -246,13 +246,16 @@
 
                     // Check completion
                     if (respondidas.size >= total) {
-                        document.getElementById('btn-next-test-container').style.display = 'block';
+                        mostrarBotonSiguiente();
                     }
 
                     // Auto-advance after 500ms
                     if (currentIndex < total - 1) {
                         setTimeout(function() { goTo(currentIndex + 1); }, 500);
                     }
+                }).catch(function(err) {
+                    console.error('Error guardando respuesta:', err);
+                    alert('Error al guardar. Intente de nuevo.');
                 });
         });
     });

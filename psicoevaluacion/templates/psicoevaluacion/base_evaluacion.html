@@ -162,6 +162,18 @@ function mostrarGuardado(element) {
     }, 2000);
 }
 
+// Show "next test" button and scroll to it
+function mostrarBotonSiguiente() {
+    var btn = document.getElementById('btn-next-test') ||
+              document.getElementById('btn-next-test-container');
+    if (btn) {
+        btn.style.display = 'block';
+        setTimeout(function() {
+            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+    }
+}
+
 // Timer functionality
 var timerInterval = null;
 var timerSeconds = 0;

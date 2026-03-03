@@ -151,7 +151,7 @@
 
     function showCard(idx) {
         if (idx >= total) {
-            document.getElementById('btn-next-test').style.display = 'block';
+            mostrarBotonSiguiente();
             return;
         }
         if (cards[current]) cards[current].classList.remove('active');
@@ -175,7 +175,7 @@
         cards[startIdx].classList.add('active');
         showCard(startIdx);
     } else {
-        document.getElementById('btn-next-test').style.display = 'block';
+        mostrarBotonSiguiente();
         document.getElementById('counter').textContent = 'Completado';
     }
 
@@ -294,9 +294,13 @@
                     if (current < total - 1) {
                         showCard(current + 1);
                     } else {
-                        document.getElementById('btn-next-test').style.display = 'block';
+                        mostrarBotonSiguiente();
                     }
                 }, 2000);
+            }).catch(function(err) {
+                console.error('Error guardando respuesta:', err);
+                thisBtn.disabled = false;
+                thisBtn.textContent = 'Reintentar';
             });
         });
     });

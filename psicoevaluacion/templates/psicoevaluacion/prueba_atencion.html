@@ -431,7 +431,7 @@
                 mostrarGuardado(saveEl);
 
                 if (respondidas.size >= totalPreguntas) {
-                    document.getElementById('btn-next-test').style.display = 'block';
+                    mostrarBotonSiguiente();
                 }
 
                 // Auto-advance
@@ -444,13 +444,19 @@
                 if (nav && nav.getCurrent() < nav.total - 1) {
                     setTimeout(function() { nav.show(nav.getCurrent() + 1); }, 600);
                 }
+            }).catch(function(err) {
+                console.error('Error guardando respuesta:', err);
+                thisBtn.disabled = false;
+                thisBtn.textContent = 'Reintentar';
+                thisBtn.classList.remove('btn-success');
+                thisBtn.classList.add('btn-danger');
             });
         });
     });
 
     // Check if already all answered
     if (respondidas.size >= totalPreguntas) {
-        document.getElementById('btn-next-test').style.display = 'block';
+        mostrarBotonSiguiente();
     }
 })();
 </script>

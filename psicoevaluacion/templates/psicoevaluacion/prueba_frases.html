@@ -91,7 +91,7 @@
         document.getElementById('btn-siguiente').disabled = (current === total - 1);
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         if (respondidas.size >= total) {
-            document.getElementById('btn-next-test').style.display = 'block';
+            mostrarBotonSiguiente();
         }
     }
 
@@ -124,8 +124,10 @@
             savedTexts[preguntaId] = text;
             mostrarGuardado(card.querySelector('.save-ind'));
             if (respondidas.size >= total) {
-                document.getElementById('btn-next-test').style.display = 'block';
+                mostrarBotonSiguiente();
             }
+        }).catch(function(err) {
+            console.error('Error guardando frase:', err);
         });
     }
 
@@ -152,8 +154,10 @@
                     savedTexts[preguntaId] = text;
                     mostrarGuardado(card.querySelector('.save-ind'));
                     if (respondidas.size >= total) {
-                        document.getElementById('btn-next-test').style.display = 'block';
+                        mostrarBotonSiguiente();
                     }
+                }).catch(function(err) {
+                    console.error('Error guardando frase:', err);
                 });
             }, 3000);
         });
