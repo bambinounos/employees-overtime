@@ -192,9 +192,10 @@ def _score_comparacion(respuestas):
         correctas = set()
         encontradas = set()
 
-        # Ground truth: stored in pregunta.secuencia_correcta as list of diff keys
+        # Ground truth: stored in pregunta.secuencia_correcta['diffs'] as list
         if r.pregunta and r.pregunta.secuencia_correcta:
-            correctas = {str(x) for x in r.pregunta.secuencia_correcta}
+            diffs = r.pregunta.secuencia_correcta.get('diffs', [])
+            correctas = {str(x) for x in diffs}
 
         # Candidate answer
         if r.respuesta_json and isinstance(r.respuesta_json, list):

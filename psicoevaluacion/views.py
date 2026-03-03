@@ -603,38 +603,38 @@ def api_guardar_atencion(request):
     # Calculate correctness based on subtipo
     es_correcta = False
     puntaje_parcial = 0.0
-    correctas_set = set()
-
-    if pregunta.secuencia_correcta:
-        correctas_set = {str(x) for x in pregunta.secuencia_correcta}
+    sec = pregunta.secuencia_correcta or {}
 
     if subtipo == 'COMPARACION':
         # F1-based: compare found differences vs actual differences
+        correctas_set = {str(x) for x in sec.get('diffs', [])}
         encontradas = set()
         if respuesta_json and isinstance(respuesta_json, list):
             encontradas = {str(x) for x in respuesta_json}
         if correctas_set:
             tp = len(correctas_set & encontradas)
             precision = tp / len(encontradas) if encontradas else 0
-            recall = tp / len(correctas_set) if correctas_set else 0
+            recall = tp / len(correctas_set)
             if precision + recall > 0:
                 puntaje_parcial = 2 * (precision * recall) / (precision + recall)
             es_correcta = encontradas == correctas_set
 
     elif subtipo == 'VERIFICACION':
         # Check if identified inconsistencies match expected
+        correctas_set = {str(x) for x in sec.get('errors', [])}
         encontradas = set()
         if respuesta_json and isinstance(respuesta_json, list):
             encontradas = {str(x) for x in respuesta_json}
         if correctas_set:
             tp = len(correctas_set & encontradas)
-            puntaje_parcial = tp / len(correctas_set) if correctas_set else 0
+            puntaje_parcial = tp / len(correctas_set)
             es_correcta = encontradas == correctas_set
 
     elif subtipo == 'SECUENCIA':
         # Check if identified error position matches
-        if respuesta_json is not None and correctas_set:
-            es_correcta = str(respuesta_json) in correctas_set
+        error_idx = sec.get('error_index')
+        if respuesta_json is not None and error_idx is not None:
+            es_correcta = str(respuesta_json) == str(error_idx)
             puntaje_parcial = 1.0 if es_correcta else 0.0
 
     _, created = RespuestaAtencion.objects.update_or_create(

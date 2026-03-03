@@ -1007,7 +1007,7 @@ class ScoreComparacionTest(TestCase):
         r = _mock_respuesta_atencion(
             'COMPARACION',
             respuesta_json=['Fecha ingreso'],
-            secuencia_correcta=['Fecha ingreso'],
+            secuencia_correcta={'diffs': ['Fecha ingreso']},
         )
         score = _score_comparacion([r])
         self.assertEqual(score, 100.0)
@@ -1017,7 +1017,7 @@ class ScoreComparacionTest(TestCase):
         r = _mock_respuesta_atencion(
             'COMPARACION',
             respuesta_json=[],
-            secuencia_correcta=['Fecha ingreso'],
+            secuencia_correcta={'diffs': ['Fecha ingreso']},
         )
         score = _score_comparacion([r])
         self.assertEqual(score, 0.0)
@@ -1027,7 +1027,7 @@ class ScoreComparacionTest(TestCase):
         r = _mock_respuesta_atencion(
             'COMPARACION',
             respuesta_json=['campo1'],
-            secuencia_correcta=['campo1', 'campo2'],
+            secuencia_correcta={'diffs': ['campo1', 'campo2']},
         )
         score = _score_comparacion([r])
         # F1 = 2 * (1.0 * 0.5) / (1.0 + 0.5) = 2*0.5/1.5 = 0.667
@@ -1038,7 +1038,7 @@ class ScoreComparacionTest(TestCase):
         r = _mock_respuesta_atencion(
             'COMPARACION',
             respuesta_json=['campo1', 'campo_falso'],
-            secuencia_correcta=['campo1'],
+            secuencia_correcta={'diffs': ['campo1']},
         )
         score = _score_comparacion([r])
         self.assertAlmostEqual(score, 66.67, places=1)
@@ -1117,7 +1117,7 @@ class CalcAtencionDetalleTest(TestCase):
             # COMPARACION: perfect → 100%
             _mock_respuesta_atencion(
                 'COMPARACION', respuesta_json=['a'],
-                secuencia_correcta=['a']),
+                secuencia_correcta={'diffs': ['a']}),
             # VERIFICACION: perfect → 100%
             _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
             # SECUENCIA: wrong → 0%
@@ -1134,7 +1134,7 @@ class CalcAtencionDetalleTest(TestCase):
     def test_all_zero(self):
         respuestas = [
             _mock_respuesta_atencion('COMPARACION', respuesta_json=[],
-                                      secuencia_correcta=['a']),
+                                      secuencia_correcta={'diffs': ['a']}),
             _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=0.0),
             _mock_respuesta_atencion('SECUENCIA', es_correcta=False),
         ]
@@ -1144,7 +1144,7 @@ class CalcAtencionDetalleTest(TestCase):
     def test_all_perfect(self):
         respuestas = [
             _mock_respuesta_atencion('COMPARACION', respuesta_json=['a'],
-                                      secuencia_correcta=['a']),
+                                      secuencia_correcta={'diffs': ['a']}),
             _mock_respuesta_atencion('VERIFICACION', puntaje_parcial=1.0),
             _mock_respuesta_atencion('SECUENCIA', es_correcta=True),
         ]

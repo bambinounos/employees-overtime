@@ -3,7 +3,8 @@ Generador de informe PDF de evaluación psicológica.
 Usa reportlab para generar el documento.
 """
 import io
-from datetime import datetime
+
+from django.utils import timezone
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -246,8 +247,8 @@ def generar_informe_pdf(evaluacion, resultado):
     elements.append(HRFlowable(width='100%', thickness=1, color=colors.HexColor('#cccccc')))
     elements.append(Spacer(1, 6))
     elements.append(Paragraph(
-        f'Informe generado el {datetime.now().strftime("%d/%m/%Y %H:%M")} | '
-        f'Calculo: {resultado.fecha_calculo.strftime("%d/%m/%Y %H:%M") if resultado.fecha_calculo else "-"}',
+        f'Informe generado el {timezone.localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")} | '
+        f'Calculo: {_fmt_date(resultado.fecha_calculo)}',
         styles['SubInfo']
     ))
 
@@ -258,7 +259,7 @@ def generar_informe_pdf(evaluacion, resultado):
 def _fmt_date(dt):
     if dt is None:
         return '-'
-    return dt.strftime('%d/%m/%Y %H:%M')
+    return timezone.localtime(dt).strftime('%d/%m/%Y %H:%M')
 
 
 def _fmt_colores(value):
