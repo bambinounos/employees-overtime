@@ -400,20 +400,26 @@ def determinar_veredicto(resultado, perfil):
 
     fallos = 0
 
-    if (resultado.puntaje_responsabilidad or 0) < perfil.min_responsabilidad:
+    def _below(valor, minimo):
+        return round(valor or 0, 2) < round(minimo, 2)
+
+    def _above(valor, maximo):
+        return round(valor or 0, 2) > round(maximo, 2)
+
+    if _below(resultado.puntaje_responsabilidad, perfil.min_responsabilidad):
         fallos += 1
-    if (resultado.puntaje_compromiso_total or 0) < perfil.min_compromiso_organizacional:
+    if _below(resultado.puntaje_compromiso_total, perfil.min_compromiso_organizacional):
         fallos += 1
-    if (resultado.puntaje_obediencia or 0) < perfil.min_obediencia:
+    if _below(resultado.puntaje_obediencia, perfil.min_obediencia):
         fallos += 1
-    if (resultado.puntaje_memoria or 0) < perfil.min_memoria:
+    if _below(resultado.puntaje_memoria, perfil.min_memoria):
         fallos += 1
-    if (resultado.puntaje_matrices or 0) < perfil.min_matrices:
+    if _below(resultado.puntaje_matrices, perfil.min_matrices):
         fallos += 1
-    if (resultado.puntaje_neuroticismo or 0) > perfil.max_neuroticismo:
+    if _above(resultado.puntaje_neuroticismo, perfil.max_neuroticismo):
         fallos += 1
     if resultado.puntaje_atencion_detalle is not None:
-        if resultado.puntaje_atencion_detalle < perfil.min_atencion_detalle:
+        if _below(resultado.puntaje_atencion_detalle, perfil.min_atencion_detalle):
             fallos += 1
 
     # Verificar si hay proyectivas sin revisar
