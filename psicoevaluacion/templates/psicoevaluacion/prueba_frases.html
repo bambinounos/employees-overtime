@@ -80,6 +80,8 @@
     var debounceTimers = {};
     var savedTexts = {};
 
+    var btnSiguiente = document.getElementById('btn-siguiente');
+
     function show(idx) {
         if (idx < 0 || idx >= total) return;
         // Save current before navigating
@@ -88,7 +90,8 @@
         current = idx;
         cards[current].classList.add('active');
         document.getElementById('btn-anterior').disabled = (current === 0);
-        document.getElementById('btn-siguiente').disabled = (current === total - 1);
+        btnSiguiente.disabled = false;
+        btnSiguiente.textContent = (current === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         if (respondidas.size >= total) {
             mostrarBotonSiguiente();
@@ -101,8 +104,16 @@
     document.getElementById('btn-anterior').addEventListener('click', function() {
         show(current - 1);
     });
-    document.getElementById('btn-siguiente').addEventListener('click', function() {
-        show(current + 1);
+    btnSiguiente.addEventListener('click', function() {
+        if (current < total - 1) {
+            show(current + 1);
+        } else {
+            // Last card - save immediately and check completion
+            saveCurrentFrase();
+            if (respondidas.size >= total) {
+                mostrarBotonSiguiente();
+            }
+        }
     });
 
     function saveCurrentFrase() {
@@ -160,6 +171,16 @@
                     console.error('Error guardando frase:', err);
                 });
             }, 3000);
+        });
+    });
+
+    // Save immediately on blur (user clicks away from textarea)
+    document.querySelectorAll('.frase-input').forEach(function(textarea) {
+        textarea.addEventListener('blur', function() {
+            var card = this.closest('.frase-card');
+            var idx = card.dataset.index;
+            if (debounceTimers[idx]) clearTimeout(debounceTimers[idx]);
+            saveCurrentFrase();
         });
     });
 
