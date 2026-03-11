@@ -174,9 +174,12 @@
         updateNav();
     }
 
+    var btnSiguiente = document.getElementById('btn-siguiente');
+
     function updateNav() {
         document.getElementById('btn-anterior').disabled = (currentIndex === 0);
-        document.getElementById('btn-siguiente').disabled = (currentIndex === total - 1);
+        btnSiguiente.disabled = false;
+        btnSiguiente.textContent = (currentIndex === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
         document.getElementById('pregunta-counter').textContent =
             (currentIndex + 1) + ' / ' + total;
 
@@ -203,8 +206,12 @@
     document.getElementById('btn-anterior').addEventListener('click', function() {
         goTo(currentIndex - 1);
     });
-    document.getElementById('btn-siguiente').addEventListener('click', function() {
-        goTo(currentIndex + 1);
+    btnSiguiente.addEventListener('click', function() {
+        if (currentIndex < total - 1) {
+            goTo(currentIndex + 1);
+        } else if (respondidas.size >= total) {
+            mostrarBotonSiguiente();
+        }
     });
 
     // Likert button clicks

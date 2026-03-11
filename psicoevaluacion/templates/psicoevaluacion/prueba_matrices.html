@@ -104,13 +104,16 @@
     var startTimes = {};
     var tiempoLimite = {{ prueba.tiempo_limite_minutos|default:"0" }};
 
+    var btnSiguiente = document.getElementById('btn-siguiente');
+
     function show(idx) {
         if (idx < 0 || idx >= total) return;
         cards[current].classList.remove('active');
         current = idx;
         cards[current].classList.add('active');
         document.getElementById('btn-anterior').disabled = (current === 0);
-        document.getElementById('btn-siguiente').disabled = (current === total - 1);
+        btnSiguiente.disabled = false;
+        btnSiguiente.textContent = (current === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         startTimes[current] = Date.now();
         if (respondidas.size >= total) {
@@ -132,8 +135,12 @@
     document.getElementById('btn-anterior').addEventListener('click', function() {
         if (current > 0) show(current - 1);
     });
-    document.getElementById('btn-siguiente').addEventListener('click', function() {
-        if (current < total - 1) show(current + 1);
+    btnSiguiente.addEventListener('click', function() {
+        if (current < total - 1) {
+            show(current + 1);
+        } else if (respondidas.size >= total) {
+            mostrarBotonSiguiente();
+        }
     });
 
     // Option selection
