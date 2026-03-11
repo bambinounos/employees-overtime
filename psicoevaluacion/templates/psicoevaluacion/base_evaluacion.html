@@ -166,6 +166,7 @@ function mostrarGuardado(element) {
 function mostrarBotonSiguiente() {
     var btn = document.getElementById('btn-next-test') ||
               document.getElementById('btn-next-test-container');
+    console.log('[DEBUG] mostrarBotonSiguiente called, btn found:', !!btn);
     if (btn) {
         btn.style.display = 'block';
         setTimeout(function() {

@@ -6,6 +6,7 @@ import zipfile
 from django.http import JsonResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.urls import reverse
@@ -172,6 +173,7 @@ def _validar_api_request(request):
 
 # --- Candidato (publico, con token) ---
 
+@never_cache
 def inicio_evaluacion(request, token):
     evaluacion = _get_evaluacion_or_404(token)
 
@@ -263,6 +265,7 @@ def _get_client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
+@never_cache
 def realizar_prueba(request, token, tipo_prueba):
     evaluacion = _get_evaluacion_or_404(token)
 
