@@ -507,7 +507,16 @@ class KPI(models.Model):
 
     
     # New fields for implementation
-    internal_code = models.SlugField(max_length=50, blank=True, null=True, help_text="System code for logic mapping (e.g. SALES_EFFECTIVENESS)")
+    INTERNAL_CODE_CHOICES = [
+        ('', '(ninguno — usa measurement_type)'),
+        ('SALES_EFFECTIVENESS', 'SALES_EFFECTIVENESS — Conversión proformas→facturas'),
+        ('PRODUCT_CREATION', 'PRODUCT_CREATION — Productos creados (excluye duplicados)'),
+    ]
+    internal_code = models.SlugField(
+        max_length=50, blank=True, null=True,
+        choices=INTERNAL_CODE_CHOICES,
+        help_text="Codigo interno que activa logica especial. Si esta vacio, se usa el measurement_type."
+    )
     min_volume_threshold = models.IntegerField(default=0, help_text="Minimum volume of records required to trigger this KPI (e.g. 10 proformas)")
     
     target_value = models.DecimalField(max_digits=10, decimal_places=2, help_text="E.g., 95 for percentage, 3 for count.")
