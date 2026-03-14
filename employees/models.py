@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import F, Avg, Sum
@@ -50,7 +51,11 @@ class Employee(models.Model):
     hire_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
     profile = models.ForeignKey(JobProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', help_text="Job Profile determining active KPIs for this employee.")
-    commission_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Porcentaje de comision sobre ventas netas facturadas (ej: 5.00 = 5%)")
+    commission_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
+        help_text="Porcentaje de comision sobre ventas netas facturadas (ej: 5.00 = 5%). Maximo 100%."
+    )
 
 
     def __str__(self):

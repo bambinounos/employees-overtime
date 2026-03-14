@@ -748,13 +748,19 @@ class DolibarrWebhookView(APIView):
             logger.warning("invoice_ids is not a list: %s", type(invoice_ids))
             return
 
+        today = timezone.now().date()
+        payment_date = today
         if payment_date_str:
             try:
-                payment_date = datetime.strptime(str(payment_date_str)[:10], '%Y-%m-%d').date()
+                parsed = datetime.strptime(str(payment_date_str)[:10], '%Y-%m-%d').date()
+                if parsed > today:
+                    logger.warning("Payment date in the future (%s), using today", parsed)
+                elif parsed < date(2020, 1, 1):
+                    logger.warning("Payment date too old (%s), using today", parsed)
+                else:
+                    payment_date = parsed
             except (ValueError, TypeError):
-                payment_date = timezone.now().date()
-        else:
-            payment_date = timezone.now().date()
+                pass  # keep today as default
 
         updated = 0
         for inv_id in invoice_ids:
