@@ -63,9 +63,15 @@ class EmployeeAdmin(admin.ModelAdmin):
 
 @admin.register(Salary)
 class SalaryAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'base_amount', 'effective_date')
-    list_filter = ('effective_date',)
+    list_display = ('employee', 'base_amount', 'effective_date', 'is_current')
+    list_filter = ('effective_date', 'employee')
     search_fields = ('employee__name',)
+    ordering = ('-effective_date',)
+
+    @admin.display(boolean=True, description='Vigente')
+    def is_current(self, obj):
+        latest = Salary.objects.filter(employee=obj.employee).first()
+        return latest and latest.pk == obj.pk
 
 @admin.register(WorkLog)
 class WorkLogAdmin(admin.ModelAdmin):

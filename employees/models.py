@@ -248,10 +248,14 @@ class Employee(models.Model):
         overtime, and performance bonus.
         Returns a dictionary with a detailed breakdown of the salary.
         """
-        try:
-            base_salary = self.salary.base_amount
-        except Salary.DoesNotExist:
-            return None # Return None if no base salary is set
+        # Find the salary effective on the first day of the target month
+        target_date = date(year, month, 1)
+        salary_record = self.salaries.filter(
+            effective_date__lte=target_date
+        ).first()  # ordered by -effective_date, so first() = most recent
+        if not salary_record:
+            return None
+        base_salary = salary_record.base_amount
 
         # 1. Calculate pay from worked hours and overtime
         work_logs = WorkLog.objects.filter(employee=self, date__year=year, date__month=month)
@@ -311,13 +315,18 @@ class Employee(models.Model):
         }
 
 class Salary(models.Model):
-    """Represents the base salary for an employee."""
-    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, primary_key=True)
+    """Represents a salary record for an employee with date-based history."""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='salaries')
     base_amount = models.DecimalField(max_digits=10, decimal_places=2)
     effective_date = models.DateField()
 
+    class Meta:
+        ordering = ['-effective_date']
+        unique_together = ('employee', 'effective_date')
+        verbose_name_plural = 'Salaries'
+
     def __str__(self):
-        return f"{self.employee.name} - ${self.base_amount}"
+        return f"{self.employee.name} - ${self.base_amount} (desde {self.effective_date})"
 
 class WorkLog(models.Model):
     """Logs the hours worked and overtime for an employee on a specific day."""
