@@ -387,6 +387,8 @@ class DolibarrWebhookView(APIView):
                 self.process_bill_validate(payload, instance)
             elif event_type == 'PROPAL_VALIDATE':
                 self.process_proforma(payload, instance)
+            elif event_type == 'ORDER_VALIDATE':
+                self.process_order(payload, instance)
             elif event_type == 'PAYMENT_CUSTOMER_CREATE':
                 self.process_payment(payload, instance)
             elif event_type == 'PRODUCT_CREATE':
@@ -446,34 +448,78 @@ class DolibarrWebhookView(APIView):
                 pass
         return timezone.now().date()
 
+    @staticmethod
+    def _validate_int(value, field_name, allow_zero=False):
+        """Validate and return a positive integer from webhook payload."""
+        if value is None:
+            return None
+        try:
+            result = int(value)
+            if not allow_zero and result <= 0:
+                logger.warning("Invalid %s: must be positive, got %s", field_name, result)
+                return None
+            if allow_zero and result < 0:
+                logger.warning("Invalid %s: must be non-negative, got %s", field_name, result)
+                return None
+            return result
+        except (ValueError, TypeError):
+            logger.warning("Invalid %s: not a number, got %s", field_name, value)
+            return None
+
+    @staticmethod
+    def _validate_amount(value, field_name):
+        """Validate and return a Decimal amount from webhook payload."""
+        try:
+            from decimal import Decimal, InvalidOperation
+            result = Decimal(str(value))
+            if abs(result) > Decimal('99999999.99'):
+                logger.warning("Suspicious %s: value too large: %s", field_name, result)
+                return None
+            return result
+        except (InvalidOperation, ValueError, TypeError):
+            logger.warning("Invalid %s: not a valid amount, got %s", field_name, value)
+            return None
+
     def process_bill_validate(self, payload, instance):
         """
         Process BILL_VALIDATE events.
-        Distinguishes between regular invoices (type=0) and credit notes (type=2).
 
         Rules:
-        - Invoices: commission attributed only if same employee created the proforma.
-        - Credit notes: attributed to the employee who made the original invoice,
-          NOT the user who issued the credit note.
+        - Invoice must have an order or proforma by the same employee.
+        - Invoices without order or proforma are rejected (not a valid workflow).
+        - Credit notes: attributed to the employee who made the original invoice.
         """
         obj = payload.get('object', {})
-        dolibarr_user_id = obj.get('fk_user_author')
-        event_date = self._parse_event_date(obj)
-        bill_type = obj.get('type', 0)
-        origin_proforma_id = obj.get('fk_propal')
 
-        if int(bill_type) == 2:
-            # Credit note: attribute to the employee who made the ORIGINAL invoice
-            # fk_facture_source points to the source invoice in Dolibarr
-            fk_facture_source = obj.get('fk_facture_source')
+        # Validate inputs
+        dolibarr_id = self._validate_int(obj.get('id'), 'dolibarr_id')
+        if not dolibarr_id:
+            return
+        dolibarr_user_id = self._validate_int(obj.get('fk_user_author'), 'fk_user_author')
+        if not dolibarr_user_id:
+            return
+        amount = self._validate_amount(obj.get('total_ht', 0), 'total_ht')
+        if amount is None:
+            return
+
+        event_date = self._parse_event_date(obj)
+        bill_type = self._validate_int(obj.get('type', 0), 'type', allow_zero=True) or 0
+        dolibarr_ref = str(obj.get('ref', ''))[:100]
+        origin_proforma_id = self._validate_int(obj.get('fk_propal'), 'fk_propal')
+        origin_order_id = self._validate_int(obj.get('fk_commande'), 'fk_commande')
+
+        if bill_type == 2:
+            # --- CREDIT NOTE ---
+            # Attribute to the employee who made the ORIGINAL invoice
+            fk_facture_source = self._validate_int(obj.get('fk_facture_source'), 'fk_facture_source')
             original_invoice = None
+
             if fk_facture_source:
                 original_invoice = SalesRecord.objects.filter(
                     dolibarr_instance=instance,
                     dolibarr_id=fk_facture_source,
                     status='invoiced',
                 ).first()
-            # Fallback: try via origin_proforma_id
             if not original_invoice and origin_proforma_id:
                 original_invoice = SalesRecord.objects.filter(
                     dolibarr_instance=instance,
@@ -484,91 +530,185 @@ class DolibarrWebhookView(APIView):
             if original_invoice:
                 target_employee = original_invoice.employee
             else:
-                # Fallback: attribute to the user who issued the credit note
                 target_employee = self._resolve_employee(instance, dolibarr_user_id)
                 if not target_employee:
                     return
+                logger.warning(
+                    "Credit note %s: could not find original invoice, "
+                    "attributing to issuer %s", dolibarr_ref, target_employee.name
+                )
 
-            amount = obj.get('total_ht', 0)
+            # Credit notes must be negative
             SalesRecord.objects.create(
                 employee=target_employee,
                 dolibarr_instance=instance,
-                dolibarr_id=obj.get('id'),
-                dolibarr_ref=obj.get('ref'),
+                dolibarr_id=dolibarr_id,
+                dolibarr_ref=dolibarr_ref,
                 origin_proforma_id=origin_proforma_id,
+                origin_order_id=origin_order_id,
                 status='credit_note',
                 amount_untaxed=-abs(amount),
                 date=event_date,
             )
-            logger.info("Credit note %s attributed to employee %s", obj.get('ref'), target_employee.name)
+            logger.info("Credit note %s attributed to employee %s", dolibarr_ref, target_employee.name)
         else:
-            # Regular invoice
+            # --- REGULAR INVOICE ---
             employee = self._resolve_employee(instance, dolibarr_user_id)
             if not employee:
                 return
 
-            # Validate same-user rule: if invoice has a proforma, it must be by the same employee
+            # Invoice must have originated from a proforma or order by the same employee
+            origin_validated = False
+
+            # Check proforma ownership
             if origin_proforma_id:
                 proforma_record = SalesRecord.objects.filter(
                     dolibarr_instance=instance,
                     dolibarr_id=origin_proforma_id,
                     status='proforma',
                 ).first()
-                if proforma_record and proforma_record.employee_id != employee.pk:
-                    logger.warning(
-                        "Invoice %s by employee %s skipped: proforma %s belongs to employee %s",
-                        obj.get('ref'), employee.name,
-                        proforma_record.dolibarr_ref, proforma_record.employee.name
-                    )
-                    return
+                if proforma_record:
+                    if proforma_record.employee_id != employee.pk:
+                        logger.warning(
+                            "Invoice %s by %s rejected: proforma belongs to %s",
+                            dolibarr_ref, employee.name, proforma_record.employee.name
+                        )
+                        return
+                    origin_validated = True
+
+            # Check order ownership (Pedido → Factura flow)
+            if not origin_validated and origin_order_id:
+                order_record = SalesRecord.objects.filter(
+                    dolibarr_instance=instance,
+                    dolibarr_id=origin_order_id,
+                    status='order',
+                ).first()
+                if order_record:
+                    if order_record.employee_id != employee.pk:
+                        logger.warning(
+                            "Invoice %s by %s rejected: order belongs to %s",
+                            dolibarr_ref, employee.name, order_record.employee.name
+                        )
+                        return
+                    origin_validated = True
+
+            # Reject invoices without proforma or order (not a valid workflow)
+            if not origin_validated:
+                logger.warning(
+                    "Invoice %s by %s rejected: no proforma or order found. "
+                    "Direct invoices are not allowed.",
+                    dolibarr_ref, employee.name
+                )
+                return
+
+            # Invoice amount must be positive
+            if amount < 0:
+                logger.warning(
+                    "Invoice %s rejected: negative amount %s", dolibarr_ref, amount
+                )
+                return
 
             SalesRecord.objects.create(
                 employee=employee,
                 dolibarr_instance=instance,
-                dolibarr_id=obj.get('id'),
-                dolibarr_ref=obj.get('ref'),
+                dolibarr_id=dolibarr_id,
+                dolibarr_ref=dolibarr_ref,
                 origin_proforma_id=origin_proforma_id,
+                origin_order_id=origin_order_id,
                 status='invoiced',
-                amount_untaxed=obj.get('total_ht', 0),
+                amount_untaxed=amount,
                 date=event_date,
             )
 
     def process_proforma(self, payload, instance):
-        """Process PROPAL_VALIDATE events (proforma/proposal validated)."""
+        """Process PROPAL_VALIDATE events."""
         obj = payload.get('object', {})
-        dolibarr_user_id = obj.get('fk_user_author')
+        dolibarr_id = self._validate_int(obj.get('id'), 'dolibarr_id')
+        dolibarr_user_id = self._validate_int(obj.get('fk_user_author'), 'fk_user_author')
+        if not dolibarr_id or not dolibarr_user_id:
+            return
 
         employee = self._resolve_employee(instance, dolibarr_user_id)
         if not employee:
             return
 
-        event_date = self._parse_event_date(obj)
+        amount = self._validate_amount(obj.get('total_ht', 0), 'total_ht')
+        if amount is None:
+            return
 
         SalesRecord.objects.create(
             employee=employee,
             dolibarr_instance=instance,
-            dolibarr_id=obj.get('id'),
-            dolibarr_ref=obj.get('ref'),
+            dolibarr_id=dolibarr_id,
+            dolibarr_ref=str(obj.get('ref', ''))[:100],
             status='proforma',
-            amount_untaxed=obj.get('total_ht', 0),
-            date=event_date,
+            amount_untaxed=amount,
+            date=self._parse_event_date(obj),
+        )
+
+    def process_order(self, payload, instance):
+        """Process ORDER_VALIDATE events (pedido validated)."""
+        obj = payload.get('object', {})
+        dolibarr_id = self._validate_int(obj.get('id'), 'dolibarr_id')
+        dolibarr_user_id = self._validate_int(obj.get('fk_user_author'), 'fk_user_author')
+        if not dolibarr_id or not dolibarr_user_id:
+            return
+
+        employee = self._resolve_employee(instance, dolibarr_user_id)
+        if not employee:
+            return
+
+        amount = self._validate_amount(obj.get('total_ht', 0), 'total_ht')
+        if amount is None:
+            return
+
+        origin_proforma_id = self._validate_int(obj.get('fk_propal'), 'fk_propal')
+
+        # Same-user validation: if order has a proforma, must be same employee
+        if origin_proforma_id:
+            proforma_record = SalesRecord.objects.filter(
+                dolibarr_instance=instance,
+                dolibarr_id=origin_proforma_id,
+                status='proforma',
+            ).first()
+            if proforma_record and proforma_record.employee_id != employee.pk:
+                logger.warning(
+                    "Order %s by %s rejected: proforma belongs to %s",
+                    obj.get('ref'), employee.name, proforma_record.employee.name
+                )
+                return
+
+        SalesRecord.objects.create(
+            employee=employee,
+            dolibarr_instance=instance,
+            dolibarr_id=dolibarr_id,
+            dolibarr_ref=str(obj.get('ref', ''))[:100],
+            origin_proforma_id=origin_proforma_id,
+            status='order',
+            amount_untaxed=amount,
+            date=self._parse_event_date(obj),
         )
 
     def process_product_creation(self, payload, instance):
         """
         Process PRODUCT_CREATE events with anti-fraud SKU validation.
-        Per FEASIBILITY_REPORT section 3.2.C.4: If a product with the same SKU
-        was already created this month in this instance, the new entry is marked
-        as a suspected duplicate (not eligible for bonus).
+        Duplicates are flagged and excluded from bonus calculations.
         """
         obj = payload.get('object', {})
-        dolibarr_user_id = obj.get('fk_user_author')
+        dolibarr_user_id = self._validate_int(obj.get('fk_user_author'), 'fk_user_author')
+        dolibarr_product_id = self._validate_int(obj.get('id'), 'dolibarr_product_id')
+        if not dolibarr_user_id or not dolibarr_product_id:
+            return
 
         employee = self._resolve_employee(instance, dolibarr_user_id)
         if not employee:
             return
 
-        product_ref = obj.get('ref', '')
+        product_ref = str(obj.get('ref', '')).strip()[:255]
+        if not product_ref:
+            logger.warning("Product creation rejected: empty product_ref")
+            return
+
         now = timezone.now()
 
         # Anti-fraud: check for same SKU created this month in this instance
@@ -582,7 +722,7 @@ class DolibarrWebhookView(APIView):
         log_entry = ProductCreationLog.objects.create(
             employee=employee,
             dolibarr_instance=instance,
-            dolibarr_product_id=obj.get('id'),
+            dolibarr_product_id=dolibarr_product_id,
             product_ref=product_ref,
             created_at=now,
             is_suspect_duplicate=duplicate_sku,
@@ -599,11 +739,14 @@ class DolibarrWebhookView(APIView):
         """
         Process PAYMENT_CUSTOMER_CREATE events.
         Updates payment_date on matching SalesRecords (invoices).
-        The payload contains invoice_ids: list of Dolibarr invoice rowids that were paid.
         """
         obj = payload.get('object', {})
         invoice_ids = obj.get('invoice_ids', [])
         payment_date_str = obj.get('date_payment')
+
+        if not isinstance(invoice_ids, list):
+            logger.warning("invoice_ids is not a list: %s", type(invoice_ids))
+            return
 
         if payment_date_str:
             try:
@@ -615,9 +758,12 @@ class DolibarrWebhookView(APIView):
 
         updated = 0
         for inv_id in invoice_ids:
+            validated_id = self._validate_int(inv_id, 'invoice_id')
+            if not validated_id:
+                continue
             count = SalesRecord.objects.filter(
                 dolibarr_instance=instance,
-                dolibarr_id=inv_id,
+                dolibarr_id=validated_id,
                 status='invoiced',
                 payment_date__isnull=True,
             ).update(payment_date=payment_date)

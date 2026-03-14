@@ -18,7 +18,7 @@ class InterfaceMyTrigger extends DolibarrTriggers
         $this->name = 'PayrollConnect';
         $this->family = "payroll_connect";
         $this->description = "Triggers for Payroll Connect integration: syncs invoices, proposals and product creations to Django payroll system.";
-        $this->version = '1.5.0';
+        $this->version = '1.6.0';
         $this->picto = 'payrollconnect@payrollconnect';
     }
 
@@ -101,7 +101,30 @@ class InterfaceMyTrigger extends DolibarrTriggers
             return $this->send($data);
         }
 
-        // 3. PAYMENT_CUSTOMER_CREATE (Customer payment received)
+        // 3. ORDER_VALIDATE (Order/Pedido validated)
+        elseif ($action == 'ORDER_VALIDATE') {
+            // Resolve linked proforma
+            $propal_id = null;
+            $object->fetchObjectLinked();
+            if (!empty($object->linkedObjectsIds['propal'])) {
+                $propal_id = reset($object->linkedObjectsIds['propal']);
+            }
+
+            $data = array(
+                'trigger_code' => 'ORDER_VALIDATE',
+                'object' => array(
+                    'id' => $object->id,
+                    'ref' => $object->ref,
+                    'total_ht' => $object->total_ht,
+                    'fk_user_author' => $object->user_author_id,
+                    'fk_propal' => $propal_id,
+                    'date_validation' => dol_print_date($object->date_validation, 'dayrfc'),
+                )
+            );
+            return $this->send($data);
+        }
+
+        // 4. PAYMENT_CUSTOMER_CREATE (Customer payment received)
         // $object is Paiement, $object->amounts = array(invoice_id => amount_paid)
         elseif ($action == 'PAYMENT_CUSTOMER_CREATE') {
             $invoice_ids = array();

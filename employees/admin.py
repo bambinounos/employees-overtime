@@ -298,7 +298,12 @@ class SalesRecordAdmin(admin.ModelAdmin):
     list_filter = ('status', 'dolibarr_instance', 'date', 'payment_date')
     search_fields = ('dolibarr_ref', 'employee__name')
     date_hierarchy = 'date'
-    readonly_fields = ('created_at',)
+    readonly_fields = ('created_at', 'dolibarr_id', 'dolibarr_instance', 'status',
+                       'amount_untaxed', 'date', 'payment_date', 'origin_proforma_id',
+                       'origin_order_id')
+
+    def has_add_permission(self, request):
+        return False  # Sales records only come from webhooks
 
 
 @admin.register(ProductCreationLog)

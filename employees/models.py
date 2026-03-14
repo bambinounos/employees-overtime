@@ -224,35 +224,31 @@ class Employee(models.Model):
             # --- Evaluate KPI based on internal_code or measurement_type ---
             
             if kpi.internal_code == 'SALES_EFFECTIVENESS':
-                # Logic: (Invoiced Proformas / Total Proformas) * 100
-                # Anti-fraud: Min volume threshold
-                
-                # Fetch SalesRecords for this month
+                # (Invoices with proforma / Total proformas) * 100
+                # Only counts proforma→invoice flow, not direct orders
                 sales_records = self.sales_records.filter(
-                    date__year=year, 
+                    date__year=year,
                     date__month=month
                 )
-                
                 total_proformas = sales_records.filter(status='proforma').count()
-                    
+
                 if total_proformas >= kpi.min_volume_threshold and total_proformas > 0:
-                    # Count how many of these proformas were invoiced
-                    # We look for invoices that reference a proforma created effectively by this employee
-                    # Simplified logic: We count "Invoiced" records that track back to a proforma? 
-                    # The FEASIBILITY_REPORT says: "Facturas con Proforma / Total Proformas".
-                    # Our SalesRecord has 'origin_proforma_id'.
-                    
-                    # Get IDs of proformas created this month
-                    # Note: This might be complex if proforma was created last month. 
-                    # Report usually implies "Closed in this month". 
-                    # Let's assume we measure "Conversion of Proformas created in this month" OR "Invoices generated this month"
-                    # "Efectividad de Ventas (Conversión)": Usually (Invoices / Proformas) in the period.
-                    
-                    invoices_count = sales_records.filter(status='invoiced', origin_proforma_id__isnull=False).count()
-                    
+                    invoices_count = sales_records.filter(
+                        status='invoiced',
+                        origin_proforma_id__isnull=False
+                    ).count()
                     actual_value = (Decimal(invoices_count) / Decimal(total_proformas)) * 100
                 else:
                     actual_value = 0
+
+            elif kpi.internal_code == 'PRODUCT_CREATION':
+                # Count unique products created this month, excluding duplicates
+                actual_value = ProductCreationLog.objects.filter(
+                    employee=self,
+                    created_at__year=year,
+                    created_at__month=month,
+                    is_suspect_duplicate=False,
+                ).count()
 
             elif kpi.measurement_type == 'percentage':
                 # e.g., "Productividad General"
@@ -430,9 +426,10 @@ class WorkLog(models.Model):
         return f"{self.employee.name} on {self.date}"
 
 class SalesRecord(models.Model):
-    """Tracks a sales event (Invoice or Credit Note) synced from Dolibarr."""
+    """Tracks a sales event synced from Dolibarr."""
     STATUS_CHOICES = [
         ('proforma', 'Proforma/Proposal'),
+        ('order', 'Pedido/Order'),
         ('invoiced', 'Facturado/Invoiced'),
         ('cancelled', 'Cancelado/Cancelled'),
         ('credit_note', 'Nota de Crédito/Credit Note'),
@@ -442,9 +439,10 @@ class SalesRecord(models.Model):
     dolibarr_instance = models.ForeignKey(DolibarrInstance, on_delete=models.CASCADE)
     dolibarr_id = models.IntegerField(help_text="RowID of the object in Dolibarr")
     dolibarr_ref = models.CharField(max_length=100, help_text="Reference (e.g., FA23-001)")
-    
-    origin_proforma_id = models.IntegerField(null=True, blank=True, help_text="RowID of the proforma (if this is an invoice)")
-    
+
+    origin_proforma_id = models.IntegerField(null=True, blank=True, help_text="RowID of the proforma")
+    origin_order_id = models.IntegerField(null=True, blank=True, help_text="RowID of the order")
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     amount_untaxed = models.DecimalField(max_digits=12, decimal_places=2, help_text="Base imponible (Total HT)")
 
