@@ -76,7 +76,7 @@ print load_fiche_titre($page_name, $linkback, 'title_setup');
 
 // Configuration tabs
 $head = payrollconnect_admin_prepare_head();
-print dol_get_fiche_head($head, 'retryqueue', $page_name, -1, 'payroll_connect@payroll_connect');
+print dol_get_fiche_head($head, 'retryqueue', $page_name, -1, 'payrollconnect@payrollconnect');
 
 // Stats summary
 $stats = PayrollConnectHelper::getRetryQueueStats($db);

@@ -24,9 +24,9 @@ class modPayrollConnect extends DolibarrModules
         $this->description = "Syncs Sales, Invoice, Credit Note and Product data to Django Payroll System via webhooks.";
         $this->descriptionlong = "Payroll Connect sends real-time webhook notifications to your Django-based payroll system when invoices are validated, proposals are confirmed, credit notes are issued, and products are created. Includes HMAC-SHA256 authentication and a retry queue for reliability.";
 
-        $this->version = '1.3.0';
+        $this->version = '1.4.0';
         $this->const_name = 'MAIN_MODULE_' . strtoupper($this->name);
-        $this->picto = 'payroll_connect@payroll_connect';
+        $this->picto = 'payrollconnect@payrollconnect';
 
         $this->editor_name = 'Bambinounos';
         $this->editor_url = 'https://github.com/bambinounos';
@@ -49,14 +49,14 @@ class modPayrollConnect extends DolibarrModules
         );
 
         // Admin setup page: links the gear icon in module list to admin/setup.php
-        $this->config_page_url = array("setup.php@payroll_connect");
+        $this->config_page_url = array("setup.php@payrollconnect");
 
         $this->dirs = array();
 
         $this->depends = array();
         $this->requiredby = array();
         $this->conflictwith = array();
-        $this->langfiles = array("payroll_connect@payroll_connect");
+        $this->langfiles = array("payrollconnect@payrollconnect");
         $this->phpmin = array(7, 4);
         $this->need_dolibarr_version = array(16, 0);
 
@@ -87,7 +87,7 @@ class modPayrollConnect extends DolibarrModules
             0 => array(
                 'label' => 'PayrollConnect - Process Retry Queue',
                 'jobtype' => 'method',
-                'class' => '/payroll_connect/lib/payroll_connect.lib.php',
+                'class' => '/payrollconnect/lib/payroll_connect.lib.php',
                 'objectname' => 'PayrollConnectHelper',
                 'method' => 'processRetryQueue',
                 'parameters' => '',

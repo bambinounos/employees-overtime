@@ -19,18 +19,18 @@ function payrollconnect_admin_prepare_head()
     $h = 0;
     $head = array();
 
-    $head[$h][0] = dol_buildpath("/payroll_connect/admin/setup.php", 1);
+    $head[$h][0] = dol_buildpath("/payrollconnect/admin/setup.php", 1);
     $head[$h][1] = $langs->trans("Settings");
     $head[$h][2] = 'settings';
     $h++;
 
-    $head[$h][0] = dol_buildpath("/payroll_connect/admin/retry_queue.php", 1);
+    $head[$h][0] = dol_buildpath("/payrollconnect/admin/retry_queue.php", 1);
     $head[$h][1] = $langs->trans("RetryQueue");
     $head[$h][2] = 'retryqueue';
     $h++;
 
-    complete_head_from_modules($conf, $langs, null, $head, $h, 'payroll_connect@payroll_connect');
-    complete_head_from_modules($conf, $langs, null, $head, $h, 'payroll_connect@payroll_connect', 'remove');
+    complete_head_from_modules($conf, $langs, null, $head, $h, 'payrollconnect@payrollconnect');
+    complete_head_from_modules($conf, $langs, null, $head, $h, 'payrollconnect@payrollconnect', 'remove');
 
     return $head;
 }

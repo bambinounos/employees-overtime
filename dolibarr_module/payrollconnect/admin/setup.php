@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-// Load Dolibarr environment (htdocs/custom/payroll_connect/admin/ -> htdocs/)
+// Load Dolibarr environment (htdocs/custom/payrollconnect/admin/ -> htdocs/)
 $res = 0;
 if (!$res && file_exists("../main.inc.php")) $res = @include "../main.inc.php";
 if (!$res && file_exists("../../main.inc.php")) $res = @include "../../main.inc.php";
@@ -203,7 +203,7 @@ print load_fiche_titre($page_name, $linkback, 'title_setup');
 
 // Configuration tabs
 $head = payrollconnect_admin_prepare_head();
-print dol_get_fiche_head($head, 'settings', $page_name, -1, 'payroll_connect@payroll_connect');
+print dol_get_fiche_head($head, 'settings', $page_name, -1, 'payrollconnect@payrollconnect');
 
 // Help box
 print '<div class="opacitymedium" style="margin-bottom: 12px;">';

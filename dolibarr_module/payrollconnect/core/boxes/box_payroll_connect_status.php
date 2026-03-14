@@ -19,7 +19,7 @@ require_once __DIR__ . '/../../lib/payroll_connect.lib.php';
 class box_payroll_connect_status extends ModeleBoxes
 {
     public $boxcode = "payrollconnectstatus";
-    public $boximg = "payroll_connect@payroll_connect";
+    public $boximg = "payrollconnect@payrollconnect";
     public $boxlabel = "PayrollConnectWidgetTitle";
     public $depends = array("payroll_connect");
 
@@ -44,7 +44,7 @@ class box_payroll_connect_status extends ModeleBoxes
     {
         global $langs;
 
-        $langs->load("payroll_connect@payroll_connect");
+        $langs->load("payrollconnect@payrollconnect");
 
         $this->info_box_head = array(
             array('text' => $langs->trans("PayrollConnectWidgetTitle"))
@@ -60,7 +60,7 @@ class box_payroll_connect_status extends ModeleBoxes
             );
             $this->info_box_contents[$line][] = array(
                 'td' => 'class="right"',
-                'text' => '<a href="' . dol_buildpath('/payroll_connect/admin/retry_queue.php', 1) . '">' . $langs->trans("RetryQueue") . '</a>',
+                'text' => '<a href="' . dol_buildpath('/payrollconnect/admin/retry_queue.php', 1) . '">' . $langs->trans("RetryQueue") . '</a>',
             );
             $line++;
         }
@@ -72,7 +72,7 @@ class box_payroll_connect_status extends ModeleBoxes
             );
             $this->info_box_contents[$line][] = array(
                 'td' => 'class="right"',
-                'text' => '<a href="' . dol_buildpath('/payroll_connect/admin/retry_queue.php', 1) . '">' . $langs->trans("RetryQueue") . '</a>',
+                'text' => '<a href="' . dol_buildpath('/payrollconnect/admin/retry_queue.php', 1) . '">' . $langs->trans("RetryQueue") . '</a>',
             );
             $line++;
         }

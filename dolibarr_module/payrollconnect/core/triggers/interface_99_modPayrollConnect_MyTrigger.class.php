@@ -18,8 +18,8 @@ class InterfaceMyTrigger extends DolibarrTriggers
         $this->name = 'PayrollConnect';
         $this->family = "payroll_connect";
         $this->description = "Triggers for Payroll Connect integration: syncs invoices, proposals and product creations to Django payroll system.";
-        $this->version = '1.3.0';
-        $this->picto = 'payroll_connect@payroll_connect';
+        $this->version = '1.4.0';
+        $this->picto = 'payrollconnect@payrollconnect';
     }
 
     /**
