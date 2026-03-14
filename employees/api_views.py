@@ -464,10 +464,17 @@ class DolibarrWebhookView(APIView):
 
         if int(bill_type) == 2:
             # Credit note: attribute to the employee who made the ORIGINAL invoice
-            # Try to find the original invoice via origin_proforma_id (fk_propal on credit note
-            # points to the source invoice in Dolibarr)
+            # fk_facture_source points to the source invoice in Dolibarr
+            fk_facture_source = obj.get('fk_facture_source')
             original_invoice = None
-            if origin_proforma_id:
+            if fk_facture_source:
+                original_invoice = SalesRecord.objects.filter(
+                    dolibarr_instance=instance,
+                    dolibarr_id=fk_facture_source,
+                    status='invoiced',
+                ).first()
+            # Fallback: try via origin_proforma_id
+            if not original_invoice and origin_proforma_id:
                 original_invoice = SalesRecord.objects.filter(
                     dolibarr_instance=instance,
                     dolibarr_id=origin_proforma_id,

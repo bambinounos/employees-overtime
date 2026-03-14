@@ -38,15 +38,48 @@ class InterfaceMyTrigger extends DolibarrTriggers
         // Dolibarr: type=0 = Standard Invoice, type=2 = Credit Note
         // Per FEASIBILITY_REPORT sections 2.1 events 2 & 3
         if ($action == 'BILL_VALIDATE') {
+            // Resolve the original proforma ID by traversing the document chain:
+            // Invoice → Order → Proforma (via llx_element_element)
+            $propal_id = null;
+            $order_id = null;
+            $object->fetchObjectLinked();
+
+            // Direct link: Invoice → Proforma
+            if (!empty($object->linkedObjectsIds['propal'])) {
+                $propal_id = reset($object->linkedObjectsIds['propal']);
+            }
+            // Indirect: Invoice → Order → Proforma
+            if (!empty($object->linkedObjectsIds['commande'])) {
+                $order_id = reset($object->linkedObjectsIds['commande']);
+                if (empty($propal_id)) {
+                    require_once DOL_DOCUMENT_ROOT . '/commande/class/commande.class.php';
+                    $order = new Commande($this->db);
+                    if ($order->fetch($order_id) > 0) {
+                        $order->fetchObjectLinked();
+                        if (!empty($order->linkedObjectsIds['propal'])) {
+                            $propal_id = reset($order->linkedObjectsIds['propal']);
+                        }
+                    }
+                }
+            }
+
+            // For credit notes: fk_facture_source points to the original invoice
+            $source_invoice_id = null;
+            if ((int)$object->type == 2 && !empty($object->fk_facture_source)) {
+                $source_invoice_id = $object->fk_facture_source;
+            }
+
             $data = array(
                 'trigger_code' => 'BILL_VALIDATE',
                 'object' => array(
                     'id' => $object->id,
                     'ref' => $object->ref,
-                    'type' => $object->type,  // 0=invoice, 2=credit note
+                    'type' => $object->type,
                     'total_ht' => $object->total_ht,
                     'fk_user_author' => $object->user_author_id,
-                    'fk_propal' => isset($object->fk_source_propal) ? $object->fk_source_propal : null,
+                    'fk_propal' => $propal_id,
+                    'fk_commande' => $order_id,
+                    'fk_facture_source' => $source_invoice_id,
                     'date_validation' => dol_print_date($object->date_validation, 'dayrfc'),
                 )
             );
