@@ -7,15 +7,15 @@
  * (at your option) any later version.
  */
 
-require_once DOL_DOCUMENT_ROOT . '/core/triggers/interface.class.php';
+require_once DOL_DOCUMENT_ROOT . '/core/triggers/dolibarrtriggers.class.php';
 require_once __DIR__ . '/../../lib/payroll_connect.lib.php';
 
-class interface_99_modPayrollConnect_MyTrigger extends InterfaceTriggers
+class InterfaceMyTrigger extends DolibarrTriggers
 {
     public function __construct($db)
     {
-        $this->db = $db;
-        $this->name = preg_replace('/^interface_99_|_[^_]+$/i', '', get_class($this));
+        parent::__construct($db);
+        $this->name = 'PayrollConnect';
         $this->family = "payroll_connect";
         $this->description = "Triggers for Payroll Connect integration: syncs invoices, proposals and product creations to Django payroll system.";
         $this->version = '1.1';
@@ -32,10 +32,8 @@ class interface_99_modPayrollConnect_MyTrigger extends InterfaceTriggers
      * @param Conf      $conf       Configuration object
      * @return int                  0=OK, <0=KO
      */
-    public function run_trigger($action, $object, User $user, Translate $langs, Conf $conf)
+    public function runTrigger($action, $object, User $user, Translate $langs, Conf $conf)
     {
-        global $db;
-
         // 1. BILL_VALIDATE (Invoice or Credit Note validated)
         // Dolibarr: type=0 = Standard Invoice, type=2 = Credit Note
         // Per FEASIBILITY_REPORT sections 2.1 events 2 & 3

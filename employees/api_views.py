@@ -373,7 +373,17 @@ class DolibarrWebhookView(APIView):
             payload = request.data
             event_type = payload.get('trigger_code')
 
-            if event_type == 'BILL_VALIDATE':
+            if event_type == 'TEST_CONNECTION':
+                log.status = 'processed'
+                log.save()
+                logger.info("Test connection successful from instance '%s'", instance.name)
+                return Response({
+                    'status': 'ok',
+                    'message': 'Connection verified',
+                    'instance': instance.name,
+                    'timestamp': timezone.now().isoformat(),
+                })
+            elif event_type == 'BILL_VALIDATE':
                 self.process_bill_validate(payload, instance)
             elif event_type == 'PROPAL_VALIDATE':
                 self.process_proforma(payload, instance)

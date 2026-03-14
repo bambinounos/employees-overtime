@@ -31,6 +31,23 @@ class modPayrollConnect extends DolibarrModules
         $this->editor_name = 'Bambinounos';
         $this->editor_url = 'https://github.com/bambinounos';
 
+        // Declare module features (triggers must be 1 for Dolibarr to scan core/triggers/)
+        $this->module_parts = array(
+            'triggers' => 1,
+            'login' => 0,
+            'substitutions' => 0,
+            'menus' => 0,
+            'tpl' => 0,
+            'barcode' => 0,
+            'models' => 0,
+            'printing' => 0,
+            'theme' => 0,
+            'css' => array(),
+            'js' => array(),
+            'hooks' => array(),
+            'moduleforexternal' => 0,
+        );
+
         // Admin setup page: links the gear icon in module list to admin/setup.php
         $this->config_page_url = array("setup.php@payroll_connect");
 
