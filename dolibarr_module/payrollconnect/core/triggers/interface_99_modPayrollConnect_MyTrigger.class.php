@@ -18,7 +18,7 @@ class InterfaceMyTrigger extends DolibarrTriggers
         $this->name = 'PayrollConnect';
         $this->family = "payroll_connect";
         $this->description = "Triggers for Payroll Connect integration: syncs invoices, proposals and product creations to Django payroll system.";
-        $this->version = '1.4.0';
+        $this->version = '1.5.0';
         $this->picto = 'payrollconnect@payrollconnect';
     }
 
@@ -68,7 +68,30 @@ class InterfaceMyTrigger extends DolibarrTriggers
             return $this->send($data);
         }
 
-        // 3. PRODUCT_CREATE (New Product created)
+        // 3. PAYMENT_CUSTOMER_CREATE (Customer payment received)
+        // $object is Paiement, $object->amounts = array(invoice_id => amount_paid)
+        elseif ($action == 'PAYMENT_CUSTOMER_CREATE') {
+            $invoice_ids = array();
+            if (!empty($object->amounts) && is_array($object->amounts)) {
+                $invoice_ids = array_map('intval', array_keys($object->amounts));
+            }
+
+            $data = array(
+                'trigger_code' => 'PAYMENT_CUSTOMER_CREATE',
+                'object' => array(
+                    'id' => $object->id,
+                    'ref' => isset($object->ref) ? $object->ref : '',
+                    'invoice_ids' => $invoice_ids,
+                    'total_amount' => isset($object->amount) ? $object->amount : 0,
+                    'date_payment' => dol_print_date(
+                        isset($object->datepaye) ? $object->datepaye : dol_now(), 'dayrfc'
+                    ),
+                )
+            );
+            return $this->send($data);
+        }
+
+        // 4. PRODUCT_CREATE (New Product created)
         elseif ($action == 'PRODUCT_CREATE') {
             $data = array(
                 'trigger_code' => 'PRODUCT_CREATE',

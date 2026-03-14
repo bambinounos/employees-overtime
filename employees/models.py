@@ -50,6 +50,7 @@ class Employee(models.Model):
     hire_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
     profile = models.ForeignKey(JobProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', help_text="Job Profile determining active KPIs for this employee.")
+    commission_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Porcentaje de comision sobre ventas netas facturadas (ej: 5.00 = 5%)")
 
 
     def __str__(self):
@@ -120,6 +121,86 @@ class Employee(models.Model):
         ipac_score = numerator / avg_execution_hours
 
         return ipac_score.quantize(Decimal('0.01'))
+
+    def calculate_commissions(self, year, month):
+        """
+        Calculates sales commissions for a given month.
+
+        Rules:
+        - Confirmed: invoices paid this month (payment_date in target month)
+        - Provisional: invoices not yet paid (informational, NOT added to salary)
+        - Negative: credit notes issued this month (deducted from salary)
+          Credit notes are attributed to the employee who made the original invoice,
+          not the user who issued the credit note.
+
+        Commission = confirmed_net * commission_percentage / 100
+        """
+        zero = Decimal('0.00')
+        pct = self.commission_percentage
+
+        if pct <= 0:
+            return {
+                'commission_amount': zero,
+                'confirmed_invoiced': zero,
+                'confirmed_count': 0,
+                'provisional_invoiced': zero,
+                'provisional_count': 0,
+                'credit_notes_amount': zero,
+                'credit_note_count': 0,
+                'net_confirmed': zero,
+                'commission_percentage': zero,
+            }
+
+        my_sales = self.sales_records
+
+        # Confirmed: invoices paid this month
+        confirmed = my_sales.filter(
+            status='invoiced',
+            payment_date__year=year,
+            payment_date__month=month,
+        )
+        confirmed_invoiced = confirmed.aggregate(
+            total=Sum('amount_untaxed')
+        )['total'] or zero
+
+        # Provisional: invoices not yet paid (all months, still pending)
+        provisional = my_sales.filter(
+            status='invoiced',
+            payment_date__isnull=True,
+        )
+        provisional_invoiced = provisional.aggregate(
+            total=Sum('amount_untaxed')
+        )['total'] or zero
+
+        # Negative: credit notes in this month (already stored as negative)
+        credit_notes = my_sales.filter(
+            status='credit_note',
+            date__year=year,
+            date__month=month,
+        )
+        credit_notes_amount = credit_notes.aggregate(
+            total=Sum('amount_untaxed')
+        )['total'] or zero  # negative value
+
+        # Net confirmed = paid invoices + credit notes (credit notes are negative)
+        net_confirmed = confirmed_invoiced + credit_notes_amount
+
+        commission_amount = max(
+            zero,
+            (net_confirmed * pct / Decimal('100')).quantize(Decimal('0.01'))
+        )
+
+        return {
+            'commission_amount': commission_amount,
+            'confirmed_invoiced': confirmed_invoiced,
+            'confirmed_count': confirmed.count(),
+            'provisional_invoiced': provisional_invoiced,
+            'provisional_count': provisional.count(),
+            'credit_notes_amount': abs(credit_notes_amount),
+            'credit_note_count': credit_notes.count(),
+            'net_confirmed': net_confirmed,
+            'commission_percentage': pct,
+        }
 
     def calculate_performance_bonus(self, year, month):
         """
@@ -294,15 +375,20 @@ class Employee(models.Model):
         # 2. Calculate performance bonus
         performance_bonus = self.calculate_performance_bonus(year, month)
 
-        # 3. Calculate final total salary
-        total_salary = work_pay + overtime_pay + performance_bonus
+        # 3. Calculate sales commissions
+        commissions = self.calculate_commissions(year, month)
+        commission_amount = commissions['commission_amount']
 
-        # 4. Return a detailed dictionary
-        return {
+        # 4. Calculate final total salary
+        total_salary = work_pay + overtime_pay + performance_bonus + commission_amount
+
+        # 5. Return a detailed dictionary
+        result = {
             'base_salary': base_salary,
             'work_pay': work_pay,
             'overtime_pay': overtime_pay,
             'performance_bonus': performance_bonus,
+            'commission_amount': commission_amount,
             'total_salary': total_salary,
             'total_hours_worked': total_hours_worked,
             'total_overtime_hours': total_overtime_hours,
@@ -313,6 +399,8 @@ class Employee(models.Model):
             'monthly_hours': monthly_hours,
             'work_days_in_month': work_days_in_month,
         }
+        result.update(commissions)
+        return result
 
 class Salary(models.Model):
     """Represents a salary record for an employee with date-based history."""
@@ -359,8 +447,9 @@ class SalesRecord(models.Model):
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     amount_untaxed = models.DecimalField(max_digits=12, decimal_places=2, help_text="Base imponible (Total HT)")
-    
+
     date = models.DateField(help_text="Date of validation or invoicing")
+    payment_date = models.DateField(null=True, blank=True, help_text="Date when invoice was paid (set by PAYMENT_CUSTOMER_CREATE webhook)")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

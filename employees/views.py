@@ -46,6 +46,8 @@ def employee_salary(request, employee_id):
     total_potential = Decimal('0.00')
     percentage_potential = 0
 
+    commission_amount = Decimal('0.00')
+
     if salary:
         # 1. Potential Bonus (Sum of all active bonus rules)
         potential_bonus = BonusRule.objects.aggregate(total=Sum('bonus_amount'))['total'] or Decimal('0.00')
@@ -59,10 +61,13 @@ def employee_salary(request, employee_id):
         work_pay = salary.get('work_pay', Decimal('0.00'))
         lost_lateness = max(Decimal('0.00'), base_salary - work_pay)
 
-        # 4. Total Potential (Base + Potential Bonus)
-        total_potential = base_salary + potential_bonus
+        # 4. Commission
+        commission_amount = salary.get('commission_amount', Decimal('0.00'))
 
-        # 5. Percentage Reached
+        # 5. Total Potential (Base + Potential Bonus + Commission)
+        total_potential = base_salary + potential_bonus + commission_amount
+
+        # 6. Percentage Reached
         total_earned = salary.get('total_salary', Decimal('0.00'))
         if total_potential > 0:
             percentage_potential = (total_earned / total_potential) * 100
@@ -79,6 +84,7 @@ def employee_salary(request, employee_id):
         'lost_lateness': lost_lateness,
         'total_potential': total_potential,
         'percentage_potential': percentage_potential,
+        'commission_amount': commission_amount,
     }
     return render(request, 'employees/employee_salary.html', context)
 

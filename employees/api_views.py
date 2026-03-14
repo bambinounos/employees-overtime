@@ -387,6 +387,8 @@ class DolibarrWebhookView(APIView):
                 self.process_bill_validate(payload, instance)
             elif event_type == 'PROPAL_VALIDATE':
                 self.process_proforma(payload, instance)
+            elif event_type == 'PAYMENT_CUSTOMER_CREATE':
+                self.process_payment(payload, instance)
             elif event_type == 'PRODUCT_CREATE':
                 self.process_product_creation(payload, instance)
             else:
@@ -447,42 +449,78 @@ class DolibarrWebhookView(APIView):
     def process_bill_validate(self, payload, instance):
         """
         Process BILL_VALIDATE events.
-        Distinguishes between regular invoices (type=0) and credit notes (type=2)
-        per FEASIBILITY_REPORT section 2.1 events 2 & 3.
+        Distinguishes between regular invoices (type=0) and credit notes (type=2).
+
+        Rules:
+        - Invoices: commission attributed only if same employee created the proforma.
+        - Credit notes: attributed to the employee who made the original invoice,
+          NOT the user who issued the credit note.
         """
         obj = payload.get('object', {})
         dolibarr_user_id = obj.get('fk_user_author')
-
-        employee = self._resolve_employee(instance, dolibarr_user_id)
-        if not employee:
-            return
-
         event_date = self._parse_event_date(obj)
         bill_type = obj.get('type', 0)
+        origin_proforma_id = obj.get('fk_propal')
 
-        # type=2 in Dolibarr = Credit Note (Nota de Credito)
         if int(bill_type) == 2:
-            # Credit notes: negative amount to deduct from commissions
+            # Credit note: attribute to the employee who made the ORIGINAL invoice
+            # Try to find the original invoice via origin_proforma_id (fk_propal on credit note
+            # points to the source invoice in Dolibarr)
+            original_invoice = None
+            if origin_proforma_id:
+                original_invoice = SalesRecord.objects.filter(
+                    dolibarr_instance=instance,
+                    dolibarr_id=origin_proforma_id,
+                    status='invoiced',
+                ).first()
+
+            if original_invoice:
+                target_employee = original_invoice.employee
+            else:
+                # Fallback: attribute to the user who issued the credit note
+                target_employee = self._resolve_employee(instance, dolibarr_user_id)
+                if not target_employee:
+                    return
+
             amount = obj.get('total_ht', 0)
             SalesRecord.objects.create(
-                employee=employee,
+                employee=target_employee,
                 dolibarr_instance=instance,
                 dolibarr_id=obj.get('id'),
                 dolibarr_ref=obj.get('ref'),
-                origin_proforma_id=obj.get('fk_propal'),
+                origin_proforma_id=origin_proforma_id,
                 status='credit_note',
-                amount_untaxed=-abs(amount),  # Always negative for credit notes
+                amount_untaxed=-abs(amount),
                 date=event_date,
             )
-            logger.info("Credit note %s processed for employee %s", obj.get('ref'), employee.name)
+            logger.info("Credit note %s attributed to employee %s", obj.get('ref'), target_employee.name)
         else:
             # Regular invoice
+            employee = self._resolve_employee(instance, dolibarr_user_id)
+            if not employee:
+                return
+
+            # Validate same-user rule: if invoice has a proforma, it must be by the same employee
+            if origin_proforma_id:
+                proforma_record = SalesRecord.objects.filter(
+                    dolibarr_instance=instance,
+                    dolibarr_id=origin_proforma_id,
+                    status='proforma',
+                ).first()
+                if proforma_record and proforma_record.employee_id != employee.pk:
+                    logger.warning(
+                        "Invoice %s by employee %s skipped: proforma %s belongs to employee %s",
+                        obj.get('ref'), employee.name,
+                        proforma_record.dolibarr_ref, proforma_record.employee.name
+                    )
+                    return
+
             SalesRecord.objects.create(
                 employee=employee,
                 dolibarr_instance=instance,
                 dolibarr_id=obj.get('id'),
                 dolibarr_ref=obj.get('ref'),
-                origin_proforma_id=obj.get('fk_propal'),
+                origin_proforma_id=origin_proforma_id,
                 status='invoiced',
                 amount_untaxed=obj.get('total_ht', 0),
                 date=event_date,
@@ -549,3 +587,36 @@ class DolibarrWebhookView(APIView):
                 "in instance '%s'. Log ID: %s",
                 product_ref, instance.name, log_entry.pk
             )
+
+    def process_payment(self, payload, instance):
+        """
+        Process PAYMENT_CUSTOMER_CREATE events.
+        Updates payment_date on matching SalesRecords (invoices).
+        The payload contains invoice_ids: list of Dolibarr invoice rowids that were paid.
+        """
+        obj = payload.get('object', {})
+        invoice_ids = obj.get('invoice_ids', [])
+        payment_date_str = obj.get('date_payment')
+
+        if payment_date_str:
+            try:
+                payment_date = datetime.strptime(str(payment_date_str)[:10], '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                payment_date = timezone.now().date()
+        else:
+            payment_date = timezone.now().date()
+
+        updated = 0
+        for inv_id in invoice_ids:
+            count = SalesRecord.objects.filter(
+                dolibarr_instance=instance,
+                dolibarr_id=inv_id,
+                status='invoiced',
+                payment_date__isnull=True,
+            ).update(payment_date=payment_date)
+            updated += count
+
+        logger.info(
+            "Payment processed: %d invoice(s) marked as paid in instance '%s'",
+            updated, instance.name
+        )

@@ -109,6 +109,37 @@
                         </div>
                         <span class="text-success font-weight-bold">+ ${{ salary.performance_bonus|floatformat:2 }}</span>
                     </li>
+                    {% if salary.commission_percentage > 0 %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{% trans "Sales Commission" %}</strong>
+                            <br>
+                            <small class="text-muted">
+                                {{ salary.confirmed_count }} {% trans "paid invoice(s)" %}: ${{ salary.confirmed_invoiced|floatformat:2 }}
+                                {% if salary.credit_note_count > 0 %}
+                                    &minus; {{ salary.credit_note_count }} {% trans "credit note(s)" %}: ${{ salary.credit_notes_amount|floatformat:2 }}
+                                {% endif %}
+                                | {% trans "Net" %}: ${{ salary.net_confirmed|floatformat:2 }} &times; {{ salary.commission_percentage|floatformat:2 }}%
+                            </small>
+                        </div>
+                        <span class="text-success font-weight-bold">+ ${{ salary.commission_amount|floatformat:2 }}</span>
+                    </li>
+                    {% if salary.provisional_count > 0 %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                        <div>
+                            <strong class="text-muted">{% trans "Provisional Commission" %}</strong>
+                            <br>
+                            <small class="text-muted">
+                                {{ salary.provisional_count }} {% trans "unpaid invoice(s)" %}: ${{ salary.provisional_invoiced|floatformat:2 }}
+                                &mdash; {% trans "pending payment" %}
+                            </small>
+                        </div>
+                        <span class="text-muted font-weight-bold">
+                            ~ ${{ salary.provisional_invoiced|floatformat:2 }}
+                        </span>
+                    </li>
+                    {% endif %}
+                    {% endif %}
                 </ul>
             </div>
         </div>

@@ -33,7 +33,7 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'hire_date', 'end_date', 'profile', 'is_active_status')
+    list_display = ('name', 'email', 'hire_date', 'end_date', 'profile', 'commission_percentage', 'is_active_status')
     search_fields = ('name', 'email')
     list_filter = ('end_date', 'profile')
 
@@ -294,8 +294,8 @@ class DolibarrUserIdentityAdmin(admin.ModelAdmin):
 
 @admin.register(SalesRecord)
 class SalesRecordAdmin(admin.ModelAdmin):
-    list_display = ('dolibarr_ref', 'employee', 'status', 'amount_untaxed', 'date', 'dolibarr_instance')
-    list_filter = ('status', 'dolibarr_instance', 'date')
+    list_display = ('dolibarr_ref', 'employee', 'status', 'amount_untaxed', 'date', 'payment_date', 'dolibarr_instance')
+    list_filter = ('status', 'dolibarr_instance', 'date', 'payment_date')
     search_fields = ('dolibarr_ref', 'employee__name')
     date_hierarchy = 'date'
     readonly_fields = ('created_at',)
