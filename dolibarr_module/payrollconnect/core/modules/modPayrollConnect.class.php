@@ -24,7 +24,7 @@ class modPayrollConnect extends DolibarrModules
         $this->description = "Syncs Sales, Invoice, Credit Note and Product data to Django Payroll System via webhooks.";
         $this->descriptionlong = "Payroll Connect sends real-time webhook notifications to your Django-based payroll system when invoices are validated, proposals are confirmed, credit notes are issued, and products are created. Includes HMAC-SHA256 authentication and a retry queue for reliability.";
 
-        $this->version = '1.6.0';
+        $this->version = '1.6.1';
         $this->const_name = 'MAIN_MODULE_' . strtoupper($this->name);
         $this->picto = 'payrollconnect@payrollconnect';
 
@@ -60,11 +60,10 @@ class modPayrollConnect extends DolibarrModules
         $this->phpmin = array(7, 4);
         $this->need_dolibarr_version = array(16, 0);
 
-        // Constants
-        $this->const = array(
-            0 => array('PAYROLL_CONNECT_WEBHOOK_URL', 'chaine', '', 'URL of the Django webhook endpoint', 0, 'current', 1),
-            1 => array('PAYROLL_CONNECT_API_SECRET', 'chaine', '', 'HMAC-SHA256 secret for webhook authentication', 0, 'current', 1),
-        );
+        // Constants: managed by admin/setup.php via dolibarr_set_const().
+        // NOT declared here to prevent delete_const/insert_const from wiping
+        // user-configured values on module deactivate/reactivate cycles.
+        $this->const = array();
 
         $this->tabs = array();
 
