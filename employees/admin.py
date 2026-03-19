@@ -315,10 +315,24 @@ class ProductCreationLogAdmin(admin.ModelAdmin):
 
 @admin.register(WebhookLog)
 class WebhookLogAdmin(admin.ModelAdmin):
-    list_display = ('id', 'received_at', 'status', 'sender_ip', 'short_error')
+    list_display = ('id', 'received_at', 'instance_name', 'trigger_code', 'status', 'sender_ip', 'short_error')
     list_filter = ('status', 'received_at')
     readonly_fields = ('received_at', 'sender_ip', 'payload', 'headers', 'status', 'error_message')
     date_hierarchy = 'received_at'
+
+    @admin.display(description='Instancia')
+    def instance_name(self, obj):
+        prof_id = (obj.headers or {}).get('X-Dolibarr-Professional-Id', '')
+        if prof_id:
+            instance = DolibarrInstance.objects.filter(professional_id=prof_id).first()
+            if instance:
+                return instance.name
+            return prof_id
+        return '-'
+
+    @admin.display(description='Evento')
+    def trigger_code(self, obj):
+        return (obj.payload or {}).get('trigger_code', '-')
 
     @admin.display(description='Error')
     def short_error(self, obj):
