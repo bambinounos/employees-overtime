@@ -26,7 +26,7 @@ class modPayrollConnect extends DolibarrModules
 
         $this->version = '1.6.1';
         $this->const_name = 'MAIN_MODULE_' . strtoupper($this->name);
-        $this->picto = 'payrollconnect@payrollconnect';
+        $this->picto = 'fontawesome_chart-line_fas_#2c3e50';
 
         $this->editor_name = 'Bambinounos';
         $this->editor_url = 'https://github.com/bambinounos';

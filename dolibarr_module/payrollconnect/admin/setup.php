@@ -203,7 +203,7 @@ print load_fiche_titre($page_name, $linkback, 'title_setup');
 
 // Configuration tabs
 $head = payrollconnect_admin_prepare_head();
-print dol_get_fiche_head($head, 'settings', $page_name, -1, 'payrollconnect@payrollconnect');
+print dol_get_fiche_head($head, 'settings', $page_name, -1, 'fontawesome_chart-line_fas_#2c3e50');
 
 // Help box
 print '<div class="opacitymedium" style="margin-bottom: 12px;">';

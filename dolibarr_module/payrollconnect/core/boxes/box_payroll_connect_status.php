@@ -19,7 +19,7 @@ require_once __DIR__ . '/../../lib/payroll_connect.lib.php';
 class box_payroll_connect_status extends ModeleBoxes
 {
     public $boxcode = "payrollconnectstatus";
-    public $boximg = "payrollconnect@payrollconnect";
+    public $boximg = "fontawesome_chart-line_fas_#2c3e50";
     public $boxlabel = "PayrollConnectWidgetTitle";
     public $depends = array("payroll_connect");
 
@@ -44,7 +44,7 @@ class box_payroll_connect_status extends ModeleBoxes
     {
         global $langs;
 
-        $langs->load("payrollconnect@payrollconnect");
+        $langs->load("fontawesome_chart-line_fas_#2c3e50");
 
         $this->info_box_head = array(
             array('text' => $langs->trans("PayrollConnectWidgetTitle"))
