@@ -614,7 +614,11 @@ def api_guardar_atencion(request):
         encontradas = set()
         if respuesta_json and isinstance(respuesta_json, list):
             encontradas = {str(x) for x in respuesta_json}
-        if correctas_set:
+        if not correctas_set:
+            # Trap question: no real differences. Correct if candidate selected nothing.
+            es_correcta = len(encontradas) == 0
+            puntaje_parcial = 1.0 if es_correcta else 0.0
+        else:
             tp = len(correctas_set & encontradas)
             precision = tp / len(encontradas) if encontradas else 0
             recall = tp / len(correctas_set)
@@ -628,7 +632,11 @@ def api_guardar_atencion(request):
         encontradas = set()
         if respuesta_json and isinstance(respuesta_json, list):
             encontradas = {str(x) for x in respuesta_json}
-        if correctas_set:
+        if not correctas_set:
+            # Trap question: no real errors. Correct if candidate selected nothing.
+            es_correcta = len(encontradas) == 0
+            puntaje_parcial = 1.0 if es_correcta else 0.0
+        else:
             tp = len(correctas_set & encontradas)
             puntaje_parcial = tp / len(correctas_set)
             es_correcta = encontradas == correctas_set
@@ -868,6 +876,10 @@ def aplicar_calificacion_ia(request, pk):
     # Recalculate verdict
     from .scoring import determinar_veredicto
     from .models import PerfilObjetivo
+    
+    # Reload resultado to ensure all state is consistent before calculating verdict
+    resultado.refresh_from_db()
+
     perfil = evaluacion.perfil_objetivo or PerfilObjetivo.objects.filter(activo=True).first()
     if perfil:
         resultado.veredicto_automatico = determinar_veredicto(resultado, perfil)

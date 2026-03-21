@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.contrib import messages
 import calendar
-from django.db.models import Max, Sum
+from django.db.models import Max, Sum, Q
 
 def index(request):
     """Renders the home page."""
@@ -20,7 +20,7 @@ def employee_list(request):
     if show_inactive:
         employees = Employee.objects.all().order_by('name')
     else:
-        employees = Employee.objects.filter(end_date__isnull=True).order_by('name')
+        employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today())).order_by('name')
 
     context = {
         'employees': employees,
@@ -118,7 +118,7 @@ def task_board(request):
         return board
 
     if user.is_superuser:
-        all_employees = Employee.objects.filter(end_date__isnull=True)
+        all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
         employee_id_str = request.GET.get('employee_id')
 
         if employee_id_str:
@@ -156,7 +156,6 @@ def task_board(request):
 
             hidden_count = 0
             if tl.name == 'Hecho' and cutoff is not None:
-                from django.db.models import Q
                 total = tasks.count()
                 tasks = tasks.filter(Q(completed_at__gte=cutoff) | Q(completed_at__isnull=True))
                 hidden_count = total - tasks.count()
@@ -183,7 +182,7 @@ def performance_report(request):
     """
     Renders the performance report page or handles CSV export.
     """
-    all_employees = Employee.objects.filter(end_date__isnull=True)
+    all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
     selected_employee_id = request.GET.get('employee_id')
 
     records = None
@@ -288,20 +287,20 @@ def strategic_dashboard(request):
     ranking_records = None
     if ipac_kpi:
         ranking_records = EmployeePerformanceRecord.objects.filter(
+            Q(employee__end_date__isnull=True) | Q(employee__end_date__gt=date.today()),
             kpi=ipac_kpi,
             date__year=year,
             date__month=month,
-            employee__end_date__isnull=True,
         ).select_related('employee').order_by('-actual_value')[:5] # Top 5 employees
 
     # --- 3. Warning KPIs ---
     warning_kpis = KPI.objects.filter(is_warning_kpi=True)
     warning_records = EmployeePerformanceRecord.objects.filter(
+        Q(employee__end_date__isnull=True) | Q(employee__end_date__gt=date.today()),
         kpi__in=warning_kpis,
         target_met=False,
         date__year=year,
         date__month=month,
-        employee__end_date__isnull=True,
     ).select_related('employee', 'kpi').order_by('employee__name')
 
     # --- 4. Trend Data (for chart) ---
@@ -361,9 +360,9 @@ def employee_ranking(request):
             if latest_date:
                 period = latest_date.strftime('%B %Y')
                 records_query = EmployeePerformanceRecord.objects.filter(
+                    Q(employee__end_date__isnull=True) | Q(employee__end_date__gt=date.today()),
                     kpi=selected_kpi,
                     date=latest_date,
-                    employee__end_date__isnull=True,
                 ).select_related('employee').order_by('-actual_value')
 
                 # Adjust sorting for KPIs where lower is better

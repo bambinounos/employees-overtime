@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 import hashlib
 import hmac
@@ -68,7 +69,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                     return Task.objects.none() # Return empty if employee not found
             else:
                 # Superuser is viewing their own board or a general view
-                 employees_to_check = Employee.objects.filter(end_date__isnull=True)
+                 employees_to_check = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
         elif hasattr(user, 'employee'):
             # Regular employee viewing their own board
             employees_to_check = [user.employee]
@@ -111,8 +112,8 @@ class TaskViewSet(viewsets.ModelViewSet):
             # task is created by the loop, we set the start date to the day before.
             start_date = timezone.localtime(parent_task.due_date).date() - timedelta(days=1)
 
-        # Determine the time from the parent task's due date
-        due_time = parent_task.due_date.time()
+        # Determine the time from the parent task's due date (localized to avoid UTC drift)
+        due_time = timezone.localtime(parent_task.due_date).time()
 
         # Loop to generate missing tasks until today.
         next_date = start_date
@@ -130,7 +131,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 break  # Should not happen
 
             # Stop if the next date is in the future or after the end date.
-            if next_date > timezone.now().date() or next_date > parent_task.recurrence_end_date:
+            if next_date > timezone.now().date() or (parent_task.recurrence_end_date and next_date > parent_task.recurrence_end_date):
                 break
 
             # Combine date and time to get the final due datetime.
@@ -304,7 +305,7 @@ def kpi_history_api(request, employee_id):
 
     # Calculate the date 12 months ago from the first day of the current month
     today = timezone.now().date()
-    twelve_months_ago = (today.replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=365)
+    twelve_months_ago = today.replace(day=1) - relativedelta(months=12)
 
 
     records = EmployeePerformanceRecord.objects.filter(
@@ -709,14 +710,18 @@ class DolibarrWebhookView(APIView):
             logger.warning("Product creation rejected: empty product_ref")
             return
 
-        now = timezone.now()
+        # Use Dolibarr event date, not Django receipt time (avoids month-boundary errors)
+        event_date = self._parse_event_date(obj)
+        event_datetime = timezone.make_aware(
+            datetime.combine(event_date, timezone.now().time())
+        )
 
         # Anti-fraud: check for same SKU created this month in this instance
         duplicate_sku = ProductCreationLog.objects.filter(
             dolibarr_instance=instance,
             product_ref=product_ref,
-            created_at__year=now.year,
-            created_at__month=now.month,
+            created_at__year=event_date.year,
+            created_at__month=event_date.month,
         ).exists()
 
         log_entry = ProductCreationLog.objects.create(
@@ -724,7 +729,7 @@ class DolibarrWebhookView(APIView):
             dolibarr_instance=instance,
             dolibarr_product_id=dolibarr_product_id,
             product_ref=product_ref,
-            created_at=now,
+            created_at=event_datetime,
             is_suspect_duplicate=duplicate_sku,
         )
 

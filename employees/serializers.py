@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Q
 from .models import Employee, WorkLog, Task, TaskList, TaskBoard, Checklist, ChecklistItem
 from datetime import date, timedelta, datetime
 
@@ -17,7 +18,7 @@ class ChecklistSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     assigned_to = serializers.PrimaryKeyRelatedField(
-        queryset=Employee.objects.filter(end_date__isnull=True)
+        queryset=Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
     )
     checklists = ChecklistSerializer(many=True, read_only=True)
     due_date_status = serializers.SerializerMethodField()

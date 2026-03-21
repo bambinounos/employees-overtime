@@ -63,8 +63,11 @@ class Employee(models.Model):
 
     @property
     def is_active(self):
-        """Returns True if the employee is currently active."""
-        return self.end_date is None
+        """Returns True if the employee is currently active.
+        An employee with a future end_date is still active until that date."""
+        if self.end_date is None:
+            return True
+        return self.end_date > date.today()
 
     def calculate_ipac(self, year, month):
         """
@@ -196,22 +199,23 @@ class Employee(models.Model):
         # Apply clawback: use running balance to recover past debts
         bal, _ = CommissionBalance.objects.get_or_create(employee=self)
 
-        # Idempotency: only update balance once per month
+        # Idempotent recalculation: use pre_month_balance (snapshot before this month)
         if bal.last_computed_year == year and bal.last_computed_month == month:
-            # Already computed for this month — return cached result
-            carry_forward = zero
-            commission_amount = max(zero, raw_commission + bal.balance)
-            remaining_debt = min(zero, raw_commission + bal.balance)
+            # Same month recalculation: use the snapshot from before this month started
+            carry_forward = bal.pre_month_balance
         else:
-            carry_forward = bal.balance  # previous debt (negative or zero)
-            adjusted = raw_commission + carry_forward
-            commission_amount = max(zero, adjusted)
-            remaining_debt = min(zero, adjusted)
-            # Persist new balance
-            bal.balance = remaining_debt
-            bal.last_computed_year = year
-            bal.last_computed_month = month
-            bal.save()
+            # New month: snapshot current balance, then apply
+            carry_forward = bal.balance
+            bal.pre_month_balance = bal.balance
+
+        adjusted = raw_commission + carry_forward
+        commission_amount = max(zero, adjusted)
+        remaining_debt = min(zero, adjusted)
+
+        bal.balance = remaining_debt
+        bal.last_computed_year = year
+        bal.last_computed_month = month
+        bal.save()
 
         return {
             'commission_amount': commission_amount,
@@ -292,13 +296,9 @@ class Employee(models.Model):
 
             elif kpi.measurement_type == 'count_lt':
                 # e.g., "Calidad Administrativa" (fewer than X errors)
-                # No entries logged = not evaluated (no bonus). An explicit entry
-                # with value=0 means "observed, zero errors" → target met.
+                # No entries = 0 errors = target met (employee is perfect)
                 entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
-                if entries.exists():
-                    actual_value = sum(entry.value for entry in entries)
-                else:
-                    actual_value = None  # sentinel: not evaluated
+                actual_value = sum(entry.value for entry in entries)
 
             elif kpi.measurement_type == 'count_gt':
                 # e.g., "Gestión Comercial Pública" (more than X offers)
@@ -317,30 +317,25 @@ class Employee(models.Model):
             
             bonus_amount_for_kpi = Decimal('0.00')
 
-            # Skip evaluation if KPI was not evaluated (count_lt with no entries)
-            if actual_value is None:
-                # Store as not-evaluated: actual=0, target_met=False, bonus=0
-                actual_value = 0
+            # 1. Check Standard Target using BonusRule
+            if kpi.measurement_type == 'count_lt':
+                if actual_value < kpi.target_value:
+                    target_met = True
             else:
-                # 1. Check Standard Target using BonusRule
-                if kpi.measurement_type == 'count_lt':
-                    if actual_value < kpi.target_value:
-                        target_met = True
-                else:
-                    if actual_value >= kpi.target_value:
-                        target_met = True
+                if actual_value >= kpi.target_value:
+                    target_met = True
 
-                rule = BonusRule.objects.filter(kpi=kpi).first()
-                if rule and target_met:
-                    bonus_amount_for_kpi = rule.bonus_amount
+            rule = BonusRule.objects.filter(kpi=kpi).first()
+            if rule and target_met:
+                bonus_amount_for_kpi = rule.bonus_amount
 
-                # 2. Check Tiered Bonuses (Overrides standard if higher)
-                tiers = kpi.tiers.all()
-                for tier in tiers:
-                    if actual_value >= tier.threshold:
-                        if tier.bonus_amount > bonus_amount_for_kpi:
-                            bonus_amount_for_kpi = tier.bonus_amount
-                            target_met = True
+            # 2. Check Tiered Bonuses (Overrides standard if higher)
+            tiers = kpi.tiers.all()
+            for tier in tiers:
+                if actual_value >= tier.threshold:
+                    if tier.bonus_amount > bonus_amount_for_kpi:
+                        bonus_amount_for_kpi = tier.bonus_amount
+                        target_met = True
 
             total_bonus += bonus_amount_for_kpi
 
@@ -518,6 +513,8 @@ class CommissionBalance(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE, related_name='commission_balance')
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'),
         help_text="Running balance. Negative = debt to recover from future commissions.")
+    pre_month_balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'),
+        help_text="Snapshot of balance BEFORE the current month's calculation. Used for idempotent recalculation.")
     last_computed_year = models.IntegerField(default=0)
     last_computed_month = models.IntegerField(default=0)
 
