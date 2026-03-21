@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 
 
 class WebhookRateThrottle(AnonRateThrottle):
-    """Rate limiter for webhook endpoints: 60 requests/minute."""
-    rate = '60/min'
+    """Rate limiter for webhook endpoints. Applied manually AFTER logging,
+    not via throttle_classes, to ensure all requests are logged."""
+    rate = '300/min'
 
 class WorkLogViewSet(viewsets.ModelViewSet):
     queryset = WorkLog.objects.all()
@@ -331,7 +332,7 @@ class DolibarrWebhookView(APIView):
     Supports: BILL_VALIDATE (invoices & credit notes), PROPAL_VALIDATE, PRODUCT_CREATE.
     """
     permission_classes = [AllowAny]  # We use HMAC for auth
-    throttle_classes = [WebhookRateThrottle]
+    throttle_classes = []  # Throttle applied manually AFTER logging
 
     def post(self, request):
         # 1. Capture Raw Data for logging and verification
@@ -343,12 +344,25 @@ class DolibarrWebhookView(APIView):
         professional_id = request.headers.get('X-Dolibarr-Professional-ID')
         signature = request.headers.get('X-Dolibarr-Signature')
 
-        # 2. Log reception immediately (audit trail per FEASIBILITY_REPORT)
+        # 2. Log reception immediately — BEFORE throttle check so no data is lost
         log = WebhookLog.objects.create(
             sender_ip=self.get_client_ip(request),
             headers=dict(request.headers),
             payload=request.data
         )
+
+        # 3. Manual throttle check AFTER logging
+        throttle = WebhookRateThrottle()
+        if not throttle.allow_request(request, self):
+            log.status = 'throttled'
+            log.error_message = 'Rate limit exceeded (logged for retry)'
+            log.save()
+            wait = throttle.wait()
+            return Response(
+                {'error': 'Rate limit exceeded', 'retry_after': int(wait or 60)},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={'Retry-After': str(int(wait or 60))}
+            )
 
         try:
             # 3. Authenticate Instance
