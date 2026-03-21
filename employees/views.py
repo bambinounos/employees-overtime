@@ -3,7 +3,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI, BonusRule
 from django.contrib.auth.decorators import login_required
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from django.contrib import messages
 import calendar
@@ -240,7 +240,6 @@ from django.db.models import Avg, Sum, Count, F
 from django.db.models.functions import Coalesce
 from .models import Task
 import json
-from datetime import timedelta
 
 @login_required
 def strategic_dashboard(request):
