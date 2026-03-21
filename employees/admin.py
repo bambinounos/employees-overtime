@@ -315,8 +315,8 @@ class ProductCreationLogAdmin(admin.ModelAdmin):
 
 @admin.register(CommissionBalance)
 class CommissionBalanceAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'balance', 'last_computed_year', 'last_computed_month')
-    readonly_fields = ('employee', 'balance', 'last_computed_year', 'last_computed_month')
+    list_display = ('employee', 'balance', 'pre_month_balance', 'last_computed_year', 'last_computed_month')
+    readonly_fields = ('employee', 'balance', 'pre_month_balance', 'last_computed_year', 'last_computed_month')
 
     def has_add_permission(self, request):
         return False

@@ -20,7 +20,7 @@ def employee_list(request):
     if show_inactive:
         employees = Employee.objects.all().order_by('name')
     else:
-        employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today())).order_by('name')
+        employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today())).order_by('name')
 
     context = {
         'employees': employees,
@@ -118,7 +118,7 @@ def task_board(request):
         return board
 
     if user.is_superuser:
-        all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
+        all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today()))
         employee_id_str = request.GET.get('employee_id')
 
         if employee_id_str:
@@ -182,7 +182,7 @@ def performance_report(request):
     """
     Renders the performance report page or handles CSV export.
     """
-    all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
+    all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today()))
     selected_employee_id = request.GET.get('employee_id')
 
     records = None
@@ -287,7 +287,7 @@ def strategic_dashboard(request):
     ranking_records = None
     if ipac_kpi:
         ranking_records = EmployeePerformanceRecord.objects.filter(
-            Q(employee__end_date__isnull=True) | Q(employee__end_date__gt=date.today()),
+            Q(employee__end_date__isnull=True) | Q(employee__end_date__gte=date.today()),
             kpi=ipac_kpi,
             date__year=year,
             date__month=month,
@@ -296,7 +296,7 @@ def strategic_dashboard(request):
     # --- 3. Warning KPIs ---
     warning_kpis = KPI.objects.filter(is_warning_kpi=True)
     warning_records = EmployeePerformanceRecord.objects.filter(
-        Q(employee__end_date__isnull=True) | Q(employee__end_date__gt=date.today()),
+        Q(employee__end_date__isnull=True) | Q(employee__end_date__gte=date.today()),
         kpi__in=warning_kpis,
         target_met=False,
         date__year=year,
@@ -360,7 +360,7 @@ def employee_ranking(request):
             if latest_date:
                 period = latest_date.strftime('%B %Y')
                 records_query = EmployeePerformanceRecord.objects.filter(
-                    Q(employee__end_date__isnull=True) | Q(employee__end_date__gt=date.today()),
+                    Q(employee__end_date__isnull=True) | Q(employee__end_date__gte=date.today()),
                     kpi=selected_kpi,
                     date=latest_date,
                 ).select_related('employee').order_by('-actual_value')

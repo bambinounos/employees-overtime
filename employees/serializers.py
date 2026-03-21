@@ -18,10 +18,18 @@ class ChecklistSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     assigned_to = serializers.PrimaryKeyRelatedField(
-        queryset=Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
+        queryset=Employee.objects.all()  # Filtered dynamically in get_fields()
     )
     checklists = ChecklistSerializer(many=True, read_only=True)
     due_date_status = serializers.SerializerMethodField()
+
+    def get_fields(self):
+        fields = super().get_fields()
+        # Evaluate date.today() at request time, not class load time
+        fields['assigned_to'].queryset = Employee.objects.filter(
+            Q(end_date__isnull=True) | Q(end_date__gte=date.today())
+        )
+        return fields
 
     class Meta:
         model = Task

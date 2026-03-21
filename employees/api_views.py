@@ -70,7 +70,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                     return Task.objects.none() # Return empty if employee not found
             else:
                 # Superuser is viewing their own board or a general view
-                 employees_to_check = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gt=date.today()))
+                 employees_to_check = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today()))
         elif hasattr(user, 'employee'):
             # Regular employee viewing their own board
             employees_to_check = [user.employee]

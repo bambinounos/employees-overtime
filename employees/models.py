@@ -67,7 +67,7 @@ class Employee(models.Model):
         An employee with a future end_date is still active until that date."""
         if self.end_date is None:
             return True
-        return self.end_date > date.today()
+        return self.end_date >= date.today()
 
     def calculate_ipac(self, year, month):
         """
@@ -199,23 +199,33 @@ class Employee(models.Model):
         # Apply clawback: use running balance to recover past debts
         bal, _ = CommissionBalance.objects.get_or_create(employee=self)
 
-        # Idempotent recalculation: use pre_month_balance (snapshot before this month)
-        if bal.last_computed_year == year and bal.last_computed_month == month:
-            # Same month recalculation: use the snapshot from before this month started
+        last_computed = (bal.last_computed_year, bal.last_computed_month)
+        requested = (year, month)
+
+        if requested == last_computed:
+            # Same month recalculation (new invoices arrived): use pre-month snapshot
             carry_forward = bal.pre_month_balance
-        else:
-            # New month: snapshot current balance, then apply
+            adjusted = raw_commission + carry_forward
+            commission_amount = max(zero, adjusted)
+            remaining_debt = min(zero, adjusted)
+            bal.balance = remaining_debt
+            bal.save()
+        elif requested > last_computed:
+            # New month (forward): snapshot and advance
             carry_forward = bal.balance
             bal.pre_month_balance = bal.balance
-
-        adjusted = raw_commission + carry_forward
-        commission_amount = max(zero, adjusted)
-        remaining_debt = min(zero, adjusted)
-
-        bal.balance = remaining_debt
-        bal.last_computed_year = year
-        bal.last_computed_month = month
-        bal.save()
+            adjusted = raw_commission + carry_forward
+            commission_amount = max(zero, adjusted)
+            remaining_debt = min(zero, adjusted)
+            bal.balance = remaining_debt
+            bal.last_computed_year = year
+            bal.last_computed_month = month
+            bal.save()
+        else:
+            # Past month query: read-only, do NOT modify balance
+            carry_forward = zero
+            commission_amount = max(zero, raw_commission)
+            remaining_debt = zero
 
         return {
             'commission_amount': commission_amount,
