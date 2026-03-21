@@ -247,6 +247,15 @@ class TaskViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             task.status = 'completed'
             task.completed_at = timezone.now()
+
+            # Move task to "Hecho" list so it counts for percentage KPI
+            hecho_list = TaskList.objects.filter(
+                board=task.list.board,
+                name__iexact='Hecho'
+            ).first()
+            if hecho_list:
+                task.list = hecho_list
+
             task.save()
 
             # Recalculate bonus for the affected employee

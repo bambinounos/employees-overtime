@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def _get_evaluacion_or_404(token):
     evaluacion = get_object_or_404(Evaluacion, token=token)
-    if evaluacion.esta_expirada() and evaluacion.estado == 'PENDIENTE':
+    if evaluacion.esta_expirada() and evaluacion.estado in ('PENDIENTE', 'EN_CURSO'):
         evaluacion.estado = 'EXPIRADA'
         evaluacion.save(update_fields=['estado'])
     return evaluacion
