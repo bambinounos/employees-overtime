@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from .models import (
     Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard, TaskList, Task,
-    ManualKpiEntry, EmployeePerformanceRecord
+    ManualKpiEntry, EmployeePerformanceRecord, JobProfile
 )
 from decimal import Decimal
 from datetime import date, datetime, timedelta
@@ -22,6 +22,12 @@ class PerformanceAndSalaryTest(TestCase):
         self.kpi_errors = KPI.objects.create(name="Calidad Administrativa", measurement_type='count_lt', target_value=Decimal('3.00'))
         BonusRule.objects.create(kpi=self.kpi_tasks, bonus_amount=Decimal('50.00'))
         BonusRule.objects.create(kpi=self.kpi_errors, bonus_amount=Decimal('50.00'))
+
+        # Assign profile with KPIs to employee
+        self.profile = JobProfile.objects.create(name='Test Profile')
+        self.profile.kpis.add(self.kpi_tasks, self.kpi_errors)
+        self.employee.profile = self.profile
+        self.employee.save()
 
         # Task Board Setup
         self.board = TaskBoard.objects.create(employee=self.employee, name=f"Board for {self.employee.name}")
@@ -319,9 +325,14 @@ class SalaryViewTest(TestCase):
         WorkLog.objects.create(employee=self.employee, date=date(2023, 1, 1), hours_worked=75, overtime_hours=0)
         WorkLog.objects.create(employee=self.employee, date=date(2023, 1, 2), hours_worked=75, overtime_hours=0)
 
-        # Create KPI and Bonus Rule
+        # Create KPI, Bonus Rule, and assign profile
         self.kpi = KPI.objects.create(name='Test KPI', measurement_type='count_gt', target_value=10)
         BonusRule.objects.create(kpi=self.kpi, bonus_amount=Decimal('200.00'), description='Test Bonus')
+
+        profile = JobProfile.objects.create(name='Test Salary Profile')
+        profile.kpis.add(self.kpi)
+        self.employee.profile = profile
+        self.employee.save()
 
         # No performance record created, so target not met. Lost Bonus = $200.
 

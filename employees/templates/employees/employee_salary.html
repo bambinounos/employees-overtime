@@ -124,6 +124,26 @@
                         </div>
                         <span class="text-success font-weight-bold">+ ${{ salary.commission_amount|floatformat:2 }}</span>
                     </li>
+                    {% if salary.carry_forward_applied and salary.carry_forward_applied < 0 %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong class="text-danger">{% trans "Commission Clawback" %}</strong>
+                            <br>
+                            <small class="text-muted">{% trans "Debt from previous credit notes applied" %}</small>
+                        </div>
+                        <span class="text-danger font-weight-bold">${{ salary.carry_forward_applied|floatformat:2 }}</span>
+                    </li>
+                    {% endif %}
+                    {% if salary.remaining_debt and salary.remaining_debt < 0 %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                        <div>
+                            <strong class="text-warning">{% trans "Outstanding Debt" %}</strong>
+                            <br>
+                            <small class="text-muted">{% trans "Will be deducted from future commissions" %}</small>
+                        </div>
+                        <span class="text-warning font-weight-bold">${{ salary.remaining_debt|floatformat:2 }}</span>
+                    </li>
+                    {% endif %}
                     {% if salary.provisional_count > 0 %}
                     <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
                         <div>

@@ -49,8 +49,12 @@ def employee_salary(request, employee_id):
     commission_amount = Decimal('0.00')
 
     if salary:
-        # 1. Potential Bonus (Sum of all active bonus rules)
-        potential_bonus = BonusRule.objects.aggregate(total=Sum('bonus_amount'))['total'] or Decimal('0.00')
+        # 1. Potential Bonus (only for KPIs in employee's profile)
+        if employee.profile:
+            profile_kpis = employee.profile.kpis.all()
+            potential_bonus = BonusRule.objects.filter(kpi__in=profile_kpis).aggregate(total=Sum('bonus_amount'))['total'] or Decimal('0.00')
+        else:
+            potential_bonus = Decimal('0.00')
 
         # 2. Lost Bonus
         earned_bonus = salary.get('performance_bonus', Decimal('0.00'))

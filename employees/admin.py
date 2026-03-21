@@ -8,7 +8,7 @@ from .models import (
     TaskList, Task, Checklist, ChecklistItem, Comment, EmployeePerformanceRecord,
     ManualKpiEntry, SiteConfiguration,
     JobProfile, KPIBonusTier, DolibarrInstance, DolibarrUserIdentity,
-    SalesRecord, ProductCreationLog, WebhookLog,
+    SalesRecord, ProductCreationLog, WebhookLog, CommissionBalance,
 )
 
 @admin.register(SiteConfiguration)
@@ -311,6 +311,15 @@ class ProductCreationLogAdmin(admin.ModelAdmin):
     list_display = ('product_ref', 'employee', 'dolibarr_instance', 'created_at', 'is_suspect_duplicate')
     list_filter = ('dolibarr_instance', 'is_suspect_duplicate')
     search_fields = ('product_ref', 'employee__name')
+
+
+@admin.register(CommissionBalance)
+class CommissionBalanceAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'balance', 'last_computed_year', 'last_computed_month')
+    readonly_fields = ('employee', 'balance', 'last_computed_year', 'last_computed_month')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(WebhookLog)
