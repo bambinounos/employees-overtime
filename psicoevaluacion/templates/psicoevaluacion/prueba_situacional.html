@@ -57,7 +57,7 @@
             </div>
 
             <div class="opciones-container mb-3">
-                {% for opcion in pregunta.opciones.all %}
+                {% for opcion in pregunta.shuffled_opciones %}
                 <div class="opcion-card" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
                     <div class="d-flex align-items-start">
                         <input type="radio" name="opcion_{{ pregunta.id }}"
