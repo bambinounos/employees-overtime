@@ -1,0 +1,247 @@
+{% extends "psicoevaluacion/base_evaluacion.html" %}
+{% load static %}
+
+{% block title %}{{ prueba.nombre }} - Evaluacion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .mv-imagen-container {
+        text-align: center;
+        padding: 1rem;
+    }
+    .mv-imagen-container img {
+        max-width: 100%;
+        max-height: 70vh;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .mv-countdown {
+        font-size: 3rem;
+        font-weight: bold;
+        color: #e74c3c;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    .mv-countdown.warning {
+        animation: pulse 0.5s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+    .fase { display: none; }
+    .fase.active { display: block; }
+    .pregunta-mv { display: none; }
+    .pregunta-mv.active { display: block; }
+    .opcion-mv {
+        padding: 12px 16px;
+        margin: 6px 0;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: white;
+    }
+    .opcion-mv:hover {
+        border-color: #2c3e50;
+        background: #f8f9fa;
+    }
+    .opcion-mv.selected {
+        border-color: #2c3e50;
+        background: #2c3e50;
+        color: white;
+    }
+    .opcion-mv input[type="radio"] {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+
+        <!-- Fase 1: Instrucciones -->
+        <div class="fase active" id="fase-instrucciones">
+            <div class="card mb-3">
+                <div class="card-body text-center py-5">
+                    <h4 class="mb-4">{{ prueba.nombre }}</h4>
+                    <p class="lead mb-4">{{ prueba.instrucciones|linebreaksbr }}</p>
+                    <p class="text-muted mb-4">
+                        Tendra <strong>45 segundos</strong> para observar la imagen.
+                        Luego se ocultara y debera responder las preguntas.
+                    </p>
+                    <button id="btn-listo" class="btn btn-primary btn-lg px-5">
+                        Estoy listo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fase 2: Imagen -->
+        <div class="fase" id="fase-imagen">
+            <div class="mv-countdown" id="countdown">45</div>
+            <div class="mv-imagen-container">
+                <img src="{% static imagen_memoria %}" alt="Imagen de memoria visual" id="mv-img">
+            </div>
+            <p class="text-center text-muted mt-2">Observe la imagen con atencion...</p>
+        </div>
+
+        <!-- Fase 3: Preguntas -->
+        <div class="fase" id="fase-preguntas">
+            <div id="preguntas-container">
+                {% for pregunta in preguntas %}
+                <div class="pregunta-mv card mb-3" data-index="{{ forloop.counter0 }}"
+                     data-pregunta-id="{{ pregunta.id }}">
+                    <div class="card-body py-4 px-4">
+                        <p class="text-muted small mb-2">Pregunta {{ forloop.counter }} de {{ preguntas|length }}</p>
+                        <h5 class="mb-4">{{ pregunta.texto }}</h5>
+
+                        {% for opcion in pregunta.shuffled_opciones %}
+                        <div class="opcion-mv" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
+                            <input type="radio" name="mv_{{ pregunta.id }}" value="{{ opcion.id }}">
+                            {{ opcion.texto }}
+                        </div>
+                        {% endfor %}
+
+                        <div class="text-center mt-2">
+                            <span class="save-indicator">&#10004; Guardado</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Navigation -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <button id="btn-anterior" class="btn btn-outline-secondary" disabled>
+                    &laquo; Anterior
+                </button>
+                <span id="counter" class="text-muted small"></span>
+                <button id="btn-siguiente" class="btn btn-outline-secondary">
+                    Siguiente &raquo;
+                </button>
+            </div>
+        </div>
+
+        <!-- Next test button -->
+        <div class="text-center mb-4" id="btn-next-test" style="display: none;">
+            <a href="{{ siguiente_url }}" class="btn btn-success btn-lg px-5">
+                Siguiente prueba &raquo;
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+<script>
+(function() {
+    var TIEMPO_OBSERVACION = 45;
+    var respondidas = new Set({{ respondidas_json|safe }});
+    var preguntas = document.querySelectorAll('.pregunta-mv');
+    var total = preguntas.length;
+    var current = 0;
+    var startTimes = {};
+
+    // If all already answered (resume), skip to questions phase showing button
+    if (respondidas.size >= total && total > 0) {
+        document.getElementById('fase-instrucciones').classList.remove('active');
+        document.getElementById('fase-preguntas').classList.add('active');
+        showQuestion(0);
+        mostrarBotonSiguiente();
+    }
+
+    // --- Fase 1 → Fase 2: Start observation ---
+    document.getElementById('btn-listo').addEventListener('click', function() {
+        document.getElementById('fase-instrucciones').classList.remove('active');
+        document.getElementById('fase-imagen').classList.add('active');
+
+        var countdown = TIEMPO_OBSERVACION;
+        var el = document.getElementById('countdown');
+
+        var interval = setInterval(function() {
+            countdown--;
+            el.textContent = countdown;
+            if (countdown <= 5) {
+                el.classList.add('warning');
+            }
+            if (countdown <= 0) {
+                clearInterval(interval);
+                // Fase 2 → Fase 3
+                document.getElementById('fase-imagen').classList.remove('active');
+                document.getElementById('fase-preguntas').classList.add('active');
+                showQuestion(0);
+            }
+        }, 1000);
+    });
+
+    // --- Question navigation ---
+    var btnSiguiente = document.getElementById('btn-siguiente');
+
+    function showQuestion(idx) {
+        if (idx < 0 || idx >= total) return;
+        preguntas[current].classList.remove('active');
+        current = idx;
+        preguntas[current].classList.add('active');
+        document.getElementById('btn-anterior').disabled = (current === 0);
+        btnSiguiente.disabled = false;
+        btnSiguiente.textContent = (current === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
+        document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
+        startTimes[current] = Date.now();
+        if (respondidas.size >= total) {
+            mostrarBotonSiguiente();
+        }
+    }
+
+    document.getElementById('btn-anterior').addEventListener('click', function() {
+        if (current > 0) showQuestion(current - 1);
+    });
+    btnSiguiente.addEventListener('click', function() {
+        if (current < total - 1) {
+            showQuestion(current + 1);
+        } else if (respondidas.size >= total) {
+            mostrarBotonSiguiente();
+        }
+    });
+
+    // --- Option selection + save ---
+    document.querySelectorAll('.opcion-mv').forEach(function(opt) {
+        opt.addEventListener('click', function() {
+            var card = this.closest('.pregunta-mv');
+            card.querySelectorAll('.opcion-mv').forEach(function(o) {
+                o.classList.remove('selected');
+                o.querySelector('input').checked = false;
+            });
+            this.classList.add('selected');
+            this.querySelector('input').checked = true;
+
+            var preguntaId = parseInt(card.dataset.preguntaId);
+            var opcionId = parseInt(this.dataset.opcionId);
+            var idx = parseInt(card.dataset.index);
+            var tiempo = startTimes[idx] ? Math.round((Date.now() - startTimes[idx]) / 1000) : null;
+
+            guardarRespuesta('/psicoevaluacion/api/respuesta/matriz/', {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: preguntaId,
+                opcion_id: opcionId,
+                tiempo_respuesta_seg: tiempo
+            }).then(function() {
+                respondidas.add(preguntaId);
+                mostrarGuardado(card.querySelector('.save-indicator'));
+
+                if (respondidas.size >= total) {
+                    mostrarBotonSiguiente();
+                }
+                if (current < total - 1) {
+                    setTimeout(function() { showQuestion(current + 1); }, 500);
+                }
+            }).catch(function(err) {
+                console.error('Error guardando respuesta:', err);
+                alert('Error al guardar. Intente de nuevo.');
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

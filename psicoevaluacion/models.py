@@ -33,6 +33,8 @@ class PerfilObjetivo(models.Model):
         help_text="% mínimo en prueba situacional")
     min_atencion_detalle = models.FloatField(default=60.0,
         help_text="% mínimo en atención al detalle")
+    min_memoria_visual = models.FloatField(default=60.0,
+        help_text="% mínimo en memoria visual (score combinado)")
 
     METODO_VEREDICTO_CHOICES = [
         ('CONTEO_FALLOS', 'Conteo de fallos (0=APTO, 1=REVISIÓN, 2+=NO APTO)'),
@@ -68,6 +70,7 @@ class Prueba(models.Model):
         ('SITUACIONAL', 'Prueba Situacional'),
         ('DESEABILIDAD', 'Escala de Deseabilidad Social'),
         ('ATENCION', 'Atención al Detalle'),
+        ('MEMORIA_VISUAL', 'Memoria Visual'),
     ]
 
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, unique=True)
@@ -137,6 +140,13 @@ class Pregunta(models.Model):
         ('AT_COMP', 'Atención: Comparación de documentos'),
         ('AT_VERI', 'Atención: Verificación de datos'),
         ('AT_SECU', 'Atención: Secuencias con error'),
+        # Memoria Visual
+        ('MV_A_REAL', 'Memoria Visual A: Real'),
+        ('MV_A_TRAP', 'Memoria Visual A: Trampa'),
+        ('MV_B_REAL', 'Memoria Visual B: Real'),
+        ('MV_B_TRAP', 'Memoria Visual B: Trampa'),
+        ('MV_C_REAL', 'Memoria Visual C: Real'),
+        ('MV_C_TRAP', 'Memoria Visual C: Trampa'),
         # Otros
         ('GENERAL', 'General'),
     ]
@@ -145,7 +155,7 @@ class Pregunta(models.Model):
         related_name='preguntas')
     texto = models.TextField()
     tipo_escala = models.CharField(max_length=20, choices=ESCALA_CHOICES)
-    dimension = models.CharField(max_length=10, choices=DIMENSION_CHOICES,
+    dimension = models.CharField(max_length=15, choices=DIMENSION_CHOICES,
         default='GENERAL')
     es_inversa = models.BooleanField(default=False,
         help_text="Si True, puntaje se invierte (6 - valor)")
@@ -446,6 +456,14 @@ class ResultadoFinal(models.Model):
         help_text="% aciertos verificación de datos (0-100%)")
     puntaje_atencion_secuencias = models.FloatField(null=True, blank=True,
         help_text="% aciertos en secuencias con error (0-100%)")
+
+    # Memoria Visual
+    puntaje_memoria_visual = models.FloatField(null=True, blank=True,
+        help_text="Score combinado memoria visual (0-100%)")
+    puntaje_mv_precision = models.FloatField(null=True, blank=True,
+        help_text="Aciertos preguntas reales (0-100%)")
+    puntaje_mv_honestidad = models.FloatField(null=True, blank=True,
+        help_text="Aciertos preguntas trampa (0-100%)")
 
     # Proyectivas (evaluación manual)
     puntaje_arbol = models.FloatField(null=True)

@@ -48,6 +48,7 @@ TEMPLATE_MAP = {
     'PERSONA_LLUVIA': 'psicoevaluacion/prueba_proyectiva.html',
     'COLORES': 'psicoevaluacion/prueba_colores.html',
     'ATENCION': 'psicoevaluacion/prueba_atencion.html',
+    'MEMORIA_VISUAL': 'psicoevaluacion/prueba_memoria_visual.html',
 }
 
 
@@ -92,7 +93,7 @@ def _get_respuestas_existentes(evaluacion, prueba):
         return list(evaluacion.respuestas_situacionales.filter(
             pregunta__prueba=prueba
         ).values_list('pregunta_id', flat=True))
-    elif tipo == 'MATRICES':
+    elif tipo in ('MATRICES', 'MEMORIA_VISUAL'):
         return list(evaluacion.respuestas_matrices.filter(
             pregunta__prueba=prueba
         ).values_list('pregunta_id', flat=True))
@@ -284,13 +285,39 @@ def realizar_prueba(request, token, tipo_prueba):
 
     # Get questions: intersect prueba.preguntas with evaluacion.preguntas_seleccionadas
     preguntas = prueba.preguntas.all().order_by('orden')
+
+    # Memoria Visual: select 1 random image set (A, B, C) and persist selection
+    imagen_memoria = None
+    if tipo_upper == 'MEMORIA_VISUAL':
+        all_mv_preguntas = list(preguntas.values_list('id', 'dimension'))
+        # Check if already selected for this evaluation
+        selected_ids = evaluacion.preguntas_seleccionadas or []
+        mv_selected = [pid for pid, dim in all_mv_preguntas if pid in selected_ids]
+        if not mv_selected:
+            # First time: pick random image set
+            imagen_set = random.choice(['A', 'B', 'C'])
+            mv_selected = [pid for pid, dim in all_mv_preguntas
+                           if dim and dim.startswith(f'MV_{imagen_set}')]
+            # Persist: merge with existing selections
+            evaluacion.preguntas_seleccionadas = list(
+                set(selected_ids) | set(mv_selected)
+            )
+            evaluacion.save(update_fields=['preguntas_seleccionadas'])
+        # Determine which image to show from the selected questions
+        first_dim = next(
+            (dim for pid, dim in all_mv_preguntas if pid in mv_selected), ''
+        )
+        if first_dim:
+            img_letter = first_dim.split('_')[1].lower()  # 'A' → 'a'
+            imagen_memoria = f'psicoevaluacion/img/memoria_visual_{img_letter}.png'
+
     if evaluacion.preguntas_seleccionadas:
         preguntas = preguntas.filter(id__in=evaluacion.preguntas_seleccionadas)
     preguntas = preguntas.prefetch_related('opciones')
     preguntas_list = list(preguntas)
 
-    # Shuffle options for matrices to prevent position bias
-    if tipo_upper == 'MATRICES':
+    # Shuffle options for matrices and memoria visual
+    if tipo_upper in ('MATRICES', 'MEMORIA_VISUAL'):
         for p in preguntas_list:
             shuffled = list(p.opciones.all())
             random.shuffle(shuffled)
@@ -329,6 +356,8 @@ def realizar_prueba(request, token, tipo_prueba):
         'siguiente_url': siguiente_url,
         'token': token,
     }
+    if imagen_memoria:
+        context['imagen_memoria'] = imagen_memoria
 
     return render(request, template, context)
 

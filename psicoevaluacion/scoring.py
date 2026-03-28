@@ -105,8 +105,6 @@ def calcular_situacional(respuestas):
     a porcentaje 0-100 para que sea comparable con los umbrales del sistema.
     Máximo teórico: 3 dimensiones × 5.0 = 15.0 → 100%.
     """
-    MAX_SUM = 15.0  # 3 dimensiones × máximo 5.0 cada una
-
     dimensiones = {
         'SIT_RESP': [], 'SIT_OBED': [], 'SIT_LEAL': []
     }
@@ -116,11 +114,17 @@ def calcular_situacional(respuestas):
             dimensiones[dim].append(r.valor)
 
     resultado = {}
+    dimensiones_validas = 0
     for dim, valores in dimensiones.items():
-        resultado[dim] = mean(valores) if valores else 0
+        if valores:
+            resultado[dim] = mean(valores)
+            dimensiones_validas += 1
+        else:
+            resultado[dim] = 0
 
+    max_sum = 5.0 * dimensiones_validas
     raw_total = sum(resultado.values())
-    resultado['total'] = (raw_total / MAX_SUM) * 100 if MAX_SUM > 0 else 0
+    resultado['total'] = (raw_total / max_sum) * 100 if max_sum > 0 else 0
     return resultado
 
 
@@ -202,6 +206,16 @@ def _score_comparacion(respuestas):
             encontradas = {str(x) for x in r.respuesta_json}
 
         if not correctas:
+            # It's a trap question: no real differences
+            if not encontradas:
+                precision = 1.0
+                recall = 1.0
+            else:
+                precision = 0.0
+                recall = 0.0
+            total_precision += precision
+            total_recall += recall
+            count += 1
             continue
 
         true_positives = len(correctas & encontradas)
@@ -276,6 +290,44 @@ def calcular_atencion_detalle(respuestas):
     }
 
 
+def calcular_memoria_visual(respuestas):
+    """
+    Scoring for Memoria Visual test.
+    Real questions (dimension ends with _REAL): correct = 2pts
+    Trap questions (dimension ends with _TRAP): correct = 2pts
+    Total max: 20pts (12 real + 8 traps)
+    """
+    precision_correctas = 0
+    precision_total = 0
+    honestidad_correctas = 0
+    honestidad_total = 0
+
+    for r in respuestas:
+        dim = r.pregunta.dimension or ''
+        if dim.endswith('_REAL'):
+            precision_total += 1
+            if r.es_correcta:
+                precision_correctas += 1
+        elif dim.endswith('_TRAP'):
+            honestidad_total += 1
+            if r.es_correcta:
+                honestidad_correctas += 1
+
+    precision_pct = (precision_correctas / precision_total * 100) if precision_total else 0
+    honestidad_pct = (honestidad_correctas / honestidad_total * 100) if honestidad_total else 0
+
+    total_puntos = (precision_correctas + honestidad_correctas) * 2
+    total_pct = (total_puntos / 20) * 100
+
+    return {
+        'precision': precision_pct,
+        'honestidad': honestidad_pct,
+        'total': total_pct,
+        'precision_correctas': precision_correctas,
+        'honestidad_correctas': honestidad_correctas,
+    }
+
+
 def calcular_resultado_final(evaluacion):
     """Orquestador principal: calcula todos los puntajes y genera ResultadoFinal."""
     resultado, _ = ResultadoFinal.objects.get_or_create(evaluacion=evaluacion)
@@ -333,7 +385,17 @@ def calcular_resultado_final(evaluacion):
         evaluacion.respuestas_situacionales.select_related('pregunta').all())
     resultado.puntaje_situacional = sit.get('total', 0)
 
-    # 6b. Atención al Detalle
+    # 6b. Memoria Visual
+    mv_respuestas = list(evaluacion.respuestas_matrices.filter(
+        pregunta__prueba__tipo='MEMORIA_VISUAL'
+    ).select_related('pregunta'))
+    if mv_respuestas:
+        mv = calcular_memoria_visual(mv_respuestas)
+        resultado.puntaje_memoria_visual = mv['total']
+        resultado.puntaje_mv_precision = mv['precision']
+        resultado.puntaje_mv_honestidad = mv['honestidad']
+
+    # 6c. Atención al Detalle
     atencion_respuestas = list(
         evaluacion.respuestas_atencion.select_related('pregunta').all())
     if atencion_respuestas:
@@ -401,10 +463,14 @@ def determinar_veredicto(resultado, perfil):
     fallos = 0
 
     def _below(valor, minimo):
-        return round(valor or 0, 2) < round(minimo, 2)
+        if valor is None:
+            return True
+        return round(valor, 2) < round(minimo, 2)
 
     def _above(valor, maximo):
-        return round(valor or 0, 2) > round(maximo, 2)
+        if valor is None:
+            return True
+        return round(valor, 2) > round(maximo, 2)
 
     if _below(resultado.puntaje_responsabilidad, perfil.min_responsabilidad):
         fallos += 1
@@ -420,6 +486,9 @@ def determinar_veredicto(resultado, perfil):
         fallos += 1
     if resultado.puntaje_atencion_detalle is not None:
         if _below(resultado.puntaje_atencion_detalle, perfil.min_atencion_detalle):
+            fallos += 1
+    if resultado.puntaje_memoria_visual is not None:
+        if _below(resultado.puntaje_memoria_visual, perfil.min_memoria_visual):
             fallos += 1
 
     # Verificar si hay proyectivas sin revisar

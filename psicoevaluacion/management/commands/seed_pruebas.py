@@ -23,6 +23,7 @@ class Command(BaseCommand):
         self._seed_situacional()
         self._seed_deseabilidad()
         self._seed_atencion_detalle()
+        self._seed_memoria_visual()
 
         self._vincular_pares_consistencia()
         self._actualizar_banco_metadata()
@@ -1729,6 +1730,7 @@ class Command(BaseCommand):
             'SITUACIONAL': (30, 15),
             'DESEABILIDAD': (12, 0),
             'ATENCION': (38, 16),
+            'MEMORIA_VISUAL': (30, 10),
         }
 
         for tipo, (banco, aplicar) in config.items():
@@ -1742,3 +1744,118 @@ class Command(BaseCommand):
                 pass
 
         self.stdout.write('  Metadata de banco actualizada')
+
+    def _seed_memoria_visual(self):
+        prueba, _ = Prueba.objects.get_or_create(
+            tipo='MEMORIA_VISUAL',
+            defaults={
+                'nombre': 'Memoria Visual',
+                'descripcion': 'Evalua la capacidad de observacion, memoria visual y honestidad del candidato.',
+                'instrucciones': (
+                    'Se le mostrara una imagen durante 45 segundos. Observela con atencion. '
+                    'Luego la imagen se ocultara y debera responder 10 preguntas sobre lo que vio. '
+                    'Algunas preguntas pueden referirse a elementos que NO estaban en la imagen.'
+                ),
+                'orden': 13,
+                'activa': True,
+                'es_proyectiva': False,
+                'tiempo_limite_minutos': 10,
+            },
+        )
+
+        if prueba.preguntas.exists():
+            self.stdout.write('  Memoria Visual ya tiene preguntas, saltando')
+            return
+
+        # Imagen A — Desierto surrealista (6 reales + 4 trampas)
+        preguntas_a = [
+            {'texto': 'De que color era el pez que aparecia en la imagen?', 'dim': 'MV_A_REAL',
+             'opciones': [('Azul', 0), ('Rojo', 1), ('Dorado', 0), ('No aparecia en la imagen', 0)]},
+            {'texto': 'De que color era la puerta?', 'dim': 'MV_A_REAL',
+             'opciones': [('No aparecia en la imagen', 0), ('Roja', 0), ('Azul', 0), ('Verde', 1)]},
+            {'texto': 'Que animal estaba sobre una de las columnas?', 'dim': 'MV_A_REAL',
+             'opciones': [('Un buho', 0), ('Un gato blanco', 1), ('Un aguila', 0), ('No aparecia en la imagen', 0)]},
+            {'texto': 'De que color era el puente que aparecia en la escena?', 'dim': 'MV_A_TRAP',
+             'opciones': [('Gris piedra', 0), ('Marron madera', 0), ('Dorado', 0), ('No aparecia en la imagen', 1)]},
+            {'texto': 'Cuantas columnas de piedra habia?', 'dim': 'MV_A_REAL',
+             'opciones': [('3', 0), ('4', 0), ('2', 1), ('No aparecia en la imagen', 0)]},
+            {'texto': 'Que hora marcaba el reloj?', 'dim': 'MV_A_TRAP',
+             'opciones': [('Las 6:00', 0), ('Las 12:00', 0), ('No aparecia en la imagen', 1), ('Las 3:15', 0)]},
+            {'texto': 'Que reflejaba el espejo agrietado?', 'dim': 'MV_A_REAL',
+             'opciones': [('Un desierto', 0), ('No aparecia en la imagen', 0), ('Una ciudad', 0), ('Un bosque', 1)]},
+            {'texto': 'Hacia que direccion iba la bicicleta?', 'dim': 'MV_A_TRAP',
+             'opciones': [('Hacia la izquierda', 0), ('Hacia la derecha', 0), ('Estaba estatica', 0), ('No aparecia en la imagen', 1)]},
+            {'texto': 'De que color era el cielo?', 'dim': 'MV_A_REAL',
+             'opciones': [('Azul claro', 0), ('Naranja', 0), ('Violeta/purpura', 1), ('No aparecia en la imagen', 0)]},
+            {'texto': 'De que color era el sombrero que aparecia en la arena?', 'dim': 'MV_A_TRAP',
+             'opciones': [('Negro', 0), ('Marron', 0), ('No aparecia en la imagen', 1), ('Blanco', 0)]},
+        ]
+
+        # Imagen B — Oceano invertido (6 reales + 4 trampas)
+        preguntas_b = [
+            {'texto': 'De que color eran las flores grandes?', 'dim': 'MV_B_REAL',
+             'opciones': [('Rojas', 0), ('Amarillas', 0), ('Purpuras/moradas', 1), ('No aparecia en la imagen', 0)]},
+            {'texto': 'Que animal estaba junto a la escalera?', 'dim': 'MV_B_REAL',
+             'opciones': [('Un gato negro', 0), ('No aparecia en la imagen', 0), ('Un perro negro', 1), ('Un conejo', 0)]},
+            {'texto': 'De que color eran las mariposas?', 'dim': 'MV_B_REAL',
+             'opciones': [('Azules', 0), ('Blancas', 0), ('Purpuras', 0), ('Amarillas/doradas', 1)]},
+            {'texto': 'De que color era el tren que cruzaba la escena?', 'dim': 'MV_B_TRAP',
+             'opciones': [('Rojo', 0), ('Negro con humo', 0), ('No aparecia en la imagen', 1), ('Plateado', 0)]},
+            {'texto': 'De que color era la luna?', 'dim': 'MV_B_REAL',
+             'opciones': [('Blanca', 0), ('Amarilla', 0), ('No aparecia en la imagen', 0), ('Naranja', 1)]},
+            {'texto': 'Cuantas mariposas habia?', 'dim': 'MV_B_REAL',
+             'opciones': [('3', 0), ('1', 0), ('2', 1), ('No aparecia en la imagen', 0)]},
+            {'texto': 'De que color era el paraguas que cubria al animal?', 'dim': 'MV_B_TRAP',
+             'opciones': [('Rojo', 0), ('Azul', 0), ('Amarillo', 0), ('No aparecia en la imagen', 1)]},
+            {'texto': 'De que color era el pasto/hierba?', 'dim': 'MV_B_REAL',
+             'opciones': [('Verde', 0), ('No aparecia en la imagen', 0), ('Azul', 1), ('Amarillo', 0)]},
+            {'texto': 'Que titulo tenia el libro que aparecia?', 'dim': 'MV_B_TRAP',
+             'opciones': [('No tenia titulo visible', 0), ('Estaba cerrado', 0), ('No aparecia en la imagen', 1), ('Estaba en otro idioma', 0)]},
+            {'texto': 'Que tipo de serpiente aparecia entre las flores?', 'dim': 'MV_B_TRAP',
+             'opciones': [('Una cobra', 0), ('Una serpiente verde', 0), ('No aparecia en la imagen', 1), ('Una serpiente pequena', 0)]},
+        ]
+
+        # Imagen C — Biblioteca cosmica (6 reales + 4 trampas)
+        preguntas_c = [
+            {'texto': 'De que color era el piano?', 'dim': 'MV_C_REAL',
+             'opciones': [('Negro', 0), ('Blanco', 0), ('Rojo/granate', 1), ('No aparecia en la imagen', 0)]},
+            {'texto': 'Que animal aparecia junto al piano?', 'dim': 'MV_C_REAL',
+             'opciones': [('Un gato negro', 0), ('Un buho azul', 1), ('No aparecia en la imagen', 0), ('Un cuervo', 0)]},
+            {'texto': 'De que color era el sillon?', 'dim': 'MV_C_REAL',
+             'opciones': [('Rojo', 0), ('No aparecia en la imagen', 0), ('Azul', 0), ('Verde', 1)]},
+            {'texto': 'Que se veia a traves de la ventana?', 'dim': 'MV_C_TRAP',
+             'opciones': [('Estrellas', 0), ('Un planeta', 0), ('Un amanecer', 0), ('No aparecia en la imagen', 1)]},
+            {'texto': 'Que frutos tenia el arbol?', 'dim': 'MV_C_REAL',
+             'opciones': [('Manzanas rojas', 0), ('No aparecia en la imagen', 0), ('Naranjas', 1), ('Limones', 0)]},
+            {'texto': 'De que color era la vela que iluminaba la escena?', 'dim': 'MV_C_TRAP',
+             'opciones': [('Blanca', 0), ('Roja', 0), ('Dorada', 0), ('No aparecia en la imagen', 1)]},
+            {'texto': 'De que material era el piso?', 'dim': 'MV_C_REAL',
+             'opciones': [('Madera', 0), ('Marmol', 0), ('Vidrio/cristal transparente', 1), ('No aparecia en la imagen', 0)]},
+            {'texto': 'De que color era el caballo?', 'dim': 'MV_C_TRAP',
+             'opciones': [('Blanco', 0), ('Negro', 0), ('No aparecia en la imagen', 1), ('Marron', 0)]},
+            {'texto': 'Que forma tenian los estantes de la biblioteca?', 'dim': 'MV_C_REAL',
+             'opciones': [('Rectos', 0), ('Circulares', 0), ('No aparecia en la imagen', 0), ('En espiral/curvos', 1)]},
+            {'texto': 'En que direccion fluia el agua de la fuente?', 'dim': 'MV_C_TRAP',
+             'opciones': [('Hacia arriba', 0), ('Hacia abajo', 0), ('En espiral', 0), ('No aparecia en la imagen', 1)]},
+        ]
+
+        orden = 1
+        for grupo in [preguntas_a, preguntas_b, preguntas_c]:
+            for p_data in grupo:
+                pregunta = Pregunta.objects.create(
+                    prueba=prueba,
+                    texto=p_data['texto'],
+                    tipo_escala='OPCION_MULTIPLE',
+                    dimension=p_data['dim'],
+                    orden=orden,
+                )
+                for i, (texto_opcion, valor) in enumerate(p_data['opciones']):
+                    Opcion.objects.create(
+                        pregunta=pregunta,
+                        texto=texto_opcion,
+                        valor=valor,
+                        orden=i + 1,
+                    )
+                orden += 1
+
+        self.stdout.write(self.style.SUCCESS(f'  Memoria Visual: {orden - 1} preguntas creadas'))
