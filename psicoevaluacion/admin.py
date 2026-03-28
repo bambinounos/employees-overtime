@@ -28,11 +28,11 @@ class PerfilObjetivoAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'activo', 'metodo_veredicto', 'min_responsabilidad',
                     'min_compromiso_organizacional',
                     'min_obediencia', 'min_memoria', 'min_matrices',
-                    'min_atencion_detalle')
+                    'min_atencion_detalle', 'min_memoria_visual')
     list_editable = ('activo', 'metodo_veredicto', 'min_responsabilidad',
                      'min_compromiso_organizacional',
                      'min_obediencia', 'min_memoria', 'min_matrices',
-                     'min_atencion_detalle')
+                     'min_atencion_detalle', 'min_memoria_visual')
 
 
 @admin.register(Prueba)
