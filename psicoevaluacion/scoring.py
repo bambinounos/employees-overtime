@@ -376,9 +376,11 @@ def calcular_resultado_final(evaluacion):
     resultado.puntaje_memoria = mem['porcentaje']
     resultado.max_secuencia_memoria = mem['max_span']
 
-    # 5. Matrices
+    # 5. Matrices (exclude MEMORIA_VISUAL which also uses RespuestaMatriz)
     resultado.puntaje_matrices = calcular_matrices(
-        list(evaluacion.respuestas_matrices.all()))
+        list(evaluacion.respuestas_matrices.filter(
+            pregunta__prueba__tipo='MATRICES'
+        ).select_related('pregunta')))
 
     # 6. Situacional
     sit = calcular_situacional(

@@ -208,6 +208,7 @@ def inicio_evaluacion(request, token):
         'PERSONA_LLUVIA': '10-15 min',
         'COLORES': '5 min',
         'ATENCION': '15-20 min',
+        'MEMORIA_VISUAL': '5-8 min',
     }
     pruebas_info = []
     for p in pruebas:
@@ -358,6 +359,8 @@ def realizar_prueba(request, token, tipo_prueba):
     }
     if imagen_memoria:
         context['imagen_memoria'] = imagen_memoria
+    elif tipo_upper == 'MEMORIA_VISUAL':
+        context['imagen_memoria'] = 'psicoevaluacion/img/memoria_visual_a.png'
 
     return render(request, template, context)
 
