@@ -20,7 +20,9 @@ config = {
         "/": CalDAVProvider(),
     },
     "verbose": 1,
-    "enable_loggers": [],
+    "logging": {
+        "enable_loggers": [],
+    },
     "property_manager": True,
     "lock_storage": True,
     "http_authenticator": {
