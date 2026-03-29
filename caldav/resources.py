@@ -4,6 +4,10 @@ from caldav.models import CalendarEvent
 import vobject
 from datetime import timedelta
 import hashlib
+import logging
+import uuid
+
+logger = logging.getLogger(__name__)
 
 class RootCollection(DAVCollection):
     def __init__(self, path, environ):
@@ -46,14 +50,36 @@ class UserCalendarCollection(DAVCollection):
             return None
 
     def put(self, name, data, content_type):
-        # This method handles PUT requests to create or update events.
-        cal = vobject.readOne(data.read().decode('utf-8'))
-        vevent = cal.vevent
+        # Parse iCalendar data with error handling
+        try:
+            raw_data = data.read().decode('utf-8')
+        except (UnicodeDecodeError, AttributeError) as e:
+            logger.warning("CalDAV PUT: invalid encoding: %s", e)
+            return None
 
-        uid = vevent.uid.value
-        title = vevent.summary.value
-        start_date = vevent.dtstart.value
-        end_date = vevent.dtend.value
+        try:
+            cal = vobject.readOne(raw_data)
+            vevent = cal.vevent
+        except Exception as e:
+            logger.warning("CalDAV PUT: malformed iCalendar data: %s", e)
+            return None
+
+        # Extract required fields with validation
+        try:
+            title = vevent.summary.value
+            start_date = vevent.dtstart.value
+            end_date = vevent.dtend.value
+        except AttributeError as e:
+            logger.warning("CalDAV PUT: missing required field: %s", e)
+            return None
+
+        # UID: required by RFC 5545, generate if missing
+        uid = getattr(vevent, 'uid', None)
+        if uid:
+            uid = uid.value
+        if not uid:
+            uid = str(uuid.uuid4())
+
         description = vevent.description.value if hasattr(vevent, 'description') else ""
 
         alarm_minutes = None

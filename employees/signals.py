@@ -6,6 +6,9 @@ from .models import ManualKpiEntry, Task, TaskList
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Task)
 def handle_recurring_task(sender, instance, created, **kwargs):
@@ -106,6 +109,10 @@ def sync_task_to_calendar(sender, instance, created, **kwargs):
     # Determine the user: the assigned employee's Django user
     user = getattr(instance.assigned_to, 'user', None)
     if not user:
+        logger.warning(
+            "CalDAV sync skipped for task '%s': employee '%s' has no Django user",
+            instance.title, instance.assigned_to
+        )
         return
 
     # Build event data from task

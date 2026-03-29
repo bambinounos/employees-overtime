@@ -1,5 +1,5 @@
 from django.contrib.auth import authenticate
-from wsgidav.domain_controller import BaseDomainController
+from wsgidav.dc.base_dc import BaseDomainController
 
 class DjangoDomainController(BaseDomainController):
     def __init__(self, environ):
