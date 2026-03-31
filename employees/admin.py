@@ -48,7 +48,8 @@ class EmployeeAdmin(admin.ModelAdmin):
         if '/autocomplete/' in request.path:
             # Allow inactive employees when editing an employee's own page
             if '/employees/employee/' not in referer:
-                queryset = queryset.filter(end_date__isnull=True)
+                today = timezone.now().date()
+                queryset = queryset.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
         return queryset, use_distinct
 
     def save_model(self, request, obj, form, change):
@@ -187,7 +188,8 @@ class TaskAdmin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "assigned_to":
-            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+            today = timezone.now().date()
+            kwargs["queryset"] = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def render_change_form(self, request, context, *args, **kwargs):
@@ -240,7 +242,8 @@ class ManualKpiEntryAdmin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "employee":
-            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+            today = timezone.now().date()
+            kwargs["queryset"] = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
@@ -288,7 +291,8 @@ class DolibarrUserIdentityAdmin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "employee":
-            kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
+            today = timezone.now().date()
+            kwargs["queryset"] = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
