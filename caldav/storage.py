@@ -187,7 +187,7 @@ class Collection(BaseCollection):
         return CalendarEvent.objects.filter(user=self._user, uid=uid).exists()
 
     def upload(self, href, item):
-        """Upload/update an event. Returns (new_item, old_item_or_None)."""
+        """Upload/update an event. Returns Item (Radicale 3.3.x API)."""
         if not self._user:
             raise ValueError("Cannot upload to collection without user")
 
@@ -198,19 +198,6 @@ class Collection(BaseCollection):
         if not uid:
             import uuid
             uid = str(uuid.uuid4())
-
-        # Check for existing event (for returning old_item)
-        old_item = None
-        try:
-            existing = CalendarEvent.objects.get(user=self._user, uid=uid)
-            old_ical = serialize_event_to_ical(existing)
-            old_item = radicale_item.Item(
-                collection_path=self._path,
-                href=f"{uid}.ics",
-                text=old_ical,
-            )
-        except CalendarEvent.DoesNotExist:
-            pass
 
         # Create or update
         event, created = CalendarEvent.objects.update_or_create(
@@ -236,12 +223,11 @@ class Collection(BaseCollection):
         # Return new item
         new_ical = serialize_event_to_ical(event)
         new_href = f"{event.uid}.ics"
-        new_item = radicale_item.Item(
+        return radicale_item.Item(
             collection_path=self._path,
             href=new_href,
             text=new_ical,
         )
-        return new_item, old_item
 
     def delete(self, href=None):
         if not self._user:
@@ -345,7 +331,8 @@ class Storage(BaseStorage):
         raise NotImplementedError("Moving events between collections not supported")
 
     def create_collection(self, href, items=None, props=None):
-        """No-op: collections are virtual (backed by DB queries)."""
+        """No-op: collections are virtual (backed by DB queries).
+        Returns BaseCollection (Radicale 3.3.x API)."""
         path = href.strip("/")
         segments = [s for s in path.split("/") if s]
 
@@ -359,17 +346,14 @@ class Storage(BaseStorage):
         col = Collection(self, path, user=user, tag=tag, props=props or {})
 
         # Process initial items if provided
-        items_map = {}
-        errors = []
         if items:
             for item in items:
                 try:
-                    new_item, _ = col.upload(item.href, item)
-                    items_map[item.href] = new_item
-                except Exception as e:
-                    errors.append(str(e))
+                    col.upload(item.href, item)
+                except Exception:
+                    pass
 
-        return col, items_map, errors
+        return col
 
     def verify(self):
         return True

@@ -50,13 +50,13 @@ class StorageCollectionTest(TestCase):
         ical_text = self._create_ical(uid, 'New Event', start, end, 'A new event.')
         item = self._make_item(ical_text, href=f"{uid}.ics")
 
-        new_item, old_item = self.collection.upload(f"{uid}.ics", item)
+        new_item = self.collection.upload(f"{uid}.ics", item)
 
         self.assertEqual(CalendarEvent.objects.count(), 1)
         event = CalendarEvent.objects.first()
         self.assertEqual(event.uid, uid)
         self.assertEqual(event.title, 'New Event')
-        self.assertIsNone(old_item)
+        self.assertIsNotNone(new_item)
 
     def test_upload_updates_event(self):
         uid = str(uuid.uuid4())
@@ -69,13 +69,13 @@ class StorageCollectionTest(TestCase):
         start2 = self.utc.localize(datetime(2024, 1, 1, 12))
         end2 = self.utc.localize(datetime(2024, 1, 1, 13))
         ical2 = self._create_ical(uid, 'Updated', start2, end2)
-        new_item, old_item = self.collection.upload(f"{uid}.ics", self._make_item(ical2, f"{uid}.ics"))
+        new_item = self.collection.upload(f"{uid}.ics", self._make_item(ical2, f"{uid}.ics"))
 
         self.assertEqual(CalendarEvent.objects.count(), 1)
         event = CalendarEvent.objects.get(uid=uid)
         self.assertEqual(event.title, 'Updated')
         self.assertEqual(event.start_date, start2)
-        self.assertIsNotNone(old_item)
+        self.assertIsNotNone(new_item)
 
     def test_upload_parses_alarm(self):
         uid = str(uuid.uuid4())
