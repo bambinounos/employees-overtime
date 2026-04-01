@@ -3,6 +3,7 @@ from wsgidav.dav_provider import DAVCollection, DAVNonCollection
 from caldav.models import CalendarEvent
 import vobject
 from datetime import timedelta
+from io import BytesIO
 import hashlib
 import logging
 import uuid
@@ -132,22 +133,8 @@ class CalendarEventResource(DAVNonCollection):
         super().__init__(path, environ)
         self.event = event
 
-    def support_etag(self):
-        return True
-
-    def get_etag(self):
-        content = self.get_content()
-        if isinstance(content, str):
-            content = content.encode('utf-8')
-        return hashlib.md5(content).hexdigest()
-
-    def get_content_type(self):
-        return "text/calendar"
-
-    def get_content_length(self):
-        return len(self.get_content().read())
-
-    def get_content(self):
+    def _serialize(self):
+        """Serialize event to iCalendar bytes."""
         import pytz
         cal = vobject.iCalendar()
         vevent = cal.add('vevent')
@@ -170,4 +157,20 @@ class CalendarEventResource(DAVNonCollection):
             valarm.add('description').value = self.event.title
             valarm.add('trigger').value = timedelta(minutes=-self.event.alarm_minutes)
 
-        return cal.serialize()
+        return cal.serialize().encode('utf-8')
+
+    def support_etag(self):
+        return True
+
+    def get_etag(self):
+        return hashlib.md5(self._serialize()).hexdigest()
+
+    def get_content_type(self):
+        return "text/calendar; charset=utf-8"
+
+    def get_content_length(self):
+        return len(self._serialize())
+
+    def get_content(self):
+        """Returns a file-like stream as required by WsgiDAV."""
+        return BytesIO(self._serialize())
