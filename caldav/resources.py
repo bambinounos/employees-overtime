@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from wsgidav.dav_provider import DAVCollection, DAVNonCollection
 from caldav.models import CalendarEvent
 import vobject
+from lxml import etree
 from datetime import timedelta
 from io import BytesIO
 import hashlib
@@ -9,6 +10,8 @@ import logging
 import uuid
 
 logger = logging.getLogger(__name__)
+
+CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
 
 
 class RootCollection(DAVCollection):
@@ -48,10 +51,33 @@ class UserPrincipal(DAVCollection):
 
 
 class CalendarCollection(DAVCollection):
-    """Calendar: /username/default/ — contains the actual events."""
+    """Calendar: /username/default/ — CalDAV calendar collection with proper resourcetype."""
     def __init__(self, path, environ, user):
         super().__init__(path, environ)
         self.user = user
+
+    def get_display_name(self):
+        return "Tareas"
+
+    def get_property_names(self, *, is_allprop):
+        names = super().get_property_names(is_allprop=is_allprop)
+        # Add CalDAV-specific properties
+        names.append(f"{{{CALDAV_NS}}}supported-calendar-component-set")
+        return names
+
+    def get_property_value(self, name):
+        if name == "{DAV:}resourcetype":
+            # Return both <D:collection/> AND <C:calendar/> for CalDAV clients
+            el = etree.Element(name)
+            etree.SubElement(el, "{DAV:}collection")
+            etree.SubElement(el, f"{{{CALDAV_NS}}}calendar")
+            return el
+        if name == f"{{{CALDAV_NS}}}supported-calendar-component-set":
+            el = etree.Element(name)
+            comp = etree.SubElement(el, f"{{{CALDAV_NS}}}comp")
+            comp.set("name", "VEVENT")
+            return el
+        return super().get_property_value(name)
 
     def get_member_names(self):
         events = CalendarEvent.objects.filter(user=self.user)
@@ -139,7 +165,6 @@ class CalendarEventResource(DAVNonCollection):
         cal = vobject.iCalendar()
         vevent = cal.add('vevent')
         vevent.add('summary').value = self.event.title
-        # Convert to pytz.UTC so vobject can resolve the TZID
         start = self.event.start_date
         end = self.event.end_date
         if start and hasattr(start, 'astimezone'):
