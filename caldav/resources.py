@@ -168,7 +168,6 @@ class CalendarEventResource(DAVNonCollection):
             valarm = vevent.add('valarm')
             valarm.add('action').value = 'DISPLAY'
             valarm.add('description').value = self.event.title
-            trigger = f"-PT{self.event.alarm_minutes}M"
-            valarm.add('trigger').value = trigger
+            valarm.add('trigger').value = timedelta(minutes=-self.event.alarm_minutes)
 
         return cal.serialize()
