@@ -4,10 +4,13 @@
 
 | Campo | Valor |
 |-------|-------|
-| **URL** | `https://[tu-dominio]/caldav-server/[tu_usuario]/` |
+| **URL** | `https://[tu-dominio]/caldav-server/[tu_usuario]/default/` |
 | **Usuario** | Tu usuario del sistema (el mismo que usas para iniciar sesion) |
 | **Password** | Tu contrasena del sistema |
 | **Tipo** | CalDAV |
+
+> **Importante:** El usuario es exacto — las mayusculas y minusculas importan.
+> Ejemplo: si tu usuario es `JOHANAMEJIA`, la URL es `/caldav-server/JOHANAMEJIA/default/`
 
 Cada usuario tiene su **calendario individual** — solo veras tus propias tareas.
 
@@ -19,7 +22,7 @@ Cada usuario tiene su **calendario individual** — solo veras tus propias tarea
 2. En el panel de calendarios, click derecho → **"Nuevo calendario..."**
 3. Selecciona **"En la red"** → Siguiente
 4. Formato: **CalDAV**
-5. URL: `https://[tu-dominio]/caldav-server/[tu_usuario]/`
+5. URL: `https://[tu-dominio]/caldav-server/[tu_usuario]/default/`
 6. Nombre: "Tareas Trabajo" (o el que prefieras)
 7. Click **Siguiente** → ingresa tu usuario y contrasena
 8. Marca **"Recordar contrasena"** si deseas
@@ -33,7 +36,7 @@ Google Calendar no soporta CalDAV directamente. Se usa la app **DAVx5**:
 
 1. Instala **DAVx5** desde Play Store o F-Droid
 2. Abre DAVx5 → **"+"** → **"Iniciar sesion con URL y nombre de usuario"**
-3. URL base: `https://[tu-dominio]/caldav-server/`
+3. URL base: `https://[tu-dominio]/caldav-server/[tu_usuario]/default/`
 4. Ingresa tu usuario y contrasena
 5. DAVx5 detectara tu calendario automaticamente
 6. Marca la casilla del calendario para sincronizar
@@ -52,7 +55,7 @@ Google Calendar no soporta CalDAV directamente. Se usa la app **DAVx5**:
 5. Contrasena: tu contrasena
 6. Descripcion: "Tareas Trabajo"
 7. En **Ajustes avanzados**:
-   - Ruta: `/caldav-server/[tu_usuario]/`
+   - Ruta: `/caldav-server/[tu_usuario]/default/`
    - Puerto: `443`
    - SSL: **Activado**
 
@@ -63,7 +66,7 @@ Google Calendar no soporta CalDAV directamente. Se usa la app **DAVx5**:
 3. Tipo: **CalDAV**
 4. Usuario: tu usuario del sistema
 5. Contrasena: tu contrasena
-6. Direccion del servidor: `https://[tu-dominio]/caldav-server/[tu_usuario]/`
+6. Direccion del servidor: `https://[tu-dominio]/caldav-server/[tu_usuario]/default/`
 
 ---
 
@@ -75,7 +78,7 @@ Outlook no soporta CalDAV de forma nativa. Se necesita un plugin:
 2. En Outlook: **Herramientas → CalDav Synchronizer → Perfiles de sincronizacion**
 3. Click **Anadir** → selecciona **CalDAV generico**
 4. Configura:
-   - URL: `https://[tu-dominio]/caldav-server/[tu_usuario]/`
+   - URL: `https://[tu-dominio]/caldav-server/[tu_usuario]/default/`
    - Usuario y contrasena
    - Intervalo de sincronizacion: 15 minutos (recomendado)
 5. Click **Probar configuracion** para verificar
@@ -106,7 +109,8 @@ Outlook no soporta CalDAV de forma nativa. Se necesita un plugin:
 
 | Problema | Solucion |
 |----------|----------|
-| "No se puede conectar" | Verifica que la URL termine con `/` y que tu usuario sea exacto (las mayusculas importan) |
+| "No se puede conectar" | Verifica que la URL termine con `/default/` y que tu usuario sea exacto (las mayusculas importan) |
+| "Aparecen muchos calendarios" | Estas usando la URL vieja sin `/default/`. Elimina el calendario y agrega uno nuevo con la URL correcta |
 | "Error de autenticacion" | Verifica que puedes iniciar sesion en el sistema web con el mismo usuario y contrasena |
 | "Calendario vacio" | Solo aparecen tareas que tienen fecha limite asignada |
 | "Eventos duplicados" | Evita editar el mismo evento en el calendario y en el sistema al mismo tiempo |
@@ -120,3 +124,4 @@ Outlook no soporta CalDAV de forma nativa. Se necesita un plugin:
 - La alarma por defecto es **30 minutos antes** de la fecha limite
 - Los eventos se crean como bloques de **1 hora** a partir de la fecha limite
 - Si mueves un evento en tu calendario, la fecha limite de la tarea se actualizara automaticamente en el sistema
+- El usuario en la URL debe coincidir exactamente con tu nombre de usuario del sistema (incluyendo mayusculas)
