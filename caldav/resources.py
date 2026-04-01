@@ -148,12 +148,21 @@ class CalendarEventResource(DAVNonCollection):
         return len(self.get_content().read())
 
     def get_content(self):
+        import pytz
         cal = vobject.iCalendar()
         vevent = cal.add('vevent')
         vevent.add('summary').value = self.event.title
-        vevent.add('dtstart').value = self.event.start_date
-        vevent.add('dtend').value = self.event.end_date
-        vevent.add('description').value = self.event.description
+        # Convert to pytz.UTC so vobject can resolve the TZID
+        start = self.event.start_date
+        end = self.event.end_date
+        if start and hasattr(start, 'astimezone'):
+            start = start.astimezone(pytz.UTC)
+        if end and hasattr(end, 'astimezone'):
+            end = end.astimezone(pytz.UTC)
+        vevent.add('uid').value = self.event.uid or f"event-{self.event.id}@payroll"
+        vevent.add('dtstart').value = start
+        vevent.add('dtend').value = end
+        vevent.add('description').value = self.event.description or ''
 
         if self.event.alarm_minutes:
             valarm = vevent.add('valarm')
