@@ -9,39 +9,54 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+
 class RootCollection(DAVCollection):
+    """Root: / — lists authenticated user's principal."""
     def __init__(self, path, environ):
         super().__init__(path, environ)
 
     def get_member_names(self):
-        # Only list the authenticated user's calendar
         if self.environ.get("wsgidav.auth.user_name"):
             return [self.environ["wsgidav.auth.user_name"]]
         return []
 
     def get_member(self, name):
-        # Return a calendar resource for the given user, only if authenticated
         auth_user = self.environ.get("wsgidav.auth.user_name")
         if auth_user and name == auth_user:
             try:
                 user = User.objects.get(username=name)
-                return UserCalendarCollection(f"/{name}", self.environ, user)
+                return UserPrincipal(f"/{name}", self.environ, user)
             except User.DoesNotExist:
                 return None
         return None
 
-class UserCalendarCollection(DAVCollection):
+
+class UserPrincipal(DAVCollection):
+    """Principal: /username/ — lists the user's calendars (just one: 'default')."""
     def __init__(self, path, environ, user):
         super().__init__(path, environ)
         self.user = user
 
     def get_member_names(self):
-        # Return a list of calendar events for this user
+        return ['default']
+
+    def get_member(self, name):
+        if name == 'default':
+            return CalendarCollection(f"{self.path}/default", self.environ, self.user)
+        return None
+
+
+class CalendarCollection(DAVCollection):
+    """Calendar: /username/default/ — contains the actual events."""
+    def __init__(self, path, environ, user):
+        super().__init__(path, environ)
+        self.user = user
+
+    def get_member_names(self):
         events = CalendarEvent.objects.filter(user=self.user)
         return [f"{event.id}.ics" for event in events]
 
     def get_member(self, name):
-        # Return a calendar event resource
         try:
             event_id = int(name.replace(".ics", ""))
             event = CalendarEvent.objects.get(id=event_id, user=self.user)
@@ -105,12 +120,14 @@ class UserCalendarCollection(DAVCollection):
             task = event.task
             if task.due_date != start_date:
                 task.due_date = start_date
-                task._skip_calendar_sync = True  # Prevent signal from re-updating CalendarEvent
+                task._skip_calendar_sync = True
                 task.save(update_fields=['due_date'])
 
         return CalendarEventResource(f"{self.path}/{event.id}.ics", self.environ, event)
 
+
 class CalendarEventResource(DAVNonCollection):
+    """Event: /username/default/123.ics — individual calendar event."""
     def __init__(self, path, environ, event):
         super().__init__(path, environ)
         self.event = event

@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from wsgidav.dav_provider import DAVProvider
-from caldav.resources import RootCollection, UserCalendarCollection, CalendarEventResource
+from caldav.resources import RootCollection, UserPrincipal, CalendarCollection, CalendarEventResource
 from caldav.models import CalendarEvent
 
 
@@ -13,42 +13,46 @@ class CalDAVProvider(DAVProvider):
         path = path.rstrip("/")
         segments = [s for s in path.split("/") if s]
 
+        auth_user = environ.get("wsgidav.auth.user_name")
+
         if len(segments) == 0:
             # Root: /
             return RootCollection("/", environ)
 
-        elif len(segments) == 1:
-            # User calendar: /Admin-RH/
-            username = segments[0]
-            auth_user = environ.get("wsgidav.auth.user_name")
-            if auth_user and username == auth_user:
-                try:
-                    user = User.objects.get(username=username)
-                    return UserCalendarCollection(f"/{username}", environ, user)
-                except User.DoesNotExist:
-                    return None
+        username = segments[0]
+        if not auth_user or username != auth_user:
             return None
 
-        elif len(segments) == 2:
-            # Event resource: /Admin-RH/123.ics
-            username = segments[0]
-            event_name = segments[1]
-            auth_user = environ.get("wsgidav.auth.user_name")
-            if auth_user and username == auth_user:
-                try:
-                    user = User.objects.get(username=username)
-                    event_id = int(event_name.replace(".ics", ""))
-                    event = CalendarEvent.objects.get(id=event_id, user=user)
-                    return CalendarEventResource(path, environ, event)
-                except (User.DoesNotExist, CalendarEvent.DoesNotExist, ValueError):
-                    # For PUT requests (new events), return the collection so WsgiDAV calls put()
-                    if environ.get("REQUEST_METHOD") == "PUT":
-                        try:
-                            user = User.objects.get(username=username)
-                            return UserCalendarCollection(f"/{username}", environ, user)
-                        except User.DoesNotExist:
-                            return None
-                    return None
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
             return None
+
+        if len(segments) == 1:
+            # Principal: /username/
+            return UserPrincipal(f"/{username}", environ, user)
+
+        elif len(segments) == 2:
+            # Calendar collection: /username/default/
+            cal_name = segments[1]
+            if cal_name == 'default':
+                return CalendarCollection(f"/{username}/default", environ, user)
+            return None
+
+        elif len(segments) == 3:
+            # Event: /username/default/123.ics
+            cal_name = segments[1]
+            event_name = segments[2]
+            if cal_name != 'default':
+                return None
+            try:
+                event_id = int(event_name.replace(".ics", ""))
+                event = CalendarEvent.objects.get(id=event_id, user=user)
+                return CalendarEventResource(f"/{username}/default/{event_name}", environ, event)
+            except (CalendarEvent.DoesNotExist, ValueError):
+                # For PUT requests (new events), return the collection
+                if environ.get("REQUEST_METHOD") == "PUT":
+                    return CalendarCollection(f"/{username}/default", environ, user)
+                return None
 
         return None

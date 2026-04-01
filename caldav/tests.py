@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from caldav.models import CalendarEvent
-from caldav.resources import UserCalendarCollection
+from caldav.resources import CalendarCollection
 from employees.models import Employee, TaskBoard, TaskList, Task
 from io import BytesIO
 import vobject
@@ -15,7 +15,7 @@ class CalDAVPutTest(TestCase):
         self.user = User.objects.create_user(username='testuser', password='password')
         provider = Mock()
         self.environ = {"wsgidav.provider": provider}
-        self.collection = UserCalendarCollection(f"/{self.user.username}", self.environ, self.user)
+        self.collection = CalendarCollection(f"/{self.user.username}/default", self.environ, self.user)
         self.utc = pytz.UTC
 
     def _create_ical(self, uid, summary, start, end, description, alarm_minutes=None):
@@ -96,7 +96,7 @@ class CalDAVBidirectionalSyncTest(TestCase):
 
         provider = Mock()
         self.environ = {"wsgidav.provider": provider}
-        self.collection = UserCalendarCollection(f"/{self.user.username}", self.environ, self.user)
+        self.collection = CalendarCollection(f"/{self.user.username}/default", self.environ, self.user)
 
     def _create_ical(self, uid, summary, start, end, description='', alarm_minutes=None):
         cal = vobject.iCalendar()
