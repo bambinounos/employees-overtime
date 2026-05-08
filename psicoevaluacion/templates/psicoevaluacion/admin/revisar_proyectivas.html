@@ -46,6 +46,15 @@
         .color-data { padding: 8px; background: #f9fafb; border-radius: 4px; font-size: 0.85rem; }
         .resultado-actual { padding: 12px; background: #f0f9ff; border-radius: 6px; margin-top: 12px; }
         .resultado-actual strong { color: #1e40af; }
+        .detalle-card { margin-top: 16px; }
+        .detalle-card h3 { font-size: 0.95rem; color: #1e3a5f; margin-bottom: 8px; }
+        .detalle-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .detalle-table th { background: #1e3a5f; color: #fff; padding: 6px 8px; text-align: left; }
+        .detalle-table td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+        .detalle-table tr:nth-child(even) td { background: #f9fafb; }
+        .detalle-table .num { text-align: center; width: 60px; }
+        .detalle-table tfoot td { font-weight: 600; background: #f0f9ff; }
+        .empty-state { color: #999; font-style: italic; font-size: 0.85rem; padding: 8px 0; }
     </style>
 </head>
 <body>
@@ -178,6 +187,32 @@
             </div>
         </div>
 
+        <!-- Detalle de sub-indicadores (Árbol, Lluvia, Colores) -->
+        <div class="detalle-card" id="detalle-card" style="margin-top:24px; padding-top:16px; border-top:1px dashed #ddd;">
+            <h2 style="font-size:1.05rem; margin-bottom:12px;">
+                Sub-indicadores por prueba
+            </h2>
+            <p style="font-size:0.85rem; color:#666; margin-bottom:12px;">
+                Desglose detallado por r&uacute;brica. Se actualiza autom&aacute;ticamente al calificar con IA.
+            </p>
+            <div id="detalle-arbol-container">
+                <h3>Test del &Aacute;rbol</h3>
+                <div id="detalle-arbol-body"></div>
+            </div>
+            <div id="detalle-persona-container" style="margin-top:16px;">
+                <h3>Persona Bajo la Lluvia</h3>
+                <div id="detalle-persona-body"></div>
+            </div>
+            <div id="detalle-colores-container" style="margin-top:16px;">
+                <h3>Test de Colores (L&uuml;scher)</h3>
+                <div id="detalle-colores-body"></div>
+            </div>
+        </div>
+
+        {{ resultado.detalle_arbol|default_if_none:""|json_script:"detalle-arbol-data" }}
+        {{ resultado.detalle_persona_lluvia|default_if_none:""|json_script:"detalle-persona-data" }}
+        {{ resultado.detalle_colores|default_if_none:""|json_script:"detalle-colores-data" }}
+
         <!-- Subdimensiones de Frases -->
         <div style="margin-top:20px; padding-top:16px; border-top:1px dashed #ddd;">
             <h3 style="font-size:0.95rem; color:#555; margin-bottom:10px;">
@@ -293,6 +328,78 @@ function applyIASuggestions(r) {
         document.getElementById('score-colores').value = r.colores.puntuacion;
         showInterp('interp-colores', r.colores);
     }
+    // Sub-indicadores tablas
+    if (r.arbol && r.arbol.detalle) renderDetalle('detalle-arbol-body', r.arbol.detalle);
+    if (r.persona_lluvia && r.persona_lluvia.detalle) renderDetalle('detalle-persona-body', r.persona_lluvia.detalle);
+    if (r.colores && r.colores.detalle) renderDetalle('detalle-colores-body', r.colores.detalle);
+}
+
+function renderDetalle(elemId, detalle) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    if (!detalle || !Array.isArray(detalle.indicadores) || detalle.indicadores.length === 0) {
+        el.innerHTML = '<div class="empty-state">Sin datos. Ejecute "Calificar con IA" para generar el desglose.</div>';
+        return;
+    }
+    let html = '<table class="detalle-table">'
+        + '<thead><tr>'
+        + '<th>Indicador</th><th class="num">Puntaje</th><th class="num">Max</th><th>Observaci&oacute;n</th>'
+        + '</tr></thead><tbody>';
+    detalle.indicadores.forEach(item => {
+        html += '<tr>'
+            + '<td>' + escapeHtml(item.nombre || '') + '</td>'
+            + '<td class="num">' + (item.puntaje ?? '') + '</td>'
+            + '<td class="num">' + (item.max ?? '') + '</td>'
+            + '<td>' + escapeHtml(item.observacion || '') + '</td>'
+            + '</tr>';
+    });
+    html += '</tbody>';
+    if (detalle.total_obtenido !== undefined && detalle.total_max !== undefined) {
+        const norm = detalle.puntaje_normalizado !== undefined
+            ? ' &mdash; ' + detalle.puntaje_normalizado + '/10'
+            : '';
+        html += '<tfoot><tr>'
+            + '<td>Total</td>'
+            + '<td class="num">' + detalle.total_obtenido + '</td>'
+            + '<td class="num">' + detalle.total_max + '</td>'
+            + '<td>' + norm + '</td>'
+            + '</tr></tfoot>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+}
+
+function loadInitialDetalle() {
+    const map = [
+        ['detalle-arbol-data', 'detalle-arbol-body', 'arbol'],
+        ['detalle-persona-data', 'detalle-persona-body', 'persona_lluvia'],
+        ['detalle-colores-data', 'detalle-colores-body', 'colores'],
+    ];
+    map.forEach(([scriptId, bodyId, key]) => {
+        const tag = document.getElementById(scriptId);
+        let detalle = null;
+        if (tag && tag.textContent && tag.textContent.trim()) {
+            try {
+                detalle = JSON.parse(tag.textContent);
+                if (detalle === '' || detalle === null) detalle = null;
+            } catch (e) {
+                detalle = null;
+            }
+        }
+        renderDetalle(bodyId, detalle);
+        // Pre-cache in iaResults so save uses the persisted detalle if user
+        // doesn't re-run IA
+        if (detalle) {
+            iaResults[key] = iaResults[key] || {};
+            iaResults[key].detalle = detalle;
+        }
+    });
 }
 
 function showInterp(elemId, result) {
@@ -375,6 +482,9 @@ function aplicarCalificacion() {
         showAlert('Error: ' + err.message, 'error');
     });
 }
+
+// On page load, hydrate sub-indicators tables from server-rendered JSON
+document.addEventListener('DOMContentLoaded', loadInitialDetalle);
 </script>
 </body>
 </html>
