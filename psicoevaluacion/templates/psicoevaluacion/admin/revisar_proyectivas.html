@@ -165,8 +165,8 @@
                 <div class="interp" id="interp-persona"></div>
             </div>
             <div class="score-item">
-                <label>Frases Incompletas (1-10)</label>
-                <input type="number" id="score-frases" min="1" max="10" step="1"
+                <label>Frases Incompletas (general, 1-10)</label>
+                <input type="number" id="score-frases" min="1" max="10" step="0.1"
                        value="{{ resultado.puntaje_frases|default_if_none:'' }}">
                 <div class="interp" id="interp-frases"></div>
             </div>
@@ -175,6 +175,33 @@
                 <input type="number" id="score-colores" min="1" max="10" step="1"
                        value="">
                 <div class="interp" id="interp-colores"></div>
+            </div>
+        </div>
+
+        <!-- Subdimensiones de Frases -->
+        <div style="margin-top:20px; padding-top:16px; border-top:1px dashed #ddd;">
+            <h3 style="font-size:0.95rem; color:#555; margin-bottom:10px;">
+                Frases Incompletas — desglose por dimensi&oacute;n
+            </h3>
+            <div class="scores-grid">
+                <div class="score-item">
+                    <label>Actitud al trabajo (1-10)</label>
+                    <input type="number" id="score-frases-trabajo" min="1" max="10" step="0.1"
+                           value="{{ resultado.puntaje_frases_trabajo|default_if_none:'' }}">
+                    <div class="interp" id="interp-frases-trabajo"></div>
+                </div>
+                <div class="score-item">
+                    <label>Relaci&oacute;n con autoridad (1-10)</label>
+                    <input type="number" id="score-frases-autoridad" min="1" max="10" step="0.1"
+                           value="{{ resultado.puntaje_frases_autoridad|default_if_none:'' }}">
+                    <div class="interp" id="interp-frases-autoridad"></div>
+                </div>
+                <div class="score-item">
+                    <label>Compromiso organizacional (1-10)</label>
+                    <input type="number" id="score-frases-compromiso" min="1" max="10" step="0.1"
+                           value="{{ resultado.puntaje_frases_compromiso|default_if_none:'' }}">
+                    <div class="interp" id="interp-frases-compromiso"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -247,6 +274,20 @@ function applyIASuggestions(r) {
     if (r.frases) {
         document.getElementById('score-frases').value = r.frases.puntuacion;
         showInterp('interp-frases', r.frases);
+        // Subdimensiones
+        const dims = r.frases.dimensiones || {};
+        if (dims.FR_TRAB) {
+            document.getElementById('score-frases-trabajo').value = dims.FR_TRAB.puntuacion;
+            showInterp('interp-frases-trabajo', dims.FR_TRAB);
+        }
+        if (dims.FR_AUTO) {
+            document.getElementById('score-frases-autoridad').value = dims.FR_AUTO.puntuacion;
+            showInterp('interp-frases-autoridad', dims.FR_AUTO);
+        }
+        if (dims.FR_COMP) {
+            document.getElementById('score-frases-compromiso').value = dims.FR_COMP.puntuacion;
+            showInterp('interp-frases-compromiso', dims.FR_COMP);
+        }
     }
     if (r.colores) {
         document.getElementById('score-colores').value = r.colores.puntuacion;
@@ -274,6 +315,25 @@ function aplicarCalificacion() {
     if (persona) payload.puntaje_persona_lluvia = parseFloat(persona);
     if (frases) payload.puntaje_frases = parseFloat(frases);
     if (colores) payload.puntaje_colores = parseFloat(colores);
+
+    // Read Frases subdimension inputs (manual edits override IA)
+    const fTrab = document.getElementById('score-frases-trabajo').value;
+    const fAuto = document.getElementById('score-frases-autoridad').value;
+    const fComp = document.getElementById('score-frases-compromiso').value;
+    if (fTrab) payload.puntaje_frases_trabajo = parseFloat(fTrab);
+    if (fAuto) payload.puntaje_frases_autoridad = parseFloat(fAuto);
+    if (fComp) payload.puntaje_frases_compromiso = parseFloat(fComp);
+
+    // Sub-indicadores detallados (vienen tal cual de la IA)
+    if (iaResults.arbol && iaResults.arbol.detalle) {
+        payload.detalle_arbol = iaResults.arbol.detalle;
+    }
+    if (iaResults.persona_lluvia && iaResults.persona_lluvia.detalle) {
+        payload.detalle_persona_lluvia = iaResults.persona_lluvia.detalle;
+    }
+    if (iaResults.colores && iaResults.colores.detalle) {
+        payload.detalle_colores = iaResults.colores.detalle;
+    }
 
     // Include interpretations from IA
     if (iaResults.arbol) payload.interpretacion_arbol = iaResults.arbol.interpretacion;

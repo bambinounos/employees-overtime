@@ -468,9 +468,24 @@ class ResultadoFinal(models.Model):
     # Proyectivas (evaluación manual)
     puntaje_arbol = models.FloatField(null=True)
     puntaje_persona_lluvia = models.FloatField(null=True)
-    puntaje_frases = models.FloatField(null=True)
+    puntaje_frases = models.FloatField(null=True,
+        help_text="Promedio general de Frases Incompletas (1-10)")
+    puntaje_frases_trabajo = models.FloatField(null=True, blank=True,
+        help_text="Frases: Actitud hacia el trabajo (FR_TRAB, 1-10)")
+    puntaje_frases_autoridad = models.FloatField(null=True, blank=True,
+        help_text="Frases: Relación con la autoridad (FR_AUTO, 1-10)")
+    puntaje_frases_compromiso = models.FloatField(null=True, blank=True,
+        help_text="Frases: Compromiso organizacional (FR_COMP, 1-10)")
     puntaje_colores = models.JSONField(null=True, blank=True,
         help_text="Interpretación de secuencia de colores")
+
+    # Sub-indicadores detallados de proyectivas (JSON con rúbrica desglosada)
+    detalle_arbol = models.JSONField(null=True, blank=True,
+        help_text="Sub-indicadores del Test del Árbol (rúbrica desglosada)")
+    detalle_persona_lluvia = models.JSONField(null=True, blank=True,
+        help_text="Sub-indicadores de Persona Bajo la Lluvia")
+    detalle_colores = models.JSONField(null=True, blank=True,
+        help_text="Sub-indicadores del Test de Colores Lüscher")
 
     # Confiabilidad v2
     puntaje_deseabilidad_social = models.FloatField(null=True, blank=True,

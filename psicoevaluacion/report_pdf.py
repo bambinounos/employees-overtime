@@ -185,16 +185,65 @@ def generar_informe_pdf(evaluacion, resultado):
         ]
         elements.append(_make_table(aten_data))
 
+    # ── Memoria Visual ──
+    if resultado.puntaje_memoria_visual is not None:
+        elements.append(Paragraph('Memoria Visual', styles['SectionTitle']))
+        mv_data = [
+            ['Subseccion', 'Puntaje', 'Descripcion'],
+            ['Precision (preguntas reales)',
+             _fmt(resultado.puntaje_mv_precision, 0, '%'),
+             'Aciertos sobre detalles vistos'],
+            ['Honestidad (preguntas trampa)',
+             _fmt(resultado.puntaje_mv_honestidad, 0, '%'),
+             'Rechazo a recuerdos falsos'],
+            ['Score combinado',
+             _fmt(resultado.puntaje_memoria_visual, 0, '%'),
+             'Total ponderado'],
+        ]
+        elements.append(_make_table(mv_data))
+
     # ── Proyectivas ──
     elements.append(Paragraph('Pruebas Proyectivas', styles['SectionTitle']))
     proy_data = [
         ['Prueba', 'Puntaje', 'Escala'],
         ['Test del Arbol', _fmt(resultado.puntaje_arbol, 0), '1-10'],
         ['Persona bajo la Lluvia', _fmt(resultado.puntaje_persona_lluvia, 0), '1-10'],
-        ['Frases Incompletas', _fmt(resultado.puntaje_frases, 0), '1-10'],
-        ['Test de Colores', _fmt_colores(resultado.puntaje_colores), '1-10'],
+        ['Frases Incompletas (general)', _fmt(resultado.puntaje_frases, 1), '1-10'],
     ]
+    # Desglose por subdimension cuando existe
+    if (resultado.puntaje_frases_trabajo is not None
+            or resultado.puntaje_frases_autoridad is not None
+            or resultado.puntaje_frases_compromiso is not None):
+        proy_data.append(
+            ['  - Actitud al trabajo',
+             _fmt(resultado.puntaje_frases_trabajo, 1), '1-10'])
+        proy_data.append(
+            ['  - Relacion con autoridad',
+             _fmt(resultado.puntaje_frases_autoridad, 1), '1-10'])
+        proy_data.append(
+            ['  - Compromiso organizacional',
+             _fmt(resultado.puntaje_frases_compromiso, 1), '1-10'])
+    proy_data.append(
+        ['Test de Colores', _fmt_colores(resultado.puntaje_colores), '1-10'])
     elements.append(_make_table(proy_data))
+
+    # ── Detalle de proyectivas (sub-indicadores con rúbrica) ──
+    detalles = [
+        ('Test del Árbol — desglose', resultado.detalle_arbol),
+        ('Persona Bajo la Lluvia — desglose', resultado.detalle_persona_lluvia),
+        ('Test de Colores — desglose', resultado.detalle_colores),
+    ]
+    if any(d for _, d in detalles):
+        elements.append(Paragraph('Detalle de Pruebas Proyectivas', styles['SectionTitle']))
+        for titulo, det in detalles:
+            if not det:
+                continue
+            elements.append(Spacer(1, 4))
+            elements.append(Paragraph(
+                f'<b>{titulo}</b>', styles['SubInfo']))
+            tabla_det = _make_detalle_table(det)
+            if tabla_det is not None:
+                elements.append(tabla_det)
 
     # Interpretations from observaciones
     if resultado.observaciones:
@@ -268,6 +317,41 @@ def _fmt_colores(value):
     if isinstance(value, dict):
         return _fmt(value.get('puntuacion'), 0)
     return str(value)
+
+
+def _make_detalle_table(detalle):
+    """Build a sub-table from a detalle JSON dict.
+
+    Expected shape: {"indicadores": [{"nombre": str, "puntaje": int, "max": int,
+    "observacion": str}, ...], "total_obtenido": int, "total_max": int}
+    Returns a Table or None if shape is invalid.
+    """
+    if not isinstance(detalle, dict):
+        return None
+    indicadores = detalle.get('indicadores')
+    if not isinstance(indicadores, list) or not indicadores:
+        return None
+
+    rows = [['Indicador', 'Puntaje', 'Max', 'Observacion']]
+    for item in indicadores:
+        if not isinstance(item, dict):
+            continue
+        rows.append([
+            str(item.get('nombre', ''))[:60],
+            str(item.get('puntaje', '')),
+            str(item.get('max', '')),
+            str(item.get('observacion', ''))[:120],
+        ])
+
+    total_obt = detalle.get('total_obtenido')
+    total_max = detalle.get('total_max')
+    if total_obt is not None and total_max is not None:
+        rows.append(['Total', str(total_obt), str(total_max), ''])
+
+    return _make_table(
+        rows,
+        col_widths=[2.0 * inch, 0.6 * inch, 0.5 * inch, 3.4 * inch],
+    )
 
 
 def _make_table(data, col_widths=None):

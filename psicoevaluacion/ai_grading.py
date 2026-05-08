@@ -37,6 +37,74 @@ Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
 {{"puntuacion": <1-10>, "interpretacion": "<análisis breve en español, máximo 200 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
 """
 
+# Rúbricas detalladas (nombre, puntaje_max)
+ARBOL_INDICADORES = [
+    ("Tamaño", 2),
+    ("Ubicación", 2),
+    ("Tronco", 2),
+    ("Copa / Follaje", 2),
+    ("Ramas", 2),
+    ("Raíces", 2),
+    ("Frutos / Flores / Hojas", 2),
+    ("Calidad del trazo", 2),
+    ("Detalles adicionales", 2),
+    ("Proporción general", 2),
+]
+PERSONA_LLUVIA_INDICADORES = [
+    ("Persona completa", 2),
+    ("Tamaño de la persona", 2),
+    ("Ubicación", 2),
+    ("Postura y orientación", 2),
+    ("Expresión facial", 2),
+    ("Vestimenta", 2),
+    ("Paraguas / Protección", 4),
+    ("Lluvia representada", 2),
+    ("Suelo / Línea base", 2),
+    ("Detalles del entorno", 2),
+]
+COLORES_INDICADORES = [
+    ("Consistencia entre rondas", 5),
+    ("Posición de Azul", 5),
+    ("Posición de Verde", 5),
+    ("Posición de Rojo", 5),
+    ("Posición de Amarillo", 5),
+    ("Acromáticos en últimas posiciones", 5),
+    ("Acromáticos en primeras posiciones (índice ansiedad)", 5),
+    ("Cromáticos en primeras posiciones", 5),
+]
+
+
+def _format_rubrica(indicadores):
+    """Formatea una lista [(nombre, max), ...] como bullets para el prompt."""
+    return "\n".join(f"- {nombre} (0-{max_pts})" for nombre, max_pts in indicadores)
+
+
+DRAWING_DETAIL_PROMPT = """\
+Eres un psicólogo experto en pruebas proyectivas gráficas.
+Analiza el dibujo de la prueba "{tipo_prueba}" calificando cada uno de los siguientes
+indicadores de la rúbrica oficial. Para cada indicador asigna un puntaje entre 0
+y su máximo, y agrega una observación breve (máximo 80 caracteres).
+
+RÚBRICA:
+{rubrica}
+
+REGLAS:
+- Respeta exactamente los nombres de la rúbrica.
+- "puntuacion" final (1-10) debe corresponder a normalizar (suma_obtenida / suma_max) * 10.
+- Si un indicador está ausente del dibujo, asigna 0 puntos.
+
+Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
+{{
+  "puntuacion": <1-10>,
+  "interpretacion": "<análisis breve en español, máximo 200 palabras>",
+  "confianza": "<ALTA|MEDIA|BAJA>",
+  "indicadores": [
+    {{"nombre": "<nombre exacto>", "puntaje": <int>, "max": <int>, "observacion": "<breve>"}},
+    ...
+  ]
+}}
+"""
+
 FRASES_PROMPT = """\
 Eres un psicólogo experto en la prueba de Frases Incompletas de Sacks.
 Analiza las siguientes respuestas agrupadas por dimensión.
@@ -52,20 +120,60 @@ Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
 {{"puntuacion": <1-10>, "interpretacion": "<análisis breve en español, máximo 200 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
 """
 
+FRASES_DIM_PROMPT = """\
+Eres un psicólogo experto en la prueba de Frases Incompletas de Sacks.
+Analiza las siguientes respuestas correspondientes a la dimensión "{dim_nombre}".
+
+{frases_texto}
+
+Evalúa específicamente esta dimensión:
+- Coherencia y profundidad de las respuestas
+- Indicadores favorables o desfavorables propios de la dimensión
+- Posibles signos de conflicto o adaptación
+
+Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
+{{"puntuacion": <1-10>, "interpretacion": "<análisis breve en español, máximo 150 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
+"""
+
+# Mapeo de código de dimensión a nombre legible
+FRASES_DIM_NOMBRES = {
+    'FR_TRAB': 'Actitud hacia el trabajo',
+    'FR_AUTO': 'Relación con la autoridad',
+    'FR_COMP': 'Compromiso organizacional',
+}
+
 COLORES_PROMPT = """\
 Eres un psicólogo experto en el Test de Colores de Lüscher.
 Analiza la siguiente secuencia de preferencia de colores:
 
 {colores_data}
 
-Evalúa:
-- Preferencias y rechazos significativos
-- Estado emocional actual
-- Necesidades y fuentes de estrés
-- Compatibilidad con un perfil laboral
+Evalúa cada uno de los siguientes indicadores de la rúbrica oficial.
+Para cada indicador asigna un puntaje entre 0 y su máximo, y una observación breve.
+
+RÚBRICA:
+{rubrica}
+
+NOTAS sobre los datos:
+- Códigos de color: 0=Gris, 1=Azul, 2=Verde, 3=Rojo-Anaranjado, 4=Amarillo, 5=Violeta, 6=Marrón, 7=Negro
+- Acromáticos: Gris (0), Negro (7), Marrón (6) — su presencia en cabecera puede indicar ansiedad
+- Cromáticos primarios: Azul (1), Verde (2), Rojo (3), Amarillo (4)
+- ronda1 y ronda2 son las dos pasadas; idealmente concuerdan
+
+REGLAS:
+- Respeta exactamente los nombres de la rúbrica.
+- "puntuacion" final (1-10) debe corresponder a (suma_obtenida / suma_max) * 10.
 
 Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
-{{"puntuacion": <1-10>, "interpretacion": "<análisis breve en español, máximo 200 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
+{{
+  "puntuacion": <1-10>,
+  "interpretacion": "<análisis breve en español, máximo 200 palabras>",
+  "confianza": "<ALTA|MEDIA|BAJA>",
+  "indicadores": [
+    {{"nombre": "<nombre exacto>", "puntaje": <int>, "max": <int>, "observacion": "<breve>"}},
+    ...
+  ]
+}}
 """
 
 
@@ -183,10 +291,68 @@ def _parse_json_response(text):
 # Public grading functions
 # ────────────────────────────────────────────────
 
+def _normalizar_indicadores(raw, rubrica):
+    """Valida y normaliza la lista de indicadores devuelta por la IA.
+
+    Garantiza que cada item tenga nombre/puntaje/max/observacion y descarta los
+    inválidos. Calcula totales. Devuelve un dict con la estructura esperada o
+    None si no hay datos utilizables.
+    """
+    if not isinstance(raw, list) or not raw:
+        return None
+
+    rubrica_dict = {nombre: max_pts for nombre, max_pts in rubrica}
+    indicadores_validos = []
+    total_obtenido = 0
+    total_max = 0
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        nombre = item.get("nombre")
+        puntaje = item.get("puntaje")
+        max_pts = item.get("max")
+        observacion = item.get("observacion", "")
+        if nombre is None or puntaje is None or max_pts is None:
+            continue
+        try:
+            puntaje_int = int(puntaje)
+            max_int = int(max_pts)
+        except (TypeError, ValueError):
+            continue
+        # Si la rúbrica define el max y la IA devolvió otro, preferir el oficial
+        if nombre in rubrica_dict:
+            max_int = rubrica_dict[nombre]
+        # Acotar puntaje a [0, max]
+        puntaje_int = max(0, min(puntaje_int, max_int))
+        indicadores_validos.append({
+            "nombre": str(nombre),
+            "puntaje": puntaje_int,
+            "max": max_int,
+            "observacion": str(observacion)[:200],
+        })
+        total_obtenido += puntaje_int
+        total_max += max_int
+
+    if not indicadores_validos:
+        return None
+
+    puntaje_normalizado = (total_obtenido / total_max * 10) if total_max > 0 else 0
+
+    return {
+        "indicadores": indicadores_validos,
+        "total_obtenido": total_obtenido,
+        "total_max": total_max,
+        "puntaje_normalizado": round(puntaje_normalizado, 1),
+    }
+
+
 def grade_drawing(config, respuesta):
-    """Analiza una imagen base64 de dibujo proyectivo (árbol / persona bajo la lluvia)."""
+    """Analiza una imagen base64 de dibujo proyectivo (árbol / persona bajo la lluvia).
+
+    Devuelve dict con puntuacion, interpretacion, confianza y `detalle` (rúbrica).
+    """
     tipo = respuesta.prueba.get_tipo_display()
-    prompt = DRAWING_PROMPT.format(tipo_prueba=tipo)
     image_b64 = respuesta.imagen_canvas or ""
     if not image_b64:
         return {
@@ -194,16 +360,50 @@ def grade_drawing(config, respuesta):
             "interpretacion": "No se encontró imagen para analizar.",
             "confianza": "BAJA",
         }
-    return _call_ai(config, prompt, image_b64=image_b64)
+
+    # Seleccionar rúbrica según tipo
+    tipo_codigo = respuesta.prueba.tipo
+    if tipo_codigo == 'ARBOL':
+        rubrica = ARBOL_INDICADORES
+    elif tipo_codigo == 'PERSONA_LLUVIA':
+        rubrica = PERSONA_LLUVIA_INDICADORES
+    else:
+        # Fallback al prompt genérico
+        prompt = DRAWING_PROMPT.format(tipo_prueba=tipo)
+        return _call_ai(config, prompt, image_b64=image_b64)
+
+    prompt = DRAWING_DETAIL_PROMPT.format(
+        tipo_prueba=tipo, rubrica=_format_rubrica(rubrica))
+    resultado = _call_ai(config, prompt, image_b64=image_b64)
+
+    # Normalizar y persistir el detalle
+    detalle = _normalizar_indicadores(resultado.get("indicadores"), rubrica)
+    if detalle is not None:
+        resultado["detalle"] = detalle
+        # Si la IA dio un puntaje inconsistente con la rúbrica, alinearlo
+        resultado["puntuacion"] = max(1, min(10, int(round(detalle["puntaje_normalizado"]))))
+    # Limpiar el array crudo para no duplicarlo en la respuesta
+    resultado.pop("indicadores", None)
+    return resultado
 
 
 def grade_frases(config, respuestas_qs):
-    """Analiza respuestas de frases incompletas agrupadas por dimensión."""
+    """Analiza respuestas de frases incompletas calificando cada dimensión por separado.
+
+    Retorna un dict con:
+        puntuacion: promedio general (1-10)
+        interpretacion: texto consolidado
+        confianza: peor confianza entre las dimensiones
+        dimensiones: {FR_TRAB: {...}, FR_AUTO: {...}, FR_COMP: {...}}
+    """
+    # Agrupar por código de dimensión (no display name) para poder mapear luego
     agrupadas = {}
     for r in respuestas_qs:
-        dim = r.pregunta.get_dimension_display() if r.pregunta else "General"
-        agrupadas.setdefault(dim, []).append({
-            "frase": r.pregunta.texto if r.pregunta else "",
+        if not r.pregunta:
+            continue
+        dim_code = r.pregunta.dimension or 'GENERAL'
+        agrupadas.setdefault(dim_code, []).append({
+            "frase": r.pregunta.texto,
             "respuesta": r.texto_respuesta,
         })
 
@@ -212,20 +412,61 @@ def grade_frases(config, respuestas_qs):
             "puntuacion": 5,
             "interpretacion": "No se encontraron frases para analizar.",
             "confianza": "BAJA",
+            "dimensiones": {},
         }
 
-    frases_texto = ""
-    for dim, items in agrupadas.items():
-        frases_texto += f"\n### {dim}\n"
+    # Calificar cada dimensión por separado
+    resultados_dim = {}
+    for dim_code, items in agrupadas.items():
+        dim_nombre = FRASES_DIM_NOMBRES.get(dim_code, dim_code)
+        frases_texto = ""
         for item in items:
             frases_texto += f'- "{item["frase"]}" → "{item["respuesta"]}"\n'
 
-    prompt = FRASES_PROMPT.format(frases_texto=frases_texto)
-    return _call_ai(config, prompt)
+        prompt = FRASES_DIM_PROMPT.format(
+            dim_nombre=dim_nombre, frases_texto=frases_texto)
+        try:
+            resultado = _call_ai(config, prompt)
+        except Exception as e:
+            logger.error("Error calificando dimension %s: %s", dim_code, e)
+            resultado = {
+                "puntuacion": 5,
+                "interpretacion": f"Error al calificar {dim_nombre}: {e}",
+                "confianza": "BAJA",
+            }
+        resultados_dim[dim_code] = resultado
+
+    # Promedio general
+    puntuaciones = [r['puntuacion'] for r in resultados_dim.values()]
+    promedio = sum(puntuaciones) / len(puntuaciones) if puntuaciones else 5
+
+    # Peor confianza
+    confianzas_orden = {'ALTA': 3, 'MEDIA': 2, 'BAJA': 1}
+    peor = min(
+        (confianzas_orden.get(r.get('confianza', 'BAJA'), 1)
+         for r in resultados_dim.values()),
+        default=1,
+    )
+    confianza_global = next(
+        (k for k, v in confianzas_orden.items() if v == peor), 'BAJA')
+
+    # Interpretación consolidada
+    partes = []
+    for dim_code, r in resultados_dim.items():
+        nombre = FRASES_DIM_NOMBRES.get(dim_code, dim_code)
+        partes.append(f"**{nombre}** ({r['puntuacion']}/10): {r['interpretacion']}")
+    interpretacion = "\n\n".join(partes)
+
+    return {
+        "puntuacion": round(promedio, 1),
+        "interpretacion": interpretacion,
+        "confianza": confianza_global,
+        "dimensiones": resultados_dim,
+    }
 
 
 def grade_colores(config, respuesta):
-    """Interpreta ranking de colores Lüscher."""
+    """Interpreta ranking de colores Lüscher con rúbrica detallada."""
     datos = respuesta.datos_trazo or {}
     texto = respuesta.texto_respuesta or ""
     colores_data = json.dumps(datos, ensure_ascii=False) if datos else texto
@@ -237,8 +478,18 @@ def grade_colores(config, respuesta):
             "confianza": "BAJA",
         }
 
-    prompt = COLORES_PROMPT.format(colores_data=colores_data)
-    return _call_ai(config, prompt)
+    prompt = COLORES_PROMPT.format(
+        colores_data=colores_data,
+        rubrica=_format_rubrica(COLORES_INDICADORES),
+    )
+    resultado = _call_ai(config, prompt)
+
+    detalle = _normalizar_indicadores(resultado.get("indicadores"), COLORES_INDICADORES)
+    if detalle is not None:
+        resultado["detalle"] = detalle
+        resultado["puntuacion"] = max(1, min(10, int(round(detalle["puntaje_normalizado"]))))
+    resultado.pop("indicadores", None)
+    return resultado
 
 
 def grade_all_projectives(evaluacion):

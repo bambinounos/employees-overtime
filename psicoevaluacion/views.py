@@ -876,6 +876,13 @@ def aplicar_calificacion_ia(request, pk):
         resultado.puntaje_persona_lluvia = float(data['puntaje_persona_lluvia'])
     if data.get('puntaje_frases') is not None:
         resultado.puntaje_frases = float(data['puntaje_frases'])
+    # Subdimensiones de Frases (opcional, viene de IA o ajuste manual)
+    if data.get('puntaje_frases_trabajo') is not None:
+        resultado.puntaje_frases_trabajo = float(data['puntaje_frases_trabajo'])
+    if data.get('puntaje_frases_autoridad') is not None:
+        resultado.puntaje_frases_autoridad = float(data['puntaje_frases_autoridad'])
+    if data.get('puntaje_frases_compromiso') is not None:
+        resultado.puntaje_frases_compromiso = float(data['puntaje_frases_compromiso'])
     if data.get('puntaje_colores') is not None:
         puntaje_colores = data['puntaje_colores']
         if isinstance(puntaje_colores, dict):
@@ -885,6 +892,14 @@ def aplicar_calificacion_ia(request, pk):
                 'puntuacion': float(puntaje_colores),
                 'interpretacion': data.get('interpretacion_colores', ''),
             }
+
+    # Sub-indicadores detallados (proyectivas)
+    if data.get('detalle_arbol') is not None:
+        resultado.detalle_arbol = data['detalle_arbol']
+    if data.get('detalle_persona_lluvia') is not None:
+        resultado.detalle_persona_lluvia = data['detalle_persona_lluvia']
+    if data.get('detalle_colores') is not None:
+        resultado.detalle_colores = data['detalle_colores']
 
     # Store interpretations in observaciones
     interpretaciones = []
@@ -923,6 +938,9 @@ def aplicar_calificacion_ia(request, pk):
         'puntaje_arbol': resultado.puntaje_arbol,
         'puntaje_persona_lluvia': resultado.puntaje_persona_lluvia,
         'puntaje_frases': resultado.puntaje_frases,
+        'puntaje_frases_trabajo': resultado.puntaje_frases_trabajo,
+        'puntaje_frases_autoridad': resultado.puntaje_frases_autoridad,
+        'puntaje_frases_compromiso': resultado.puntaje_frases_compromiso,
         'puntaje_colores': resultado.puntaje_colores,
     })
 
