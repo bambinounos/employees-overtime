@@ -205,7 +205,7 @@ def _call_anthropic(config, prompt, image_b64=None):
 
     payload = {
         "model": config.anthropic_model,
-        "max_tokens": 1024,
+        "max_tokens": 2048,
         "messages": [{"role": "user", "content": content}],
     }
     headers = {
@@ -241,7 +241,7 @@ def _call_google(config, prompt, image_b64=None):
 
     payload = {
         "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024},
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048},
     }
     url = GOOGLE_API_URL.format(model=config.google_model)
     resp = httpx.post(
@@ -377,11 +377,16 @@ def grade_drawing(config, respuesta):
     resultado = _call_ai(config, prompt, image_b64=image_b64)
 
     # Normalizar y persistir el detalle
-    detalle = _normalizar_indicadores(resultado.get("indicadores"), rubrica)
+    raw_ind = resultado.get("indicadores")
+    detalle = _normalizar_indicadores(raw_ind, rubrica)
     if detalle is not None:
         resultado["detalle"] = detalle
         # Si la IA dio un puntaje inconsistente con la rúbrica, alinearlo
         resultado["puntuacion"] = max(1, min(10, int(round(detalle["puntaje_normalizado"]))))
+    else:
+        logger.warning(
+            "IA no devolvio indicadores validos para %s (raw=%r)",
+            tipo_codigo, raw_ind if raw_ind is not None else "<missing>")
     # Limpiar el array crudo para no duplicarlo en la respuesta
     resultado.pop("indicadores", None)
     return resultado
@@ -484,10 +489,15 @@ def grade_colores(config, respuesta):
     )
     resultado = _call_ai(config, prompt)
 
-    detalle = _normalizar_indicadores(resultado.get("indicadores"), COLORES_INDICADORES)
+    raw_ind = resultado.get("indicadores")
+    detalle = _normalizar_indicadores(raw_ind, COLORES_INDICADORES)
     if detalle is not None:
         resultado["detalle"] = detalle
         resultado["puntuacion"] = max(1, min(10, int(round(detalle["puntaje_normalizado"]))))
+    else:
+        logger.warning(
+            "IA no devolvio indicadores validos para COLORES (raw=%r)",
+            raw_ind if raw_ind is not None else "<missing>")
     resultado.pop("indicadores", None)
     return resultado
 
