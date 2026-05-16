@@ -235,6 +235,11 @@ def generar_informe_pdf(evaluacion, resultado):
     ]
     if any(d for _, d in detalles):
         elements.append(Paragraph('Detalle de Pruebas Proyectivas', styles['SectionTitle']))
+        elements.append(Paragraph(
+            'Cada prueba se califica con su propia rúbrica y el total se '
+            'normaliza a una escala 0-10, por lo que los puntajes finales son '
+            'comparables entre pruebas aunque el máximo bruto difiera.',
+            styles['InterpText']))
         for titulo, det in detalles:
             if not det:
                 continue
@@ -244,6 +249,13 @@ def generar_informe_pdf(evaluacion, resultado):
             tabla_det = _make_detalle_table(det)
             if tabla_det is not None:
                 elements.append(tabla_det)
+            if 'Lluvia' in titulo:
+                elements.append(Paragraph(
+                    'Nota: en Persona bajo la Lluvia el indicador '
+                    '"Paraguas / Protección" pondera ×2 (máx. 4) por ser el '
+                    'principal indicador de mecanismos de afrontamiento ante '
+                    'el estrés; por eso el total bruto es sobre 22.',
+                    styles['InterpText']))
 
     # Interpretations from observaciones
     if resultado.observaciones:
