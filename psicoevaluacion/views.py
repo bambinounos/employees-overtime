@@ -901,16 +901,17 @@ def aplicar_calificacion_ia(request, pk):
     if data.get('detalle_colores') is not None:
         resultado.detalle_colores = data['detalle_colores']
 
-    # Store interpretations in observaciones
+    # Store interpretations in observaciones.
+    # IMPORTANTE: se REEMPLAZA, no se acumula. Acumular hacía que una
+    # corrida fallback (p.ej. "No se pudo obtener el desglose") y la
+    # corrida buena quedaran ambas en el informe (duplicación).
     interpretaciones = []
     for key in ('interpretacion_arbol', 'interpretacion_persona_lluvia',
                 'interpretacion_frases', 'interpretacion_colores'):
         if data.get(key):
             interpretaciones.append(f"**{key.replace('interpretacion_', '').title()}**: {data[key]}")
     if interpretaciones:
-        existing = resultado.observaciones or ''
-        separator = '\n\n---\n\n' if existing else ''
-        resultado.observaciones = existing + separator + '\n'.join(interpretaciones)
+        resultado.observaciones = '\n'.join(interpretaciones)
 
     resultado.save()
 

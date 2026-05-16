@@ -93,11 +93,15 @@ REGLAS:
 - Respeta exactamente los nombres de la rúbrica.
 - "puntuacion" final (1-10) debe corresponder a normalizar (suma_obtenida / suma_max) * 10.
 - Si un indicador está ausente del dibujo, asigna 0 puntos.
+- COHERENCIA OBLIGATORIA: la "interpretacion" debe ser consistente con los
+  puntajes asignados. Si el total normalizado es bajo (< 6/10), la
+  interpretación debe describir explícitamente las debilidades y carencias
+  observadas, NO un perfil favorable. No elogies aspectos que puntuaste bajo.
 
 Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
 {{
   "puntuacion": <1-10>,
-  "interpretacion": "<análisis breve en español, máximo 200 palabras>",
+  "interpretacion": "<análisis breve en español, máximo 200 palabras, COHERENTE con los puntajes>",
   "confianza": "<ALTA|MEDIA|BAJA>",
   "indicadores": [
     {{"nombre": "<nombre exacto>", "puntaje": <int>, "max": <int>, "observacion": "<breve>"}},
@@ -175,11 +179,14 @@ NOTAS sobre los datos:
 REGLAS:
 - Respeta exactamente los nombres de la rúbrica.
 - "puntuacion" final (1-10) debe corresponder a (suma_obtenida / suma_max) * 10.
+- COHERENCIA OBLIGATORIA: la "interpretacion" debe ser consistente con los
+  puntajes asignados. Si el total normalizado es bajo (< 6/10), describe
+  explícitamente las señales desfavorables, no un perfil positivo.
 
 Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
 {{
   "puntuacion": <1-10>,
-  "interpretacion": "<análisis breve en español, máximo 200 palabras>",
+  "interpretacion": "<análisis breve en español, máximo 200 palabras, COHERENTE con los puntajes>",
   "confianza": "<ALTA|MEDIA|BAJA>",
   "indicadores": [
     {{"nombre": "<nombre exacto>", "puntaje": <int>, "max": <int>, "observacion": "<breve>"}},
