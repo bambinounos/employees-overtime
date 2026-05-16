@@ -133,14 +133,18 @@ Para cada dimensión evalúa:
 - Indicadores favorables o desfavorables propios de la dimensión
 - Posibles signos de conflicto o adaptación
 
-Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra).
-Incluye SOLO las dimensiones presentes arriba. Estructura:
+Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra,
+sin explicación antes ni después). El JSON DEBE tener una clave raíz
+"dimensiones". Usa exactamente los códigos de dimensión que aparecen arriba
+(FR_TRAB, FR_AUTO y/o FR_COMP), incluyendo SOLO los presentes.
+
+Ejemplo EXACTO del formato esperado:
 {{
   "dimensiones": {{
-    "<CODIGO_DIM>": {{"puntuacion": <1-10>, "interpretacion": "<máx 150 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
+    "FR_TRAB": {{"puntuacion": 8, "interpretacion": "Buena actitud hacia el trabajo, responsabilidad clara.", "confianza": "ALTA"}},
+    "FR_AUTO": {{"puntuacion": 6, "interpretacion": "Relación funcional con la autoridad, sin conflictos.", "confianza": "MEDIA"}}
   }}
 }}
-donde <CODIGO_DIM> es uno de: FR_TRAB, FR_AUTO, FR_COMP.
 """
 
 # Mapeo de código de dimensión a nombre legible
@@ -270,8 +274,45 @@ def _call_ai(config, prompt, image_b64=None):
     return _call_google(config, prompt, image_b64)
 
 
+def _extraer_json(text):
+    """Devuelve el primer objeto JSON {...} balanceado dentro de `text`.
+
+    Tolera preámbulos/postámbulos en prosa que algunos modelos agregan
+    pese a pedir 'solo JSON'. Devuelve None si no encuentra uno parseable.
+    """
+    inicio = text.find('{')
+    if inicio == -1:
+        return None
+    profundidad = 0
+    en_string = False
+    escape = False
+    for i in range(inicio, len(text)):
+        c = text[i]
+        if en_string:
+            if escape:
+                escape = False
+            elif c == '\\':
+                escape = True
+            elif c == '"':
+                en_string = False
+            continue
+        if c == '"':
+            en_string = True
+        elif c == '{':
+            profundidad += 1
+        elif c == '}':
+            profundidad -= 1
+            if profundidad == 0:
+                fragmento = text[inicio:i + 1]
+                try:
+                    return json.loads(fragmento)
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
 def _parse_json_response(text):
-    """Parsea respuesta JSON del modelo, tolerando markdown code blocks."""
+    """Parsea respuesta JSON del modelo, tolerando markdown y prosa extra."""
     text = text.strip()
     if text.startswith("```"):
         # Strip ```json ... ```
@@ -281,15 +322,29 @@ def _parse_json_response(text):
     try:
         result = json.loads(text)
     except json.JSONDecodeError:
-        logger.warning("AI returned non-JSON: %s", text[:200])
+        # Segundo intento: extraer el primer objeto JSON balanceado
+        result = _extraer_json(text)
+        if result is None:
+            logger.warning("AI returned non-JSON: %s", text[:300])
+            result = {
+                "puntuacion": 5,
+                "interpretacion": f"No se pudo parsear la respuesta de IA: {text[:200]}",
+                "confianza": "BAJA",
+            }
+    if not isinstance(result, dict):
+        logger.warning("AI returned non-dict JSON: %r", result)
         result = {
             "puntuacion": 5,
-            "interpretacion": f"No se pudo parsear la respuesta de IA: {text[:200]}",
+            "interpretacion": "Respuesta de IA con formato inesperado.",
             "confianza": "BAJA",
         }
-    # Validate bounds
+    # Validate bounds (tolera float o string numérico)
     score = result.get("puntuacion", 5)
-    result["puntuacion"] = max(1, min(10, int(score)))
+    try:
+        score = int(round(float(score)))
+    except (TypeError, ValueError):
+        score = 5
+    result["puntuacion"] = max(1, min(10, score))
     if result.get("confianza") not in ("ALTA", "MEDIA", "BAJA"):
         result["confianza"] = "BAJA"
     return result
@@ -439,10 +494,17 @@ def grade_frases(config, respuestas_qs):
     prompt = FRASES_MULTI_PROMPT.format(frases_texto=frases_texto)
     raw = _call_ai(config, prompt)
 
-    # La IA devuelve {"dimensiones": {FR_TRAB: {...}, ...}}.
+    # La IA debería devolver {"dimensiones": {FR_TRAB: {...}, ...}}.
     # _call_ai/_parse_json_response inyecta puntuacion/confianza top-level que
     # ignoramos aquí; tomamos el sub-dict dimensiones.
     dims_ia = raw.get("dimensiones")
+    # Tolerancia: algunos modelos omiten el wrapper y devuelven las
+    # dimensiones directamente en el nivel superior (FR_TRAB: {...}).
+    if not isinstance(dims_ia, dict):
+        topo = {k: v for k, v in raw.items()
+                if k in agrupadas and isinstance(v, dict)}
+        if topo:
+            dims_ia = topo
     resultados_dim = {}
     if isinstance(dims_ia, dict):
         for dim_code in agrupadas.keys():
@@ -469,8 +531,9 @@ def grade_frases(config, respuestas_qs):
                 }
     else:
         logger.warning(
-            "grade_frases: IA no devolvio 'dimensiones' (keys=%r)",
-            list(raw.keys()))
+            "grade_frases: IA no devolvio 'dimensiones'. keys=%r raw=%r",
+            list(raw.keys()) if isinstance(raw, dict) else type(raw),
+            raw)
         for dim_code in agrupadas.keys():
             resultados_dim[dim_code] = {
                 "puntuacion": 5,

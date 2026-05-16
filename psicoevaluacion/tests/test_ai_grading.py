@@ -46,6 +46,27 @@ class ParseJsonResponseTest(TestCase):
         result = _parse_json_response(text)
         self.assertEqual(result['confianza'], 'BAJA')
 
+    def test_json_with_prose_around_it(self):
+        # El modelo agrega preámbulo/postámbulo pese a pedir solo JSON
+        text = ('Claro, aquí está el análisis solicitado:\n\n'
+                '{"puntuacion": 7, "interpretacion": "ok", "confianza": "ALTA"}\n\n'
+                'Espero que sea útil.')
+        result = _parse_json_response(text)
+        self.assertEqual(result['puntuacion'], 7)
+        self.assertEqual(result['confianza'], 'ALTA')
+
+    def test_puntuacion_float_string(self):
+        text = '{"puntuacion": "7.5", "interpretacion": "x", "confianza": "ALTA"}'
+        result = _parse_json_response(text)
+        self.assertEqual(result['puntuacion'], 8)
+
+    def test_dimensiones_wrapper_preserved(self):
+        text = ('{"dimensiones": {"FR_TRAB": {"puntuacion": 8, '
+                '"interpretacion": "ok", "confianza": "ALTA"}}}')
+        result = _parse_json_response(text)
+        self.assertIn('dimensiones', result)
+        self.assertEqual(result['dimensiones']['FR_TRAB']['puntuacion'], 8)
+
 
 class GradeDrawingTest(TestCase):
 
@@ -105,6 +126,26 @@ class GradeFrasesTest(TestCase):
         self.assertEqual(result['dimensiones']['FR_TRAB']['puntuacion'], 7)
         # CRÍTICO: una sola llamada IA (evita el timeout del worker gunicorn)
         mock_call.assert_called_once()
+
+    @patch('psicoevaluacion.ai_grading._call_ai')
+    def test_tolera_dimensiones_sin_wrapper(self, mock_call):
+        # El modelo omite la clave raíz "dimensiones" y devuelve FR_* arriba
+        mock_call.return_value = {
+            'FR_TRAB': {
+                'puntuacion': 9, 'interpretacion': 'Excelente', 'confianza': 'ALTA',
+            },
+            'puntuacion': 5,  # inyectado por _parse_json_response
+            'confianza': 'BAJA',
+        }
+        config = MagicMock()
+        r1 = MagicMock()
+        r1.pregunta.dimension = 'FR_TRAB'
+        r1.pregunta.texto = 'Mi trabajo ideal es...'
+        r1.texto_respuesta = 'uno donde puedo crecer'
+
+        result = grade_frases(config, [r1])
+        self.assertEqual(result['dimensiones']['FR_TRAB']['puntuacion'], 9)
+        self.assertEqual(result['puntuacion'], 9)
 
 
 class GradeColoresTest(TestCase):
