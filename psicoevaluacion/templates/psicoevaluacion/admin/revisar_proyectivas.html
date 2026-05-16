@@ -54,6 +54,8 @@
         .detalle-table tr:nth-child(even) td { background: #f9fafb; }
         .detalle-table .num { text-align: center; width: 60px; }
         .detalle-table tfoot td { font-weight: 600; background: #f0f9ff; }
+        .detalle-table input.det-punt { width: 50px; text-align: center; padding: 3px; border: 1px solid #cbd5e1; border-radius: 3px; }
+        .detalle-table input.det-obs { width: 100%; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 3px; font-size: 0.82rem; }
         .empty-state { color: #999; font-style: italic; font-size: 0.85rem; padding: 8px 0; }
     </style>
 </head>
@@ -328,45 +330,106 @@ function applyIASuggestions(r) {
         document.getElementById('score-colores').value = r.colores.puntuacion;
         showInterp('interp-colores', r.colores);
     }
-    // Sub-indicadores tablas
-    if (r.arbol && r.arbol.detalle) renderDetalle('detalle-arbol-body', r.arbol.detalle);
-    if (r.persona_lluvia && r.persona_lluvia.detalle) renderDetalle('detalle-persona-body', r.persona_lluvia.detalle);
-    if (r.colores && r.colores.detalle) renderDetalle('detalle-colores-body', r.colores.detalle);
+    // Sub-indicadores tablas (editables)
+    if (r.arbol && r.arbol.detalle) renderDetalle('arbol', r.arbol.detalle);
+    if (r.persona_lluvia && r.persona_lluvia.detalle) renderDetalle('persona_lluvia', r.persona_lluvia.detalle);
+    if (r.colores && r.colores.detalle) renderDetalle('colores', r.colores.detalle);
 }
 
-function renderDetalle(elemId, detalle) {
-    const el = document.getElementById(elemId);
+// Mapeo key -> {bodyId, scoreInputId}
+const DETALLE_MAP = {
+    arbol:          { bodyId: 'detalle-arbol-body',   scoreId: 'score-arbol' },
+    persona_lluvia: { bodyId: 'detalle-persona-body', scoreId: 'score-persona' },
+    colores:        { bodyId: 'detalle-colores-body', scoreId: 'score-colores' },
+};
+
+function renderDetalle(key, detalle) {
+    const cfg = DETALLE_MAP[key];
+    if (!cfg) return;
+    const el = document.getElementById(cfg.bodyId);
     if (!el) return;
     if (!detalle || !Array.isArray(detalle.indicadores) || detalle.indicadores.length === 0) {
-        el.innerHTML = '<div class="empty-state">Sin datos. Ejecute "Calificar con IA" para generar el desglose.</div>';
+        el.innerHTML = '<div class="empty-state">Sin datos. Ejecute "Calificar con IA" o ingrese los puntajes manualmente tras descargar el ZIP.</div>';
         return;
     }
-    let html = '<table class="detalle-table">'
+    let html = '<table class="detalle-table" data-key="' + key + '">'
         + '<thead><tr>'
         + '<th>Indicador</th><th class="num">Puntaje</th><th class="num">Max</th><th>Observaci&oacute;n</th>'
         + '</tr></thead><tbody>';
-    detalle.indicadores.forEach(item => {
-        html += '<tr>'
+    detalle.indicadores.forEach((item, idx) => {
+        const maxV = parseInt(item.max ?? 0, 10) || 0;
+        const punt = item.puntaje ?? '';
+        html += '<tr data-idx="' + idx + '" data-nombre="' + escapeHtml(item.nombre || '') + '" data-max="' + maxV + '">'
             + '<td>' + escapeHtml(item.nombre || '') + '</td>'
-            + '<td class="num">' + (item.puntaje ?? '') + '</td>'
-            + '<td class="num">' + (item.max ?? '') + '</td>'
-            + '<td>' + escapeHtml(item.observacion || '') + '</td>'
+            + '<td class="num"><input type="number" class="det-punt" min="0" max="' + maxV
+                + '" step="1" value="' + punt + '" oninput="recalcDetalle(\'' + key + '\')"></td>'
+            + '<td class="num">' + maxV + '</td>'
+            + '<td><input type="text" class="det-obs" value="' + escapeHtml(item.observacion || '') + '"></td>'
             + '</tr>';
     });
-    html += '</tbody>';
-    if (detalle.total_obtenido !== undefined && detalle.total_max !== undefined) {
-        const norm = detalle.puntaje_normalizado !== undefined
-            ? ' &mdash; ' + detalle.puntaje_normalizado + '/10'
-            : '';
-        html += '<tfoot><tr>'
-            + '<td>Total</td>'
-            + '<td class="num">' + detalle.total_obtenido + '</td>'
-            + '<td class="num">' + detalle.total_max + '</td>'
-            + '<td>' + norm + '</td>'
-            + '</tr></tfoot>';
-    }
-    html += '</table>';
+    html += '</tbody>'
+        + '<tfoot><tr>'
+        + '<td>Total</td>'
+        + '<td class="num" id="det-tot-' + key + '">0</td>'
+        + '<td class="num" id="det-max-' + key + '">0</td>'
+        + '<td id="det-norm-' + key + '"></td>'
+        + '</tr></tfoot></table>'
+        + '<p style="font-size:0.8rem;color:#666;margin-top:4px;">'
+        + 'Editar un puntaje recalcula el total y actualiza el puntaje global de la prueba.</p>';
     el.innerHTML = html;
+    recalcDetalle(key);
+}
+
+// Recalcula total/max/normalizado y sincroniza el puntaje global del test
+function recalcDetalle(key) {
+    const cfg = DETALLE_MAP[key];
+    const table = document.querySelector('.detalle-table[data-key="' + key + '"]');
+    if (!table) return;
+    let totObt = 0, totMax = 0;
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const maxV = parseInt(tr.dataset.max, 10) || 0;
+        let v = parseInt(tr.querySelector('.det-punt').value, 10);
+        if (isNaN(v)) v = 0;
+        v = Math.max(0, Math.min(v, maxV));
+        totObt += v;
+        totMax += maxV;
+    });
+    const norm = totMax > 0 ? Math.round((totObt / totMax) * 10 * 10) / 10 : 0;
+    document.getElementById('det-tot-' + key).textContent = totObt;
+    document.getElementById('det-max-' + key).textContent = totMax;
+    document.getElementById('det-norm-' + key).innerHTML = '&mdash; ' + norm + '/10';
+    // Sincronizar el puntaje global de la prueba
+    const scoreEl = document.getElementById(cfg.scoreId);
+    if (scoreEl) scoreEl.value = Math.max(1, Math.min(10, Math.round(norm)));
+}
+
+// Lee los inputs editados y arma el objeto detalle para el payload
+function collectDetalle(key) {
+    const table = document.querySelector('.detalle-table[data-key="' + key + '"]');
+    if (!table) return null;
+    const indicadores = [];
+    let totObt = 0, totMax = 0;
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const maxV = parseInt(tr.dataset.max, 10) || 0;
+        let v = parseInt(tr.querySelector('.det-punt').value, 10);
+        if (isNaN(v)) v = 0;
+        v = Math.max(0, Math.min(v, maxV));
+        indicadores.push({
+            nombre: tr.dataset.nombre,
+            puntaje: v,
+            max: maxV,
+            observacion: tr.querySelector('.det-obs').value || '',
+        });
+        totObt += v;
+        totMax += maxV;
+    });
+    if (indicadores.length === 0) return null;
+    return {
+        indicadores: indicadores,
+        total_obtenido: totObt,
+        total_max: totMax,
+        puntaje_normalizado: totMax > 0 ? Math.round((totObt / totMax) * 10 * 10) / 10 : 0,
+    };
 }
 
 function escapeHtml(s) {
@@ -377,11 +440,11 @@ function escapeHtml(s) {
 
 function loadInitialDetalle() {
     const map = [
-        ['detalle-arbol-data', 'detalle-arbol-body', 'arbol'],
-        ['detalle-persona-data', 'detalle-persona-body', 'persona_lluvia'],
-        ['detalle-colores-data', 'detalle-colores-body', 'colores'],
+        ['detalle-arbol-data', 'arbol'],
+        ['detalle-persona-data', 'persona_lluvia'],
+        ['detalle-colores-data', 'colores'],
     ];
-    map.forEach(([scriptId, bodyId, key]) => {
+    map.forEach(([scriptId, key]) => {
         const tag = document.getElementById(scriptId);
         let detalle = null;
         if (tag && tag.textContent && tag.textContent.trim()) {
@@ -392,13 +455,7 @@ function loadInitialDetalle() {
                 detalle = null;
             }
         }
-        renderDetalle(bodyId, detalle);
-        // Pre-cache in iaResults so save uses the persisted detalle if user
-        // doesn't re-run IA
-        if (detalle) {
-            iaResults[key] = iaResults[key] || {};
-            iaResults[key].detalle = detalle;
-        }
+        renderDetalle(key, detalle);
     });
 }
 
@@ -431,16 +488,15 @@ function aplicarCalificacion() {
     if (fAuto) payload.puntaje_frases_autoridad = parseFloat(fAuto);
     if (fComp) payload.puntaje_frases_compromiso = parseFloat(fComp);
 
-    // Sub-indicadores detallados (vienen tal cual de la IA)
-    if (iaResults.arbol && iaResults.arbol.detalle) {
-        payload.detalle_arbol = iaResults.arbol.detalle;
-    }
-    if (iaResults.persona_lluvia && iaResults.persona_lluvia.detalle) {
-        payload.detalle_persona_lluvia = iaResults.persona_lluvia.detalle;
-    }
-    if (iaResults.colores && iaResults.colores.detalle) {
-        payload.detalle_colores = iaResults.colores.detalle;
-    }
+    // Sub-indicadores detallados: se leen de las tablas editables, de modo
+    // que cualquier ajuste manual (tras descargar el ZIP y calificar a mano)
+    // sobrescribe lo que sugirió la IA.
+    const detArbol = collectDetalle('arbol');
+    const detPersona = collectDetalle('persona_lluvia');
+    const detColores = collectDetalle('colores');
+    if (detArbol) payload.detalle_arbol = detArbol;
+    if (detPersona) payload.detalle_persona_lluvia = detPersona;
+    if (detColores) payload.detalle_colores = detColores;
 
     // Include interpretations from IA
     if (iaResults.arbol) payload.interpretacion_arbol = iaResults.arbol.interpretacion;
