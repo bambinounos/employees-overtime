@@ -260,36 +260,7 @@
             this.textContent = 'Guardando...';
             var thisBtn = this;
 
-            guardarRespuesta('/psicoevaluacion/api/respuesta/memoria/', {
-                evaluacion_token: '{{ token }}',
-                pregunta_id: preguntaId,
-                secuencia_respondida: respuesta,
-                tiempo_respuesta_seg: tiempo
-            }).then(function(data) {
-                respondidas.add(preguntaId);
-                thisBtn.style.display = 'none';
-
-                // Show result
-                var resEl = card.querySelector('.resultado-memoria');
-                if (data.es_correcta) {
-                    resEl.className = 'resultado-memoria correcto';
-                    resEl.textContent = 'Correcto!';
-                } else {
-                    resEl.className = 'resultado-memoria incorrecto';
-                    resEl.textContent = 'Incorrecto. La secuencia era: ' + secuencia.join(' - ');
-                }
-
-                // Color inputs
-                inputs.forEach(function(inp, i) {
-                    if (parseInt(inp.value) === secuencia[i]) {
-                        inp.classList.add('correct');
-                    } else {
-                        inp.classList.add('incorrect');
-                    }
-                    inp.readOnly = true;
-                });
-
-                // Move to next after delay
+            function avanzar() {
                 setTimeout(function() {
                     if (current < total - 1) {
                         showCard(current + 1);
@@ -297,11 +268,59 @@
                         mostrarBotonSiguiente();
                     }
                 }, 2000);
-            }).catch(function(err) {
-                console.error('Error guardando respuesta:', err);
-                thisBtn.disabled = false;
-                thisBtn.textContent = 'Reintentar';
-            });
+            }
+
+            function intentarGuardar(reintentos) {
+                guardarRespuesta('/psicoevaluacion/api/respuesta/memoria/', {
+                    evaluacion_token: '{{ token }}',
+                    pregunta_id: preguntaId,
+                    secuencia_respondida: respuesta,
+                    tiempo_respuesta_seg: tiempo
+                }).then(function(data) {
+                    respondidas.add(preguntaId);
+                    thisBtn.style.display = 'none';
+
+                    var resEl = card.querySelector('.resultado-memoria');
+                    if (data.es_correcta) {
+                        resEl.className = 'resultado-memoria correcto';
+                        resEl.textContent = 'Correcto!';
+                    } else {
+                        resEl.className = 'resultado-memoria incorrecto';
+                        resEl.textContent = 'Incorrecto. La secuencia era: ' + secuencia.join(' - ');
+                    }
+
+                    inputs.forEach(function(inp, i) {
+                        if (parseInt(inp.value) === secuencia[i]) {
+                            inp.classList.add('correct');
+                        } else {
+                            inp.classList.add('incorrect');
+                        }
+                        inp.readOnly = true;
+                    });
+
+                    avanzar();
+                }).catch(function(err) {
+                    console.error('Error guardando respuesta:', err);
+                    if (reintentos > 0) {
+                        thisBtn.textContent = 'Reintentando...';
+                        setTimeout(function() {
+                            intentarGuardar(reintentos - 1);
+                        }, 1500);
+                    } else {
+                        // No bloquear: continuar aunque el guardado no
+                        // haya confirmado (al finalizar se calcula con
+                        // lo que esté en BD).
+                        thisBtn.style.display = 'none';
+                        var resEl = card.querySelector('.resultado-memoria');
+                        resEl.className = 'resultado-memoria incorrecto';
+                        resEl.textContent = 'No se pudo guardar esta respuesta; '
+                            + 'puedes continuar.';
+                        inputs.forEach(function(inp) { inp.readOnly = true; });
+                        avanzar();
+                    }
+                });
+            }
+            intentarGuardar(2);
         });
     });
 })();

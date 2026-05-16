@@ -82,6 +82,22 @@
 
     var btnSiguiente = document.getElementById('btn-siguiente');
 
+    // Completitud robusta: todas las frases escritas en pantalla; un guardado
+    // fallido NO debe dejar trabado al candidato.
+    function todasContestadasDOM() {
+        if (total === 0) return false;
+        for (var i = 0; i < cards.length; i++) {
+            var ta = cards[i].querySelector('.frase-input');
+            if (!ta || !ta.value.trim()) return false;
+        }
+        return true;
+    }
+    function checkCompletion() {
+        if (respondidas.size >= total || todasContestadasDOM()) {
+            mostrarBotonSiguiente();
+        }
+    }
+
     function show(idx) {
         if (idx < 0 || idx >= total) return;
         // Save current before navigating
@@ -93,9 +109,7 @@
         btnSiguiente.disabled = false;
         btnSiguiente.textContent = (current === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
-        if (respondidas.size >= total) {
-            mostrarBotonSiguiente();
-        }
+        checkCompletion();
     }
 
     cards[0].classList.add('active');
@@ -108,10 +122,13 @@
         if (current < total - 1) {
             show(current + 1);
         } else {
-            // Last card - save immediately and check completion
+            // Última: guardar y permitir finalizar si todo está escrito,
+            // aunque algún guardado por red no haya confirmado.
             saveCurrentFrase();
-            if (respondidas.size >= total) {
+            if (todasContestadasDOM()) {
                 mostrarBotonSiguiente();
+            } else {
+                alert('Aún hay frases sin completar. Revísalas antes de finalizar.');
             }
         }
     });
@@ -124,22 +141,28 @@
 
         if (!text || savedTexts[preguntaId] === text) return;
 
-        guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
-            evaluacion_token: '{{ token }}',
-            pregunta_id: preguntaId,
-            prueba_id: {{ prueba.id }},
-            tipo: 'TEXTO',
-            texto_respuesta: text
-        }).then(function() {
-            respondidas.add(preguntaId);
-            savedTexts[preguntaId] = text;
-            mostrarGuardado(card.querySelector('.save-ind'));
-            if (respondidas.size >= total) {
-                mostrarBotonSiguiente();
-            }
-        }).catch(function(err) {
-            console.error('Error guardando frase:', err);
-        });
+        function intentarGuardar(reintentos) {
+            guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
+                evaluacion_token: '{{ token }}',
+                pregunta_id: preguntaId,
+                prueba_id: {{ prueba.id }},
+                tipo: 'TEXTO',
+                texto_respuesta: text
+            }).then(function() {
+                respondidas.add(preguntaId);
+                savedTexts[preguntaId] = text;
+                mostrarGuardado(card.querySelector('.save-ind'));
+                checkCompletion();
+            }).catch(function(err) {
+                console.error('Error guardando frase:', err);
+                if (reintentos > 0) {
+                    setTimeout(function() {
+                        intentarGuardar(reintentos - 1);
+                    }, 1500);
+                }
+            });
+        }
+        intentarGuardar(2);
     }
 
     // Debounced auto-save on input (3s)
@@ -164,9 +187,7 @@
                     respondidas.add(preguntaId);
                     savedTexts[preguntaId] = text;
                     mostrarGuardado(card.querySelector('.save-ind'));
-                    if (respondidas.size >= total) {
-                        mostrarBotonSiguiente();
-                    }
+                    checkCompletion();
                 }).catch(function(err) {
                     console.error('Error guardando frase:', err);
                 });

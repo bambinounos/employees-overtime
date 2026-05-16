@@ -106,6 +106,23 @@
 
     var btnSiguiente = document.getElementById('btn-siguiente');
 
+    // Completitud robusta: basada en lo seleccionado en pantalla, no en que
+    // cada guardado por red haya confirmado.
+    function todasContestadasDOM() {
+        if (total === 0) return false;
+        for (var i = 0; i < cards.length; i++) {
+            if (!cards[i].querySelector('.opcion-matriz.selected')) {
+                return false;
+            }
+        }
+        return true;
+    }
+    function checkCompletion() {
+        if (respondidas.size >= total || todasContestadasDOM()) {
+            mostrarBotonSiguiente();
+        }
+    }
+
     function show(idx) {
         if (idx < 0 || idx >= total) return;
         cards[current].classList.remove('active');
@@ -116,9 +133,7 @@
         btnSiguiente.textContent = (current === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         startTimes[current] = Date.now();
-        if (respondidas.size >= total) {
-            mostrarBotonSiguiente();
-        }
+        checkCompletion();
     }
 
     cards[0].classList.add('active');
@@ -138,8 +153,10 @@
     btnSiguiente.addEventListener('click', function() {
         if (current < total - 1) {
             show(current + 1);
-        } else if (respondidas.size >= total) {
+        } else if (todasContestadasDOM()) {
             mostrarBotonSiguiente();
+        } else {
+            alert('Aún hay preguntas sin responder. Revísalas antes de finalizar.');
         }
     });
 
@@ -159,25 +176,40 @@
             var idx = parseInt(card.dataset.index);
             var tiempo = startTimes[idx] ? Math.round((Date.now() - startTimes[idx]) / 1000) : null;
 
-            guardarRespuesta('/psicoevaluacion/api/respuesta/matriz/', {
+            var payload = {
                 evaluacion_token: '{{ token }}',
                 pregunta_id: preguntaId,
                 opcion_id: opcionId,
                 tiempo_respuesta_seg: tiempo
-            }).then(function() {
-                respondidas.add(preguntaId);
-                mostrarGuardado(card.querySelector('.save-ind'));
-
-                if (respondidas.size >= total) {
-                    mostrarBotonSiguiente();
-                }
+            };
+            function avanzar() {
                 if (current < total - 1) {
                     setTimeout(function() { show(current + 1); }, 500);
                 }
-            }).catch(function(err) {
-                console.error('Error guardando respuesta:', err);
-                alert('Error al guardar. Intente de nuevo.');
-            });
+            }
+            function intentarGuardar(reintentos) {
+                guardarRespuesta('/psicoevaluacion/api/respuesta/matriz/', payload)
+                .then(function() {
+                    respondidas.add(preguntaId);
+                    mostrarGuardado(card.querySelector('.save-ind'));
+                    checkCompletion();
+                    avanzar();
+                }).catch(function(err) {
+                    console.error('Error guardando respuesta:', err);
+                    if (reintentos > 0) {
+                        setTimeout(function() {
+                            intentarGuardar(reintentos - 1);
+                        }, 1500);
+                    } else {
+                        alert('Una respuesta no se pudo guardar tras varios '
+                            + 'intentos. Puedes continuar; si el problema '
+                            + 'persiste, avisa al evaluador.');
+                        checkCompletion();
+                        avanzar();
+                    }
+                });
+            }
+            intentarGuardar(2);
         });
     });
 })();

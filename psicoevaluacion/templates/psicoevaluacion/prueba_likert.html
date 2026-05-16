@@ -150,6 +150,24 @@
     var respondidas = new Set({{ respondidas_json|safe }});
     var startTimes = {};
 
+    // Completitud robusta: basada en lo seleccionado en pantalla, no en que
+    // cada guardado por red haya confirmado (un guardado fallido NO debe
+    // dejar trabado al candidato).
+    function todasContestadasDOM() {
+        if (total === 0) return false;
+        for (var i = 0; i < preguntas.length; i++) {
+            if (!preguntas[i].querySelector('.likert-btn.selected')) {
+                return false;
+            }
+        }
+        return true;
+    }
+    function checkCompletion() {
+        if (respondidas.size >= total || todasContestadasDOM()) {
+            mostrarBotonSiguiente();
+        }
+    }
+
     // Build dot nav
     var dotNav = document.getElementById('dot-nav');
     for (var i = 0; i < total; i++) {
@@ -190,9 +208,7 @@
         });
 
         // Show next test button if all answered
-        if (respondidas.size >= total) {
-            mostrarBotonSiguiente();
-        }
+        checkCompletion();
 
         // Track time
         startTimes[currentIndex] = Date.now();
@@ -209,8 +225,10 @@
     btnSiguiente.addEventListener('click', function() {
         if (currentIndex < total - 1) {
             goTo(currentIndex + 1);
-        } else if (respondidas.size >= total) {
+        } else if (todasContestadasDOM()) {
             mostrarBotonSiguiente();
+        } else {
+            alert('Aún hay preguntas sin responder. Revísalas antes de finalizar.');
         }
     });
 
@@ -243,27 +261,36 @@
             };
             if (opcionId) saveData.opcion_id = opcionId;
 
-            guardarRespuesta('/psicoevaluacion/api/respuesta/psicometrica/', saveData)
+            var idx = parseInt(card.dataset.index);
+            function avanzar() {
+                if (currentIndex < total - 1) {
+                    setTimeout(function() { goTo(currentIndex + 1); }, 500);
+                }
+            }
+            function intentarGuardar(reintentos) {
+                guardarRespuesta('/psicoevaluacion/api/respuesta/psicometrica/', saveData)
                 .then(function() {
                     respondidas.add(preguntaId);
-                    // Update dot
-                    var idx = parseInt(card.dataset.index);
                     dotNav.querySelectorAll('.dot')[idx].classList.add('answered');
                     mostrarGuardado(document.getElementById('save-indicator'));
-
-                    // Check completion
-                    if (respondidas.size >= total) {
-                        mostrarBotonSiguiente();
-                    }
-
-                    // Auto-advance after 500ms
-                    if (currentIndex < total - 1) {
-                        setTimeout(function() { goTo(currentIndex + 1); }, 500);
-                    }
+                    checkCompletion();
+                    avanzar();
                 }).catch(function(err) {
                     console.error('Error guardando respuesta:', err);
-                    alert('Error al guardar. Intente de nuevo.');
+                    if (reintentos > 0) {
+                        setTimeout(function() {
+                            intentarGuardar(reintentos - 1);
+                        }, 1500);
+                    } else {
+                        alert('Una respuesta no se pudo guardar tras varios '
+                            + 'intentos. Puedes continuar; si el problema '
+                            + 'persiste, avisa al evaluador.');
+                        checkCompletion();
+                        avanzar();
+                    }
                 });
+            }
+            intentarGuardar(2);
         });
     });
 

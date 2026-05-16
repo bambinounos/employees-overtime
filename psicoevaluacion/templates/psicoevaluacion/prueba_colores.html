@@ -174,22 +174,39 @@
             preguntaId = {{ preguntas.0.id }};
             {% endif %}
 
-            guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
-                evaluacion_token: '{{ token }}',
-                pregunta_id: preguntaId,
-                prueba_id: {{ prueba.id }},
-                tipo: 'TEXTO',
-                texto_respuesta: JSON.stringify(resultados)
-            }).then(function() {
-                btn.textContent = 'Guardado';
-                btn.classList.remove('btn-primary');
-                btn.classList.add('btn-secondary');
-                mostrarGuardado(document.getElementById('save-indicator'));
-                mostrarBotonSiguiente();
-            }).catch(function() {
-                btn.disabled = false;
-                btn.textContent = 'Reintentar';
-            });
+            function intentarGuardar(reintentos) {
+                guardarRespuesta('/psicoevaluacion/api/respuesta/proyectiva/', {
+                    evaluacion_token: '{{ token }}',
+                    pregunta_id: preguntaId,
+                    prueba_id: {{ prueba.id }},
+                    tipo: 'TEXTO',
+                    texto_respuesta: JSON.stringify(resultados)
+                }).then(function() {
+                    btn.textContent = 'Guardado';
+                    btn.classList.remove('btn-primary', 'btn-danger');
+                    btn.classList.add('btn-secondary');
+                    mostrarGuardado(document.getElementById('save-indicator'));
+                    mostrarBotonSiguiente();
+                }).catch(function(err) {
+                    console.error('Error guardando colores:', err);
+                    if (reintentos > 0) {
+                        btn.textContent = 'Reintentando...';
+                        setTimeout(function() {
+                            intentarGuardar(reintentos - 1);
+                        }, 1500);
+                    } else {
+                        // No bloquear el fin de la evaluación.
+                        btn.disabled = false;
+                        btn.textContent = 'Reintentar';
+                        btn.classList.add('btn-danger');
+                        alert('No se pudo guardar el test de colores tras '
+                            + 'varios intentos. Puedes continuar; si el '
+                            + 'problema persiste, avisa al evaluador.');
+                        mostrarBotonSiguiente();
+                    }
+                });
+            }
+            intentarGuardar(2);
         }
     });
 })();

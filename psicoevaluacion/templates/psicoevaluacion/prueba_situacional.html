@@ -109,6 +109,23 @@
 
     var btnSiguiente = document.getElementById('btn-siguiente');
 
+    // Completitud robusta: cada escenario con una opción elegida en pantalla;
+    // un guardado fallido NO debe dejar trabado al candidato.
+    function todasContestadasDOM() {
+        if (total === 0) return false;
+        for (var i = 0; i < cards.length; i++) {
+            if (!cards[i].querySelector('.opcion-card.selected')) {
+                return false;
+            }
+        }
+        return true;
+    }
+    function checkCompletion() {
+        if (respondidas.size >= total || todasContestadasDOM()) {
+            mostrarBotonSiguiente();
+        }
+    }
+
     function show(idx) {
         cards[current].classList.remove('active');
         current = idx;
@@ -118,9 +135,7 @@
         btnSiguiente.textContent = (current === total - 1) ? 'Finalizar \u00BB' : 'Siguiente \u00BB';
         document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
         startTimes[current] = Date.now();
-        if (respondidas.size >= total) {
-            mostrarBotonSiguiente();
-        }
+        checkCompletion();
     }
 
     cards[0].classList.add('active');
@@ -132,8 +147,10 @@
     btnSiguiente.addEventListener('click', function() {
         if (current < total - 1) {
             show(current + 1);
-        } else if (respondidas.size >= total) {
+        } else if (todasContestadasDOM()) {
             mostrarBotonSiguiente();
+        } else {
+            alert('Aún hay escenarios sin responder. Revísalos antes de finalizar.');
         }
     });
 
@@ -169,34 +186,45 @@
             this.disabled = true;
             this.textContent = 'Guardando...';
             var thisBtn = this;
-
-            guardarRespuesta('/psicoevaluacion/api/respuesta/situacional/', {
+            var payload = {
                 evaluacion_token: '{{ token }}',
                 pregunta_id: preguntaId,
                 opcion_id: opcionId,
                 valor: valor,
                 justificacion: justificacion,
                 tiempo_respuesta_seg: tiempo
-            }).then(function() {
-                respondidas.add(preguntaId);
-                thisBtn.textContent = 'Confirmado';
-                thisBtn.classList.remove('btn-primary');
-                thisBtn.classList.add('btn-success');
-                mostrarGuardado(document.getElementById('save-ind-' + idx));
+            };
 
-                if (respondidas.size >= total) {
-                    mostrarBotonSiguiente();
-                }
-                if (current < total - 1) {
-                    setTimeout(function() { show(current + 1); }, 600);
-                }
-            }).catch(function(err) {
-                console.error('Error guardando respuesta:', err);
-                thisBtn.disabled = false;
-                thisBtn.textContent = 'Reintentar';
-                thisBtn.classList.remove('btn-success');
-                thisBtn.classList.add('btn-danger');
-            });
+            function intentarGuardar(reintentos) {
+                guardarRespuesta('/psicoevaluacion/api/respuesta/situacional/', payload)
+                .then(function() {
+                    respondidas.add(preguntaId);
+                    thisBtn.textContent = 'Confirmado';
+                    thisBtn.classList.remove('btn-primary', 'btn-danger');
+                    thisBtn.classList.add('btn-success');
+                    mostrarGuardado(document.getElementById('save-ind-' + idx));
+                    checkCompletion();
+                    if (current < total - 1) {
+                        setTimeout(function() { show(current + 1); }, 600);
+                    }
+                }).catch(function(err) {
+                    console.error('Error guardando respuesta:', err);
+                    if (reintentos > 0) {
+                        thisBtn.textContent = 'Reintentando...';
+                        setTimeout(function() {
+                            intentarGuardar(reintentos - 1);
+                        }, 1500);
+                    } else {
+                        // No bloquear: la opción está elegida en pantalla.
+                        thisBtn.disabled = false;
+                        thisBtn.textContent = 'Reintentar';
+                        thisBtn.classList.remove('btn-success');
+                        thisBtn.classList.add('btn-danger');
+                        checkCompletion();
+                    }
+                });
+            }
+            intentarGuardar(2);
         });
     });
 })();

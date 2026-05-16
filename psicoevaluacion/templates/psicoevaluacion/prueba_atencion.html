@@ -199,8 +199,19 @@
 (function() {
     var preguntasData = {{ preguntas_json|safe }};
     var respondidas = new Set({{ respondidas_json|safe }});
+    // Preguntas en las que el candidato pulsó "Confirmar", aunque el guardado
+    // por red no haya confirmado. Evita que un guardado fallido deje trabado
+    // al candidato al final.
+    var confirmadas = new Set();
     var startTimes = {};
     var selecciones = {}; // preguntaId -> selected values
+
+    function checkCompletion() {
+        if (respondidas.size >= totalPreguntas
+                || confirmadas.size >= totalPreguntas) {
+            mostrarBotonSiguiente();
+        }
+    }
 
     // Build lookup by id
     var preguntaById = {};
@@ -414,50 +425,61 @@
             this.disabled = true;
             this.textContent = 'Guardando...';
             var thisBtn = this;
+            // Cuenta como confirmada apenas pulsa, independiente de la red.
+            confirmadas.add(pid);
 
-            guardarRespuesta('/psicoevaluacion/api/respuesta/atencion/', {
-                evaluacion_token: '{{ token }}',
-                pregunta_id: pid,
-                subtipo: subtipo,
-                respuesta_json: respuesta,
-                tiempo_respuesta_seg: tiempo
-            }).then(function() {
-                respondidas.add(pid);
-                thisBtn.textContent = 'Confirmado';
-                thisBtn.classList.remove('btn-primary');
-                thisBtn.classList.add('btn-success');
-
-                var saveEl = document.getElementById('save-' + subtipo.toLowerCase().substring(0, 4) + '-' + pid);
-                mostrarGuardado(saveEl);
-
-                if (respondidas.size >= totalPreguntas) {
-                    mostrarBotonSiguiente();
-                }
-
-                // Auto-advance
+            function avanzar() {
                 var card = thisBtn.closest('.pregunta-atencion');
                 var nav = null;
                 if (card.classList.contains('pregunta-comp')) nav = compNav;
                 else if (card.classList.contains('pregunta-veri')) nav = veriNav;
                 else if (card.classList.contains('pregunta-secu')) nav = secuNav;
-
                 if (nav && nav.getCurrent() < nav.total - 1) {
                     setTimeout(function() { nav.show(nav.getCurrent() + 1); }, 600);
                 }
-            }).catch(function(err) {
-                console.error('Error guardando respuesta:', err);
-                thisBtn.disabled = false;
-                thisBtn.textContent = 'Reintentar';
-                thisBtn.classList.remove('btn-success');
-                thisBtn.classList.add('btn-danger');
-            });
+            }
+
+            function intentarGuardar(reintentos) {
+                guardarRespuesta('/psicoevaluacion/api/respuesta/atencion/', {
+                    evaluacion_token: '{{ token }}',
+                    pregunta_id: pid,
+                    subtipo: subtipo,
+                    respuesta_json: respuesta,
+                    tiempo_respuesta_seg: tiempo
+                }).then(function() {
+                    respondidas.add(pid);
+                    thisBtn.textContent = 'Confirmado';
+                    thisBtn.classList.remove('btn-primary', 'btn-danger');
+                    thisBtn.classList.add('btn-success');
+
+                    var saveEl = document.getElementById('save-' + subtipo.toLowerCase().substring(0, 4) + '-' + pid);
+                    mostrarGuardado(saveEl);
+                    checkCompletion();
+                    avanzar();
+                }).catch(function(err) {
+                    console.error('Error guardando respuesta:', err);
+                    if (reintentos > 0) {
+                        thisBtn.textContent = 'Reintentando...';
+                        setTimeout(function() {
+                            intentarGuardar(reintentos - 1);
+                        }, 1500);
+                    } else {
+                        // No bloquear: ya quedó en confirmadas.
+                        thisBtn.disabled = false;
+                        thisBtn.textContent = 'Reintentar';
+                        thisBtn.classList.remove('btn-success');
+                        thisBtn.classList.add('btn-danger');
+                        checkCompletion();
+                        avanzar();
+                    }
+                });
+            }
+            intentarGuardar(2);
         });
     });
 
     // Check if already all answered
-    if (respondidas.size >= totalPreguntas) {
-        mostrarBotonSiguiente();
-    }
+    checkCompletion();
 })();
 </script>
 {% endblock %}
