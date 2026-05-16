@@ -6,6 +6,7 @@ Soporta Anthropic (Claude) y Google (Gemini) via llamadas HTTP directas con http
 import json
 import logging
 import base64
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 
@@ -120,19 +121,26 @@ Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
 {{"puntuacion": <1-10>, "interpretacion": "<análisis breve en español, máximo 200 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
 """
 
-FRASES_DIM_PROMPT = """\
+FRASES_MULTI_PROMPT = """\
 Eres un psicólogo experto en la prueba de Frases Incompletas de Sacks.
-Analiza las siguientes respuestas correspondientes a la dimensión "{dim_nombre}".
+Analiza las siguientes respuestas agrupadas por dimensión y califica CADA
+dimensión por separado en una sola respuesta.
 
 {frases_texto}
 
-Evalúa específicamente esta dimensión:
+Para cada dimensión evalúa:
 - Coherencia y profundidad de las respuestas
 - Indicadores favorables o desfavorables propios de la dimensión
 - Posibles signos de conflicto o adaptación
 
-Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra):
-{{"puntuacion": <1-10>, "interpretacion": "<análisis breve en español, máximo 150 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
+Responde EXCLUSIVAMENTE con un JSON válido (sin markdown, sin texto extra).
+Incluye SOLO las dimensiones presentes arriba. Estructura:
+{{
+  "dimensiones": {{
+    "<CODIGO_DIM>": {{"puntuacion": <1-10>, "interpretacion": "<máx 150 palabras>", "confianza": "<ALTA|MEDIA|BAJA>"}}
+  }}
+}}
+donde <CODIGO_DIM> es uno de: FR_TRAB, FR_AUTO, FR_COMP.
 """
 
 # Mapeo de código de dimensión a nombre legible
@@ -420,26 +428,55 @@ def grade_frases(config, respuestas_qs):
             "dimensiones": {},
         }
 
-    # Calificar cada dimensión por separado
-    resultados_dim = {}
+    # Construir el texto con todas las dimensiones para UNA sola llamada
+    frases_texto = ""
     for dim_code, items in agrupadas.items():
         dim_nombre = FRASES_DIM_NOMBRES.get(dim_code, dim_code)
-        frases_texto = ""
+        frases_texto += f"\n### {dim_code} — {dim_nombre}\n"
         for item in items:
             frases_texto += f'- "{item["frase"]}" → "{item["respuesta"]}"\n'
 
-        prompt = FRASES_DIM_PROMPT.format(
-            dim_nombre=dim_nombre, frases_texto=frases_texto)
-        try:
-            resultado = _call_ai(config, prompt)
-        except Exception as e:
-            logger.error("Error calificando dimension %s: %s", dim_code, e)
-            resultado = {
+    prompt = FRASES_MULTI_PROMPT.format(frases_texto=frases_texto)
+    raw = _call_ai(config, prompt)
+
+    # La IA devuelve {"dimensiones": {FR_TRAB: {...}, ...}}.
+    # _call_ai/_parse_json_response inyecta puntuacion/confianza top-level que
+    # ignoramos aquí; tomamos el sub-dict dimensiones.
+    dims_ia = raw.get("dimensiones")
+    resultados_dim = {}
+    if isinstance(dims_ia, dict):
+        for dim_code in agrupadas.keys():
+            d = dims_ia.get(dim_code)
+            if isinstance(d, dict):
+                punt = d.get("puntuacion", 5)
+                try:
+                    punt = max(1, min(10, int(round(float(punt)))))
+                except (TypeError, ValueError):
+                    punt = 5
+                conf = d.get("confianza")
+                if conf not in ("ALTA", "MEDIA", "BAJA"):
+                    conf = "BAJA"
+                resultados_dim[dim_code] = {
+                    "puntuacion": punt,
+                    "interpretacion": str(d.get("interpretacion", ""))[:1500],
+                    "confianza": conf,
+                }
+            else:
+                resultados_dim[dim_code] = {
+                    "puntuacion": 5,
+                    "interpretacion": "La IA no devolvió esta dimensión.",
+                    "confianza": "BAJA",
+                }
+    else:
+        logger.warning(
+            "grade_frases: IA no devolvio 'dimensiones' (keys=%r)",
+            list(raw.keys()))
+        for dim_code in agrupadas.keys():
+            resultados_dim[dim_code] = {
                 "puntuacion": 5,
-                "interpretacion": f"Error al calificar {dim_nombre}: {e}",
+                "interpretacion": "No se pudo obtener el desglose por dimensión.",
                 "confianza": "BAJA",
             }
-        resultados_dim[dim_code] = resultado
 
     # Promedio general
     puntuaciones = [r['puntuacion'] for r in resultados_dim.values()]
@@ -529,38 +566,48 @@ def grade_all_projectives(evaluacion):
         'colores': None,
     }
 
-    proyectivas = evaluacion.respuestas_proyectivas.select_related(
+    proyectivas = list(evaluacion.respuestas_proyectivas.select_related(
         'prueba', 'pregunta'
-    ).all()
+    ).all())
+
+    # Construir las tareas independientes (1 llamada IA cada una)
+    tareas = {}  # key -> callable sin argumentos
 
     for resp in proyectivas:
         tipo_prueba = resp.prueba.tipo
+        if tipo_prueba == 'ARBOL' and resp.tipo == 'DIBUJO':
+            tareas['arbol'] = lambda r=resp: grade_drawing(config, r)
+        elif tipo_prueba == 'PERSONA_LLUVIA' and resp.tipo == 'DIBUJO':
+            tareas['persona_lluvia'] = lambda r=resp: grade_drawing(config, r)
+        elif tipo_prueba == 'COLORES':
+            tareas['colores'] = lambda r=resp: grade_colores(config, r)
+
+    frases_qs = evaluacion.respuestas_proyectivas.filter(
+        prueba__tipo='FRASES', tipo='TEXTO')
+    if frases_qs.exists():
+        frases_list = list(frases_qs.select_related('pregunta'))
+        tareas['frases'] = lambda fl=frases_list: grade_frases(config, fl)
+
+    if not tareas:
+        return resultados
+
+    def _run(key, fn):
         try:
-            if tipo_prueba == 'ARBOL' and resp.tipo == 'DIBUJO':
-                resultados['arbol'] = grade_drawing(config, resp)
-            elif tipo_prueba == 'PERSONA_LLUVIA' and resp.tipo == 'DIBUJO':
-                resultados['persona_lluvia'] = grade_drawing(config, resp)
-            elif tipo_prueba == 'COLORES':
-                resultados['colores'] = grade_colores(config, resp)
+            return key, fn()
         except Exception as e:
-            logger.error("Error calificando %s: %s", tipo_prueba, e)
-            resultados[tipo_prueba.lower()] = {
+            logger.exception("Error calificando %s", key)
+            return key, {
                 "puntuacion": 5,
                 "interpretacion": f"Error al calificar: {e}",
                 "confianza": "BAJA",
             }
 
-    # Frases: agrupar todas las respuestas de tipo TEXTO de prueba FRASES
-    frases_qs = proyectivas.filter(prueba__tipo='FRASES', tipo='TEXTO')
-    if frases_qs.exists():
-        try:
-            resultados['frases'] = grade_frases(config, frases_qs)
-        except Exception as e:
-            logger.error("Error calificando FRASES: %s", e)
-            resultados['frases'] = {
-                "puntuacion": 5,
-                "interpretacion": f"Error al calificar frases: {e}",
-                "confianza": "BAJA",
-            }
+    # Ejecutar las llamadas IA en paralelo: el tiempo total pasa de la suma
+    # de las llamadas a la más lenta, evitando el timeout del worker gunicorn.
+    with ThreadPoolExecutor(max_workers=len(tareas)) as executor:
+        futures = [executor.submit(_run, k, fn) for k, fn in tareas.items()]
+        for fut in as_completed(futures):
+            key, value = fut.result()
+            resultados[key] = value
 
     return resultados

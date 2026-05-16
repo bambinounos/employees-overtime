@@ -82,18 +82,28 @@ class GradeFrasesTest(TestCase):
         self.assertEqual(result['confianza'], 'BAJA')
 
     @patch('psicoevaluacion.ai_grading._call_ai')
-    def test_calls_ai_with_grouped_frases(self, mock_call):
+    def test_calls_ai_once_with_grouped_frases(self, mock_call):
+        # Nuevo contrato: una sola llamada que devuelve scores por dimensión
         mock_call.return_value = {
-            'puntuacion': 7, 'interpretacion': 'Buenas frases', 'confianza': 'MEDIA'
+            'dimensiones': {
+                'FR_TRAB': {
+                    'puntuacion': 7,
+                    'interpretacion': 'Buenas frases',
+                    'confianza': 'MEDIA',
+                },
+            }
         }
         config = MagicMock()
         r1 = MagicMock()
-        r1.pregunta.get_dimension_display.return_value = 'Actitud hacia el trabajo'
+        r1.pregunta.dimension = 'FR_TRAB'
         r1.pregunta.texto = 'Mi trabajo ideal es...'
         r1.texto_respuesta = 'uno donde puedo crecer'
 
         result = grade_frases(config, [r1])
+        # Promedio de las dimensiones (solo FR_TRAB = 7)
         self.assertEqual(result['puntuacion'], 7)
+        self.assertEqual(result['dimensiones']['FR_TRAB']['puntuacion'], 7)
+        # CRÍTICO: una sola llamada IA (evita el timeout del worker gunicorn)
         mock_call.assert_called_once()
 
 
