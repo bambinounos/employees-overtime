@@ -18,7 +18,7 @@ class InterfaceMyTrigger extends DolibarrTriggers
         $this->name = 'PayrollConnect';
         $this->family = "payroll_connect";
         $this->description = "Triggers for Payroll Connect integration: syncs invoices, proposals and product creations to Django payroll system.";
-        $this->version = '1.6.1';
+        $this->version = '1.6.2';
         $this->picto = 'fontawesome_chart-line_fas_#2c3e50';
     }
 
@@ -167,8 +167,14 @@ class InterfaceMyTrigger extends DolibarrTriggers
     /**
      * Send data to Django via the helper, with retry queue on failure.
      *
+     * On webhook failure: tries to queue for retry. If queued OK, returns 0 so
+     * Dolibarr does NOT rollback the source transaction (the retry queue will
+     * deliver the event later). Returns -1 only when even the queue insert
+     * failed - that is the only scenario that justifies aborting the business
+     * transaction to avoid silent data loss.
+     *
      * @param array $data Payload to send
-     * @return int 0=OK, -1=Error (queued for retry)
+     * @return int 0=OK (sent or queued), -1=Critical error (queue insert failed)
      */
     private function send($data)
     {
@@ -184,8 +190,17 @@ class InterfaceMyTrigger extends DolibarrTriggers
         $result = PayrollConnectHelper::sendToDjango($webhook_url, $api_secret, $data);
 
         if ($result === false) {
-            // Queue for retry (per FEASIBILITY_REPORT section 2.1 "Cola de Reintentos")
-            PayrollConnectHelper::queueForRetry($this->db, $data);
+            // Webhook failed: try to queue for retry. If queued, transaction continues.
+            $queueId = PayrollConnectHelper::queueForRetry($this->db, $data);
+            if ($queueId > 0) {
+                dol_syslog(
+                    "PayrollConnect: Webhook failed but event queued for retry (queue ID: $queueId). Transaction continues.",
+                    LOG_WARNING
+                );
+                return 0;
+            }
+            // Could not even queue - abort to surface the failure
+            $this->errors[] = "PayrollConnect: Failed to send webhook AND failed to queue for retry. Event lost.";
             return -1;
         }
 
