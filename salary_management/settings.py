@@ -149,3 +149,11 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Allow large uploads for canvas drawings (Base64 encoded, ~3MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+
+# Per-server overrides (ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS, proxy, secrets...).
+# salary_management/local_settings.py is gitignored — anything defined there
+# wins over the defaults above without needing local commits to this file.
+try:
+    from .local_settings import *  # noqa: F401,F403
+except ImportError:
+    pass
