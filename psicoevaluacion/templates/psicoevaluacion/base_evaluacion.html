@@ -216,5 +216,10 @@ function detenerTimer() {
 </script>
 {% block javascript %}{% endblock %}
 
+{% if app_version %}
+<footer style="text-align:center;color:#999;font-size:12px;padding:16px 0;">
+    v{{ app_version }}
+</footer>
+{% endif %}
 </body>
 </html>
