@@ -9,7 +9,7 @@ from .serializers import WorkLogSerializer, TaskBoardSerializer, TaskSerializer
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 import hashlib
@@ -430,6 +430,14 @@ class DolibarrWebhookView(APIView):
             log.save()
             logger.warning("Webhook validation error: %s", e)
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as e:
+            # Duplicate event (e.g. proforma revalidated in Dolibarr).
+            # Treat as no-op so the Dolibarr trigger doesn't rollback the source transaction.
+            log.status = 'processed'
+            log.error_message = f'Duplicate event ignored: {e}'
+            log.save()
+            logger.info("Duplicate webhook event treated as no-op: %s", e)
+            return Response({'status': 'already_processed'}, status=status.HTTP_200_OK)
         except Exception as e:
             log.status = 'error'
             log.error_message = str(e)
@@ -563,18 +571,23 @@ class DolibarrWebhookView(APIView):
                 )
 
             # Credit notes must be negative
-            SalesRecord.objects.create(
-                employee=target_employee,
+            record, created = SalesRecord.objects.update_or_create(
                 dolibarr_instance=instance,
                 dolibarr_id=dolibarr_id,
-                dolibarr_ref=dolibarr_ref,
-                origin_proforma_id=origin_proforma_id,
-                origin_order_id=origin_order_id,
                 status='credit_note',
-                amount_untaxed=-abs(amount),
-                date=event_date,
+                defaults={
+                    'employee': target_employee,
+                    'dolibarr_ref': dolibarr_ref,
+                    'origin_proforma_id': origin_proforma_id,
+                    'origin_order_id': origin_order_id,
+                    'amount_untaxed': -abs(amount),
+                    'date': event_date,
+                },
             )
-            logger.info("Credit note %s attributed to employee %s", dolibarr_ref, target_employee.name)
+            if not created:
+                logger.info("Credit note %s re-processed (dolibarr_id=%s)", dolibarr_ref, dolibarr_id)
+            else:
+                logger.info("Credit note %s attributed to employee %s", dolibarr_ref, target_employee.name)
         else:
             # --- REGULAR INVOICE ---
             employee = self._resolve_employee(instance, dolibarr_user_id)
@@ -632,17 +645,24 @@ class DolibarrWebhookView(APIView):
                 )
                 return
 
-            SalesRecord.objects.create(
-                employee=employee,
+            record, created = SalesRecord.objects.update_or_create(
                 dolibarr_instance=instance,
                 dolibarr_id=dolibarr_id,
-                dolibarr_ref=dolibarr_ref,
-                origin_proforma_id=origin_proforma_id,
-                origin_order_id=origin_order_id,
                 status='invoiced',
-                amount_untaxed=amount,
-                date=event_date,
+                defaults={
+                    'employee': employee,
+                    'dolibarr_ref': dolibarr_ref,
+                    'origin_proforma_id': origin_proforma_id,
+                    'origin_order_id': origin_order_id,
+                    'amount_untaxed': amount,
+                    'date': event_date,
+                },
             )
+            if not created:
+                logger.info(
+                    "Invoice re-validated: dolibarr_id=%s ref=%s amount=%s",
+                    dolibarr_id, dolibarr_ref, amount,
+                )
 
     def process_proforma(self, payload, instance):
         """Process PROPAL_VALIDATE events."""
@@ -660,15 +680,22 @@ class DolibarrWebhookView(APIView):
         if amount is None:
             return
 
-        SalesRecord.objects.create(
-            employee=employee,
+        record, created = SalesRecord.objects.update_or_create(
             dolibarr_instance=instance,
             dolibarr_id=dolibarr_id,
-            dolibarr_ref=str(obj.get('ref', ''))[:100],
             status='proforma',
-            amount_untaxed=amount,
-            date=self._parse_event_date(obj),
+            defaults={
+                'employee': employee,
+                'dolibarr_ref': str(obj.get('ref', ''))[:100],
+                'amount_untaxed': amount,
+                'date': self._parse_event_date(obj),
+            },
         )
+        if not created:
+            logger.info(
+                "Proforma re-validated: dolibarr_id=%s ref=%s amount=%s",
+                dolibarr_id, record.dolibarr_ref, amount,
+            )
 
     def process_order(self, payload, instance):
         """Process ORDER_VALIDATE events (pedido validated)."""
@@ -702,16 +729,23 @@ class DolibarrWebhookView(APIView):
                 )
                 return
 
-        SalesRecord.objects.create(
-            employee=employee,
+        record, created = SalesRecord.objects.update_or_create(
             dolibarr_instance=instance,
             dolibarr_id=dolibarr_id,
-            dolibarr_ref=str(obj.get('ref', ''))[:100],
-            origin_proforma_id=origin_proforma_id,
             status='order',
-            amount_untaxed=amount,
-            date=self._parse_event_date(obj),
+            defaults={
+                'employee': employee,
+                'dolibarr_ref': str(obj.get('ref', ''))[:100],
+                'origin_proforma_id': origin_proforma_id,
+                'amount_untaxed': amount,
+                'date': self._parse_event_date(obj),
+            },
         )
+        if not created:
+            logger.info(
+                "Order re-validated: dolibarr_id=%s ref=%s amount=%s",
+                dolibarr_id, record.dolibarr_ref, amount,
+            )
 
     def process_product_creation(self, payload, instance):
         """
