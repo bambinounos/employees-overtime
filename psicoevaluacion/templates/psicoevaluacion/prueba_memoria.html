@@ -208,7 +208,8 @@
                     for (var j = 0; j < secuencia.length; j++) {
                         var inp = document.createElement('input');
                         inp.type = 'text';
-                        inp.maxLength = 1;
+                        // Ancho por campo según el número esperado (soporta 2+ cifras, ej. "21")
+                        inp.maxLength = String(secuencia[j]).length;
                         inp.className = 'digit-input';
                         inp.dataset.pos = j;
                         inp.inputMode = 'numeric';
@@ -224,7 +225,8 @@
                     // Auto-advance on digit entry
                     inputs.forEach(function(input, i) {
                         input.addEventListener('input', function() {
-                            if (this.value && i < inputs.length - 1) {
+                            // Avanzar solo cuando el campo está lleno (permite teclear "21" completo)
+                            if (this.value.length >= this.maxLength && i < inputs.length - 1) {
                                 inputs[i + 1].focus();
                             }
                         });

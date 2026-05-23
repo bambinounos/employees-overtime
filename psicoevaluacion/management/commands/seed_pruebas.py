@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from psicoevaluacion.models import Prueba, Pregunta, Opcion, PerfilObjetivo
+from psicoevaluacion.memoria_pool import MEMORIA_POOL, sync_memoria_pool
 
 
 class Command(BaseCommand):
@@ -570,17 +571,17 @@ class Command(BaseCommand):
         self.stdout.write(f'  Obediencia: {len(items)} ítems')
 
     # ──────────────────────────────────────────────
-    # 4. TEST DE MEMORIA (10 niveles — sin cambio)
+    # 4. TEST DE MEMORIA (10 niveles × 5 variantes aleatorias)
     # ──────────────────────────────────────────────
     def _seed_memoria(self):
-        prueba, _ = Prueba.objects.get_or_create(
+        Prueba.objects.get_or_create(
             tipo='MEMORIA',
             defaults={
                 'nombre': 'Test de Memoria de Trabajo',
                 'descripcion': 'Evalúa capacidad de retener y reproducir secuencias de información.',
                 'instrucciones': (
-                    'Se le presentará una secuencia de números o instrucciones. '
-                    'Observe con atención y luego reprodúzcala exactamente como la vio. '
+                    'Se le presentará una secuencia de números. '
+                    'Obsérvela con atención y luego reprodúzcala exactamente como la vio. '
                     'La dificultad irá aumentando progresivamente.'
                 ),
                 'orden': 4,
@@ -589,37 +590,12 @@ class Command(BaseCommand):
             },
         )
 
-        niveles = [
-            (1, "Repita la siguiente secuencia de 3 dígitos en el mismo orden.", [4, 7, 2]),
-            (2, "Repita la siguiente secuencia de 4 dígitos en el mismo orden.", [8, 3, 1, 6]),
-            (3, "Repita la siguiente secuencia de 5 dígitos en el mismo orden.", [5, 9, 2, 7, 4]),
-            (4, "Repita la siguiente secuencia de 3 dígitos en orden INVERSO.", [6, 1, 8]),
-            (5, "Repita la siguiente secuencia de 4 dígitos en orden INVERSO.", [3, 7, 4, 9]),
-            (6, "Repita la siguiente secuencia de 5 dígitos en orden INVERSO.", [2, 5, 8, 1, 6]),
-            (7, "Siga estas instrucciones en orden: Escriba el número 3, luego el 7, luego el 1.",
-             [3, 7, 1]),
-            (8, "Siga estas instrucciones: Primero 5, después 2, luego 8, finalmente 4.",
-             [5, 2, 8, 4]),
-            (9, "Siga estas instrucciones: Escriba 9, después 3, luego 6, después 1, finalmente 7.",
-             [9, 3, 6, 1, 7]),
-            (10, "Instrucción compleja: Escriba el 4, duplíquelo (8), reste 3 (5), "
-                 "agregue el primer número (4), luego escriba la suma total (21), "
-                 "y finalmente el número de pasos (6).",
-             [4, 8, 5, 4, 21, 6]),
-        ]
-
-        for orden, texto, secuencia in niveles:
-            Pregunta.objects.get_or_create(
-                prueba=prueba, texto=texto,
-                defaults={
-                    'tipo_escala': 'SECUENCIA',
-                    'dimension': 'GENERAL',
-                    'orden': orden,
-                    'secuencia_correcta': secuencia,
-                },
-            )
-
-        self.stdout.write(f'  Memoria: {len(niveles)} niveles')
+        # Pool aleatorizado: una variante por nivel se elige al armar cada evaluación
+        # (ver utils.seleccionar_preguntas_evaluacion + items_a_aplicar=10).
+        sync_memoria_pool(Prueba, Pregunta)
+        self.stdout.write(
+            f'  Memoria: {len(MEMORIA_POOL)} niveles × 5 variantes (50 secuencias)'
+        )
 
     # ──────────────────────────────────────────────
     # 5. MATRICES PROGRESIVAS (30 preguntas)
