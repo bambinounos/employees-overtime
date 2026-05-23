@@ -91,24 +91,29 @@ def sync_memoria_pool(Prueba, Pregunta):
     ]
     existing = list(Pregunta.objects.filter(prueba=prueba).order_by('orden', 'id'))
 
-    for i, (dim, orden, texto, seq) in enumerate(desired):
-        if i < len(existing):
-            q = existing[i]
-            q.dimension = dim
-            q.orden = orden
-            q.texto = texto
-            q.secuencia_correcta = seq
-            q.tipo_escala = 'SECUENCIA'
-            q.save()
-        else:
-            Pregunta.objects.create(
-                prueba=prueba,
-                dimension=dim,
-                orden=orden,
-                texto=texto,
-                secuencia_correcta=seq,
-                tipo_escala='SECUENCIA',
-            )
+    # Reasigna TODAS las filas existentes ciclando por el pool, de modo que
+    # ninguna quede con dimensión vieja/huérfana (si hubiera más de len(desired),
+    # las sobrantes se vuelven variantes extra de un nivel válido, nunca GENERAL).
+    for i, q in enumerate(existing):
+        dim, orden, texto, seq = desired[i % len(desired)]
+        q.dimension = dim
+        q.orden = orden
+        q.texto = texto
+        q.secuencia_correcta = seq
+        q.tipo_escala = 'SECUENCIA'
+        q.save()
+
+    # Crea las que falten si había menos preguntas que el pool.
+    for i in range(len(existing), len(desired)):
+        dim, orden, texto, seq = desired[i]
+        Pregunta.objects.create(
+            prueba=prueba,
+            dimension=dim,
+            orden=orden,
+            texto=texto,
+            secuencia_correcta=seq,
+            tipo_escala='SECUENCIA',
+        )
 
     prueba.items_a_aplicar = 10
     prueba.save()
