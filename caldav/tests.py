@@ -178,3 +178,37 @@ class BidirectionalSyncTest(TestCase):
         event = CalendarEvent.objects.get(uid=uid)
         self.assertIsNone(event.task)
         self.assertEqual(event.start_date, start)
+
+
+class ScriptNameMiddlewareTest(TestCase):
+    """The WSGI wrapper must advertise the proxy mount prefix to Radicale so
+    calendar-multiget hrefs carrying /caldav-server are not rejected."""
+
+    def _capture_app(self):
+        captured = {}
+
+        def app(environ, start_response):
+            captured['env'] = environ
+            return []
+
+        return app, captured
+
+    def test_injects_x_script_name(self):
+        from caldav.wsgi import with_script_name
+        app, captured = self._capture_app()
+        wrapped = with_script_name(app, '/caldav-server')
+        wrapped({}, lambda *a: None)
+        self.assertEqual(captured['env'].get('HTTP_X_SCRIPT_NAME'), '/caldav-server')
+
+    def test_does_not_override_proxy_header(self):
+        from caldav.wsgi import with_script_name
+        app, captured = self._capture_app()
+        wrapped = with_script_name(app, '/caldav-server')
+        wrapped({'HTTP_X_SCRIPT_NAME': '/already-set'}, lambda *a: None)
+        self.assertEqual(captured['env'].get('HTTP_X_SCRIPT_NAME'), '/already-set')
+
+    def test_disabled_when_empty(self):
+        from caldav.wsgi import with_script_name
+        app, captured = self._capture_app()
+        wrapped = with_script_name(app, '')
+        self.assertIs(wrapped, app)  # no wrapping when prefix is empty
