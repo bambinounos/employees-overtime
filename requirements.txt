@@ -1,11 +1,24 @@
+# Core framework — pinned to the 4.2 LTS line (prod runs 4.2.24).
+# Bounded so a fresh `pip install` on Python 3.10 never pulls Django 5.x/6.x.
+Django>=4.2,<4.3
+djangorestframework>=3.14.0
+# WSGI server for gunicorn.service / caldav.service (prod runs 23.0.0).
+gunicorn>=23.0,<24
+
+# CalDAV (Radicale 3.3.x APIs used by caldav/storage.py + wsgi.py; cap before 3.4).
+radicale>=3.3.0,<3.4
+
+# PDF report engine (reportlab 4.x).
+reportlab>=4.0,<5
+
+# Supporting libraries
 asgiref>=3.5.0
 defusedxml>=0.7.1
-Django>=4.2
 django_year_calendar>=0.5.0
-djangorestframework>=3.14.0
+httpx>=0.24.0
 Jinja2>=3.1.0
 json5>=0.9.0
-lxml
+lxml>=4.9
 MarkupSafe>=2.1.0
 pillow>=9.0.0
 psycopg2-binary>=2.9.0
@@ -15,6 +28,3 @@ PyYAML>=6.0
 six>=1.16.0
 sqlparse>=0.4.0
 vobject>=0.9.6
-reportlab>=4.0
-radicale>=3.3.0
-httpx>=0.24.0
