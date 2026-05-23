@@ -76,6 +76,17 @@ class EvaluacionAdmin(admin.ModelAdmin):
             kwargs["queryset"] = Employee.objects.filter(end_date__isnull=True)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Asignar/cambiar el perfil recalcula el veredicto del resultado existente.
+        if 'perfil_objetivo' in getattr(form, 'changed_data', []):
+            from .scoring import recalcular_veredicto
+            nuevo = recalcular_veredicto(obj)
+            if nuevo:
+                self.message_user(
+                    request,
+                    f"Veredicto recalculado con el perfil asignado: {nuevo}")
+
     @admin.display(description='Estado')
     def estado_color(self, obj):
         colores = {

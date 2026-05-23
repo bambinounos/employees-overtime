@@ -29,7 +29,9 @@ def _color_veredicto(veredicto):
         return colors.HexColor('#16a34a')
     elif veredicto == 'NO_APTO':
         return colors.HexColor('#dc2626')
-    return colors.HexColor('#d97706')
+    elif veredicto == 'PENDIENTE':
+        return colors.HexColor('#6b7280')  # gris: sin perfil / sin evaluar
+    return colors.HexColor('#d97706')  # REVISION (ámbar)
 
 
 def generar_informe_pdf(evaluacion, resultado):

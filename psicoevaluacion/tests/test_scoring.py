@@ -546,13 +546,38 @@ class CalcResultadoFinalTest(TestCase):
         self.assertEqual(resultado.puntaje_memoria, 0)
 
     def test_evaluacion_sin_perfil(self):
-        """Si no hay perfil, veredicto = REVISION."""
+        """Sin perfil asignado, el veredicto es PENDIENTE (no REVISION)."""
         ev = Evaluacion(nombres='NoPerfil', cedula='333', correo='n@n.com')
         ev.save()
-        # Make sure no active profiles exist
-        PerfilObjetivo.objects.all().delete()
+        # Aunque existan perfiles activos, ya no hay fallback: sin asignación → PENDIENTE
+        PerfilObjetivo.objects.create(nombre="Activo cualquiera", activo=True)
         resultado = calcular_resultado_final(ev)
-        self.assertEqual(resultado.veredicto_automatico, 'REVISION')
+        self.assertEqual(resultado.veredicto_automatico, 'PENDIENTE')
+
+    def test_recalcular_veredicto_al_asignar_perfil(self):
+        """recalcular_veredicto: PENDIENTE sin perfil; cambia al asignar uno."""
+        from psicoevaluacion.scoring import recalcular_veredicto
+        from psicoevaluacion.models import ResultadoFinal
+        ev = Evaluacion.objects.create(
+            nombres='Recalc', cedula='444', correo='r@r.com')
+        ResultadoFinal.objects.create(evaluacion=ev, evaluacion_confiable=True)
+
+        # Sin perfil → PENDIENTE
+        self.assertEqual(recalcular_veredicto(ev), 'PENDIENTE')
+
+        # Al asignar un perfil, el veredicto se recalcula (deja de ser PENDIENTE)
+        ev.perfil_objetivo = PerfilObjetivo.objects.create(
+            nombre="Perfil recalc", activo=True)
+        ev.save()
+        nuevo = recalcular_veredicto(ev)
+        self.assertNotEqual(nuevo, 'PENDIENTE')
+        self.assertIn(nuevo, ('APTO', 'NO_APTO', 'REVISION'))
+
+    def test_recalcular_veredicto_sin_resultado_devuelve_none(self):
+        from psicoevaluacion.scoring import recalcular_veredicto
+        ev = Evaluacion.objects.create(
+            nombres='SinResultado', cedula='555', correo='sr@r.com')
+        self.assertIsNone(recalcular_veredicto(ev))
 
     def test_resultado_se_actualiza_no_duplica(self):
         ev = self._setup_full_evaluation()

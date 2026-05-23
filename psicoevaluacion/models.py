@@ -421,6 +421,7 @@ class ResultadoFinal(models.Model):
         ('APTO', 'APTO'),
         ('NO_APTO', 'NO APTO'),
         ('REVISION', 'Requiere revisión adicional'),
+        ('PENDIENTE', 'Pendiente - Sin perfil asignado'),
     ]
 
     evaluacion = models.OneToOneField(Evaluacion, on_delete=models.CASCADE,
@@ -505,7 +506,7 @@ class ResultadoFinal(models.Model):
 
     # Veredicto
     veredicto_automatico = models.CharField(max_length=10,
-        choices=VEREDICTO_CHOICES, default='REVISION')
+        choices=VEREDICTO_CHOICES, default='PENDIENTE')
     veredicto_manual = models.CharField(max_length=10,
         choices=VEREDICTO_CHOICES, null=True, blank=True)
     veredicto_final = models.CharField(max_length=10,

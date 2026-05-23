@@ -1,6 +1,6 @@
 from statistics import mean
 
-from .models import ResultadoFinal, PerfilObjetivo, RespuestaPsicometrica, RespuestaAtencion
+from .models import ResultadoFinal, RespuestaPsicometrica, RespuestaAtencion
 
 
 def calcular_bigfive(respuestas):
@@ -433,15 +433,40 @@ def calcular_resultado_final(evaluacion):
         (sit_total / 20) * 0.4
     )
 
-    # 8. Veredicto automático
-    perfil = evaluacion.perfil_objetivo or PerfilObjetivo.objects.filter(activo=True).first()
-    if perfil:
-        resultado.veredicto_automatico = determinar_veredicto(resultado, perfil)
-    else:
-        resultado.veredicto_automatico = 'REVISION'
+    # 8. Veredicto automático (solo según el perfil ASIGNADO; PENDIENTE si no hay)
+    resultado.veredicto_automatico = _veredicto_desde_perfil(
+        resultado, evaluacion.perfil_objetivo)
 
     resultado.save()
     return resultado
+
+
+def _veredicto_desde_perfil(resultado, perfil):
+    """Veredicto según el perfil asignado; PENDIENTE si no hay perfil.
+
+    No se hace fallback a un perfil activo arbitrario: sin perfil explícito
+    el veredicto queda PENDIENTE para señalar que falta configurarlo, en vez
+    de un REVISION engañoso.
+    """
+    if perfil:
+        return determinar_veredicto(resultado, perfil)
+    return 'PENDIENTE'
+
+
+def recalcular_veredicto(evaluacion):
+    """Recalcula y persiste veredicto_automatico desde el perfil ASIGNADO.
+
+    Refresca el resultado desde la BD para usar puntajes frescos. Devuelve el
+    nuevo veredicto, o None si la evaluación todavía no tiene resultado.
+    """
+    resultado = getattr(evaluacion, 'resultado', None)
+    if resultado is None:
+        return None
+    resultado.refresh_from_db()
+    resultado.veredicto_automatico = _veredicto_desde_perfil(
+        resultado, evaluacion.perfil_objetivo)
+    resultado.save(update_fields=['veredicto_automatico'])
+    return resultado.veredicto_automatico
 
 
 def determinar_veredicto(resultado, perfil):
