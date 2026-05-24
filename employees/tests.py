@@ -1,4 +1,5 @@
 import calendar
+from unittest import mock
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -8,8 +9,13 @@ from .models import (
     ManualKpiEntry, EmployeePerformanceRecord, JobProfile
 )
 from decimal import Decimal
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
+
+# Instante fijo a mediodía local (TIME_ZONE=America/Mexico_City, UTC-6):
+# 18:00 UTC == 12:00 local, así fecha UTC == fecha local y no hay frontera de
+# medianoche que haga flaky la generación de tareas recurrentes.
+FROZEN_NOW = datetime(2025, 6, 16, 18, 0, 0, tzinfo=dt_timezone.utc)
 
 class PerformanceAndSalaryTest(TestCase):
     def setUp(self):
@@ -209,7 +215,8 @@ class RecurringTaskTest(TestCase):
         self.board = TaskBoard.objects.create(employee=self.employee, name="Test Board")
         self.task_list = TaskList.objects.create(board=self.board, name="To Do", order=1)
 
-    def test_recurring_task_generation(self):
+    @mock.patch('django.utils.timezone.now', return_value=FROZEN_NOW)
+    def test_recurring_task_generation(self, mock_now):
         # 1. Create a weekly recurring task
         start_datetime = timezone.now() - timedelta(days=10)
         end_date = (timezone.now() + timedelta(days=20)).date()
@@ -239,7 +246,8 @@ class RecurringTaskTest(TestCase):
         # We expect two instances to have been created: one for last week and one for this week.
         self.assertEqual(Task.objects.filter(is_recurring=False).count(), 2)
 
-    def test_idempotent_task_generation(self):
+    @mock.patch('django.utils.timezone.now', return_value=FROZEN_NOW)
+    def test_idempotent_task_generation(self, mock_now):
         # 1. Create a daily recurring task that should have started 3 days ago
         start_datetime = timezone.now() - timedelta(days=3)
         end_date = (timezone.now() + timedelta(days=10)).date()
@@ -275,7 +283,8 @@ class RecurringTaskTest(TestCase):
         # The number of tasks should not change, proving idempotency.
         self.assertEqual(Task.objects.filter(is_recurring=False).count(), 4)
 
-    def test_superuser_generates_tasks_for_specific_employee(self):
+    @mock.patch('django.utils.timezone.now', return_value=FROZEN_NOW)
+    def test_superuser_generates_tasks_for_specific_employee(self, mock_now):
         # 1. Create a recurring task for a specific employee
         start_datetime = timezone.now() - timedelta(days=2)
         end_date = (timezone.now() + timedelta(days=10)).date()

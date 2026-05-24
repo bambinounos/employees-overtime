@@ -82,7 +82,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 parent_tasks = Task.objects.filter(
                     assigned_to=employee,
                     is_recurring=True,
-                    recurrence_end_date__gte=timezone.now().date()
+                    recurrence_end_date__gte=timezone.localtime(timezone.now()).date()
                 )
                 for parent in parent_tasks:
                     self.generate_missing_tasks(parent)
@@ -132,7 +132,11 @@ class TaskViewSet(viewsets.ModelViewSet):
                 break  # Should not happen
 
             # Stop if the next date is in the future or after the end date.
-            if next_date > timezone.now().date() or (parent_task.recurrence_end_date and next_date > parent_task.recurrence_end_date):
+            # Use LOCAL date to match start_date/due_time above; comparing against
+            # the UTC date would generate an extra "tomorrow" instance when the
+            # view runs near UTC midnight (TIME_ZONE is UTC-6).
+            hoy_local = timezone.localtime(timezone.now()).date()
+            if next_date > hoy_local or (parent_task.recurrence_end_date and next_date > parent_task.recurrence_end_date):
                 break
 
             # Combine date and time to get the final due datetime.
