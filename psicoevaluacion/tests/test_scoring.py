@@ -418,6 +418,32 @@ class DeterminarVeredictoTest(TestCase):
         veredicto = determinar_veredicto(resultado, self.perfil)
         self.assertEqual(veredicto, 'NO_APTO')
 
+    def test_detalle_marca_indicador_en_fallo(self):
+        from psicoevaluacion.scoring import detalle_veredicto
+        resultado = self._make_resultado(puntaje_memoria_visual=50.0)  # < 60 (default)
+        det = detalle_veredicto(resultado, self.perfil)
+        mv = next(d for d in det if d['indicador'] == 'Memoria visual')
+        self.assertEqual(mv['estado'], 'FALLO')
+        self.assertEqual(mv['umbral'], self.perfil.min_memoria_visual)
+        otros = [d for d in det if d['indicador'] != 'Memoria visual']
+        self.assertTrue(all(d['estado'] == 'OK' for d in otros))
+
+    def test_sin_dato_fuerza_revision_no_no_apto(self):
+        from psicoevaluacion.scoring import evaluar_indicadores
+        # Falta un puntaje obligatorio (matrices) → SIN_DATO, no fallo
+        resultado = self._make_resultado(puntaje_matrices=None)
+        det, fallos, sin_dato = evaluar_indicadores(resultado, self.perfil)
+        self.assertEqual(fallos, 0)
+        self.assertEqual(sin_dato, 1)
+        mat = next(d for d in det if d['indicador'] == 'Matrices')
+        self.assertEqual(mat['estado'], 'SIN_DATO')
+        self.assertEqual(determinar_veredicto(resultado, self.perfil), 'REVISION')
+
+    def test_detalle_veredicto_sin_perfil_vacio(self):
+        from psicoevaluacion.scoring import detalle_veredicto
+        resultado = self._make_resultado()
+        self.assertEqual(detalle_veredicto(resultado, None), [])
+
 
 # ──────────────────────────────────────────────
 # RESULTADO FINAL INTEGRATION TEST

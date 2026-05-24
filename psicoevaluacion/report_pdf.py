@@ -136,6 +136,38 @@ def generar_informe_pdf(evaluacion, resultado):
     elements.append(vtable)
     elements.append(Spacer(1, 12))
 
+    # ── Motivo del veredicto ──
+    elements.append(Paragraph('Motivo del veredicto', styles['SectionTitle']))
+    detalle = getattr(resultado, 'detalle_veredicto', None) or []
+    if veredicto == 'PENDIENTE' or not detalle:
+        elements.append(Paragraph(
+            'Sin perfil objetivo asignado: no se evaluaron indicadores contra '
+            'umbrales. Asigne un perfil para obtener el veredicto.',
+            styles['InterpText']))
+    else:
+        drivers = [d for d in detalle if d.get('estado') != 'OK']
+        if not drivers:
+            elements.append(Paragraph(
+                'Todos los indicadores evaluados están dentro del umbral del perfil.',
+                styles['InterpText']))
+        else:
+            mot_data = [['Indicador', 'Puntaje', 'Umbral', 'Estado']]
+            for d in drivers:
+                comp = '>=' if d.get('comparacion') == 'min' else '<='
+                estado = 'SIN DATO' if d.get('estado') == 'SIN_DATO' else 'FALLO'
+                mot_data.append([
+                    d.get('indicador', ''),
+                    _fmt(d.get('puntaje')),
+                    f"{comp} {_fmt(d.get('umbral'))}",
+                    estado,
+                ])
+            elements.append(_make_table(mot_data))
+            elements.append(Paragraph(
+                'FALLO = puntaje fuera del umbral del perfil. '
+                'SIN DATO = prueba obligatoria sin puntaje (no rendida).',
+                styles['InterpText']))
+    elements.append(Spacer(1, 12))
+
     # ── Big Five ──
     elements.append(Paragraph('Big Five (OCEAN)', styles['SectionTitle']))
     bf_data = [

@@ -921,15 +921,14 @@ def aplicar_calificacion_ia(request, pk):
         fecha_revision=timezone.now(),
     )
 
-    # Recalculate verdict (solo según el perfil ASIGNADO; PENDIENTE si no hay)
-    from .scoring import _veredicto_desde_perfil
+    # Recalculate verdict + breakdown (solo según el perfil ASIGNADO; PENDIENTE si no hay)
+    from .scoring import _aplicar_veredicto
 
     # Reload resultado to ensure all state is consistent before calculating verdict
     resultado.refresh_from_db()
 
-    resultado.veredicto_automatico = _veredicto_desde_perfil(
-        resultado, evaluacion.perfil_objetivo)
-    resultado.save(update_fields=['veredicto_automatico'])
+    _aplicar_veredicto(resultado, evaluacion.perfil_objetivo)
+    resultado.save(update_fields=['veredicto_automatico', 'detalle_veredicto'])
 
     return JsonResponse({
         'status': 'ok',

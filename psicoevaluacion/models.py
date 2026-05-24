@@ -512,6 +512,9 @@ class ResultadoFinal(models.Model):
     veredicto_final = models.CharField(max_length=10,
         choices=VEREDICTO_CHOICES, null=True, blank=True,
         help_text="El evaluador puede sobrescribir el veredicto automático")
+    detalle_veredicto = models.JSONField(null=True, blank=True,
+        help_text="Desglose por indicador: puntaje vs umbral del perfil y estado "
+                  "(OK / FALLO / SIN_DATO). Explica por qué se emitió el veredicto.")
 
     observaciones = models.TextField(blank=True)
     fecha_calculo = models.DateTimeField(auto_now=True)

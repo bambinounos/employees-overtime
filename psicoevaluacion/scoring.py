@@ -433,40 +433,64 @@ def calcular_resultado_final(evaluacion):
         (sit_total / 20) * 0.4
     )
 
-    # 8. Veredicto automático (solo según el perfil ASIGNADO; PENDIENTE si no hay)
-    resultado.veredicto_automatico = _veredicto_desde_perfil(
-        resultado, evaluacion.perfil_objetivo)
+    # 8. Veredicto automático + desglose (solo según el perfil ASIGNADO)
+    _aplicar_veredicto(resultado, evaluacion.perfil_objetivo)
 
     resultado.save()
     return resultado
 
 
-def _veredicto_desde_perfil(resultado, perfil):
-    """Veredicto según el perfil asignado; PENDIENTE si no hay perfil.
+# Indicadores que componen el veredicto:
+# (nombre legible, attr en resultado, attr de umbral en perfil, modo, opcional)
+# modo 'min' = falla si está por debajo; 'max' = falla si está por encima.
+# opcional=True: si no hay puntaje (prueba no aplicada) no se evalúa ni se reporta.
+INDICADORES_VEREDICTO = [
+    ('Responsabilidad', 'puntaje_responsabilidad', 'min_responsabilidad', 'min', False),
+    ('Compromiso organizacional', 'puntaje_compromiso_total', 'min_compromiso_organizacional', 'min', False),
+    ('Obediencia', 'puntaje_obediencia', 'min_obediencia', 'min', False),
+    ('Memoria', 'puntaje_memoria', 'min_memoria', 'min', False),
+    ('Matrices', 'puntaje_matrices', 'min_matrices', 'min', False),
+    ('Neuroticismo', 'puntaje_neuroticismo', 'max_neuroticismo', 'max', False),
+    ('Atención al detalle', 'puntaje_atencion_detalle', 'min_atencion_detalle', 'min', True),
+    ('Memoria visual', 'puntaje_memoria_visual', 'min_memoria_visual', 'min', True),
+]
 
-    No se hace fallback a un perfil activo arbitrario: sin perfil explícito
-    el veredicto queda PENDIENTE para señalar que falta configurarlo, en vez
-    de un REVISION engañoso.
+
+def evaluar_indicadores(resultado, perfil):
+    """Evalúa cada indicador contra el umbral del perfil.
+
+    Devuelve (detalle, fallos, sin_dato):
+      detalle:  lista de dicts {indicador, puntaje, umbral, comparacion, estado}
+                con estado OK / FALLO / SIN_DATO.
+      fallos:   indicadores con dato por fuera del umbral.
+      sin_dato: indicadores obligatorios sin puntaje (prueba no rendida).
+    Los indicadores opcionales (atención, memoria visual) se omiten si no hay dato.
     """
-    if perfil:
-        return determinar_veredicto(resultado, perfil)
-    return 'PENDIENTE'
-
-
-def recalcular_veredicto(evaluacion):
-    """Recalcula y persiste veredicto_automatico desde el perfil ASIGNADO.
-
-    Refresca el resultado desde la BD para usar puntajes frescos. Devuelve el
-    nuevo veredicto, o None si la evaluación todavía no tiene resultado.
-    """
-    resultado = getattr(evaluacion, 'resultado', None)
-    if resultado is None:
-        return None
-    resultado.refresh_from_db()
-    resultado.veredicto_automatico = _veredicto_desde_perfil(
-        resultado, evaluacion.perfil_objetivo)
-    resultado.save(update_fields=['veredicto_automatico'])
-    return resultado.veredicto_automatico
+    detalle = []
+    fallos = 0
+    sin_dato = 0
+    for nombre, attr_res, attr_perfil, modo, opcional in INDICADORES_VEREDICTO:
+        valor = getattr(resultado, attr_res, None)
+        umbral = getattr(perfil, attr_perfil, None)
+        if valor is None:
+            if opcional:
+                continue
+            estado = 'SIN_DATO'
+            sin_dato += 1
+        elif modo == 'min':
+            estado = 'FALLO' if round(valor, 2) < round(umbral, 2) else 'OK'
+            fallos += int(estado == 'FALLO')
+        else:  # max
+            estado = 'FALLO' if round(valor, 2) > round(umbral, 2) else 'OK'
+            fallos += int(estado == 'FALLO')
+        detalle.append({
+            'indicador': nombre,
+            'puntaje': valor,
+            'umbral': umbral,
+            'comparacion': modo,
+            'estado': estado,
+        })
+    return detalle, fallos, sin_dato
 
 
 def determinar_veredicto(resultado, perfil):
@@ -474,51 +498,23 @@ def determinar_veredicto(resultado, perfil):
     Determina veredicto según el método configurado en el perfil.
 
     CONTEO_FALLOS (default):
-        APTO: 0 fallos y sin proyectivas pendientes
+        APTO: 0 fallos, sin datos faltantes y sin proyectivas pendientes
         NO_APTO: 2+ fallos
-        REVISION: 1 fallo, proyectivas pendientes, o evaluación no confiable
+        REVISION: 1 fallo, datos faltantes, proyectivas pendientes o no confiable
 
     ESTRICTO:
-        APTO: 0 fallos y sin proyectivas pendientes
+        APTO: 0 fallos, sin datos faltantes y sin proyectivas pendientes
         NO_APTO: cualquier fallo
-        (no existe REVISION por fallos, solo por confiabilidad o proyectivas pendientes)
+        REVISION: datos faltantes, proyectivas pendientes o no confiable
+
+    Un puntaje faltante (prueba obligatoria no rendida) cuenta como SIN_DATO y
+    fuerza REVISION — ya no se mezcla con un fallo real por bajo umbral.
     """
-    # Si evaluación no es confiable, forzar REVISION
     if not resultado.evaluacion_confiable:
         return 'REVISION'
 
-    fallos = 0
+    _, fallos, sin_dato = evaluar_indicadores(resultado, perfil)
 
-    def _below(valor, minimo):
-        if valor is None:
-            return True
-        return round(valor, 2) < round(minimo, 2)
-
-    def _above(valor, maximo):
-        if valor is None:
-            return True
-        return round(valor, 2) > round(maximo, 2)
-
-    if _below(resultado.puntaje_responsabilidad, perfil.min_responsabilidad):
-        fallos += 1
-    if _below(resultado.puntaje_compromiso_total, perfil.min_compromiso_organizacional):
-        fallos += 1
-    if _below(resultado.puntaje_obediencia, perfil.min_obediencia):
-        fallos += 1
-    if _below(resultado.puntaje_memoria, perfil.min_memoria):
-        fallos += 1
-    if _below(resultado.puntaje_matrices, perfil.min_matrices):
-        fallos += 1
-    if _above(resultado.puntaje_neuroticismo, perfil.max_neuroticismo):
-        fallos += 1
-    if resultado.puntaje_atencion_detalle is not None:
-        if _below(resultado.puntaje_atencion_detalle, perfil.min_atencion_detalle):
-            fallos += 1
-    if resultado.puntaje_memoria_visual is not None:
-        if _below(resultado.puntaje_memoria_visual, perfil.min_memoria_visual):
-            fallos += 1
-
-    # Verificar si hay proyectivas sin revisar
     proyectivas_pendientes = resultado.evaluacion.respuestas_proyectivas.filter(
         revisado=False).exists()
 
@@ -527,14 +523,50 @@ def determinar_veredicto(resultado, perfil):
     if metodo == 'ESTRICTO':
         if fallos > 0:
             return 'NO_APTO'
-        if proyectivas_pendientes:
+        if sin_dato > 0 or proyectivas_pendientes:
             return 'REVISION'
         return 'APTO'
 
     # CONTEO_FALLOS (default)
-    if fallos == 0 and not proyectivas_pendientes:
-        return 'APTO'
-    elif fallos >= 2:
+    if fallos >= 2:
         return 'NO_APTO'
-    else:
+    if fallos == 1 or sin_dato > 0 or proyectivas_pendientes:
         return 'REVISION'
+    return 'APTO'
+
+
+def detalle_veredicto(resultado, perfil):
+    """Lista de indicadores evaluados vs umbral (para informe/UI). [] sin perfil."""
+    if not perfil:
+        return []
+    detalle, _, _ = evaluar_indicadores(resultado, perfil)
+    return detalle
+
+
+def _aplicar_veredicto(resultado, perfil):
+    """Setea veredicto_automatico y detalle_veredicto en memoria.
+
+    Sin perfil asignado → PENDIENTE y detalle vacío (no se evaluó nada). No se
+    hace fallback a un perfil activo arbitrario.
+    """
+    if perfil:
+        resultado.veredicto_automatico = determinar_veredicto(resultado, perfil)
+        resultado.detalle_veredicto = detalle_veredicto(resultado, perfil)
+    else:
+        resultado.veredicto_automatico = 'PENDIENTE'
+        resultado.detalle_veredicto = None
+
+
+def recalcular_veredicto(evaluacion):
+    """Recalcula y persiste veredicto + desglose desde el perfil ASIGNADO.
+
+    Refresca el resultado desde la BD para usar puntajes frescos. Devuelve el
+    nuevo veredicto, o None si la evaluación todavía no tiene resultado.
+    """
+    resultado = getattr(evaluacion, 'resultado', None)
+    if resultado is None:
+        return None
+    resultado.refresh_from_db()
+    _aplicar_veredicto(resultado, evaluacion.perfil_objetivo)
+    resultado.save(update_fields=['veredicto_automatico', 'detalle_veredicto'])
+    return resultado.veredicto_automatico
