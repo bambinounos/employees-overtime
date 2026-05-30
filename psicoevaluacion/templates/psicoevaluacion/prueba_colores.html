@@ -156,12 +156,10 @@
             resultados.ronda1 = order;
             ronda = 2;
             document.getElementById('ronda-label').textContent = 'Ronda 2 de 2';
-            // Shuffle and re-render
+            // Re-render only: la instancia de Sortable sigue activa sobre #color-list
+            // (delega eventos en el contenedor). Recrearla aquí dejaba dos instancias
+            // duplicadas peleando por el drag y rompía el arrastre en la ronda 2.
             renderColors(shuffle(LUSCHER_COLORS));
-            sortable = Sortable.create(colorList, {
-                animation: 150,
-                ghostClass: 'sortable-ghost',
-            });
         } else {
             resultados.ronda2 = order;
             var btn = this;
