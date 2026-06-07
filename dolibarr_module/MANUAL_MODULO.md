@@ -4,7 +4,7 @@ Módulo Dolibarr que sincroniza Facturas, Presupuestos, Notas de Crédito y Prod
 
 ## Requisitos
 
-- Dolibarr >= 16.0
+- Dolibarr >= 16.0 (**probado en 16.x – 23.0.x**)
 - PHP >= 7.4 con extensión cURL habilitada
 - Servidor Django (payroll) en funcionamiento
 
