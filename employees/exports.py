@@ -18,9 +18,34 @@ from .models import Employee, ReciboNomina
 
 AZUL = "1E3A5F"
 GRIS_CLARO = "EEF2F7"
+ROJO_HELLBAM = "8B1A1A"
 
 MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
          'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+EMPRESA_NOMBRE = 'IMPORTADORA HELLBAM S.A.'
+EMPRESA_RUC = 'RUC: 2290350487001'
+EMPRESA_LINKS = [
+    ('www.hellbam.com', 'https://www.hellbam.com'),
+    ('www.hellbam.store', 'https://www.hellbam.store'),
+    ('kama.hellbam.store', 'https://kama.hellbam.store'),
+]
+
+
+def _bloque_empresa(ws, num_cols):
+    """Filas 1-3: nombre, RUC y links clicables de la empresa."""
+    celda = ws.cell(row=1, column=1, value=EMPRESA_NOMBRE)
+    celda.font = Font(bold=True, size=14, color=ROJO_HELLBAM)
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
+
+    celda = ws.cell(row=2, column=1, value=EMPRESA_RUC)
+    celda.font = Font(size=10, color="555555")
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=num_cols)
+
+    for idx, (texto, url) in enumerate(EMPRESA_LINKS, start=1):
+        celda = ws.cell(row=3, column=idx, value=texto)
+        celda.hyperlink = url
+        celda.font = Font(size=10, color="2563EB", underline='single')
 
 COLUMNAS_PLANILLA = [
     ('Empleado', 28),
@@ -121,13 +146,15 @@ def generar_planilla_xlsx(year, month):
     ws = wb.active
     ws.title = f"Planilla {month:02d}-{year}"
 
+    _bloque_empresa(ws, len(COLUMNAS_PLANILLA))
+
     titulo = f"PLANILLA DE NÓMINA — {MESES[month]} {year}"
     if preliminar:
         titulo += " (PRELIMINAR — mes sin cerrar)"
-    ws.cell(row=1, column=1, value=titulo).font = Font(bold=True, size=14, color=AZUL)
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(COLUMNAS_PLANILLA))
+    ws.cell(row=5, column=1, value=titulo).font = Font(bold=True, size=13, color=AZUL)
+    ws.merge_cells(start_row=5, start_column=1, end_row=5, end_column=len(COLUMNAS_PLANILLA))
 
-    fila_encabezado = 3
+    fila_encabezado = 7
     for idx, (nombre, ancho) in enumerate(COLUMNAS_PLANILLA, start=1):
         ws.cell(row=fila_encabezado, column=idx, value=nombre)
         ws.column_dimensions[get_column_letter(idx)].width = ancho

@@ -33,9 +33,13 @@ class PlanillaXlsxTest(TestCase):
         self.assertFalse(preliminar)
 
         ws = load_workbook(io.BytesIO(contenido)).active
-        # Fila 4 = primera fila de datos (título en 1, encabezado en 3)
-        self.assertEqual(ws.cell(row=4, column=1).value, 'Ana Nómina')
-        self.assertEqual(Decimal(str(ws.cell(row=4, column=10).value)), recibo.total)
+        # Branding: empresa en fila 1, RUC en 2, links en 3
+        self.assertEqual(ws.cell(row=1, column=1).value, 'IMPORTADORA HELLBAM S.A.')
+        self.assertIn('2290350487001', ws.cell(row=2, column=1).value)
+        self.assertEqual(ws.cell(row=3, column=1).hyperlink.target, 'https://www.hellbam.com')
+        # Fila 8 = primera fila de datos (empresa 1-3, título 5, encabezado 7)
+        self.assertEqual(ws.cell(row=8, column=1).value, 'Ana Nómina')
+        self.assertEqual(Decimal(str(ws.cell(row=8, column=10).value)), recibo.total)
 
     def test_planilla_mes_pasado_sin_recibos_falla_claro(self):
         with self.assertRaises(PlanillaSinRecibosError):
@@ -48,7 +52,7 @@ class PlanillaXlsxTest(TestCase):
         contenido, preliminar = generar_planilla_xlsx(hoy.year, hoy.month)
         self.assertTrue(preliminar)
         ws = load_workbook(io.BytesIO(contenido)).active
-        self.assertIn('PRELIMINAR', ws.cell(row=1, column=1).value)
+        self.assertIn('PRELIMINAR', ws.cell(row=5, column=1).value)
 
     def test_vista_planilla_solo_superuser(self):
         generar_recibo(self.employee, 2023, 1)

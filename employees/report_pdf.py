@@ -8,12 +8,15 @@ reglas de bonos o comisiones.
 import io
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.staticfiles import finders
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable,
+    Image,
 )
 
 MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
@@ -21,6 +24,42 @@ MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
 
 AZUL = colors.HexColor('#1e3a5f')
 GRIS = colors.HexColor('#555555')
+ROJO_HELLBAM = colors.HexColor('#8b1a1a')
+
+EMPRESA_NOMBRE = 'IMPORTADORA HELLBAM S.A.'
+EMPRESA_RUC = 'RUC: 2290350487001'
+EMPRESA_LINKS = [
+    ('www.hellbam.com', 'https://www.hellbam.com'),
+    ('www.hellbam.store', 'https://www.hellbam.store'),
+    ('kama.hellbam.store', 'https://kama.hellbam.store'),
+]
+
+
+def _bloque_empresa(styles):
+    """Logo + datos de la empresa con links clicables. Si el logo no está
+    disponible (p.ej. static sin desplegar), degrada a solo texto."""
+    links = ' &nbsp;·&nbsp; '.join(
+        f'<a href="{url}" color="#2563eb"><u>{texto}</u></a>'
+        for texto, url in EMPRESA_LINKS)
+    info = Paragraph(
+        f'<font size="13"><b>{EMPRESA_NOMBRE}</b></font><br/>'
+        f'<font size="9" color="#555555">{EMPRESA_RUC}</font><br/>'
+        f'<font size="9">{links}</font>',
+        styles['Normal'])
+
+    logo_path = finders.find('employees/img/logo_hellbam.png')
+    if not logo_path:
+        return info
+
+    # 834x299 px -> mantener proporción (~2.79) a 1.9" de ancho
+    logo = Image(logo_path, width=1.9 * inch, height=1.9 * inch * 299 / 834)
+    tabla = Table([[logo, info]], colWidths=[2.1 * inch, 4.7 * inch])
+    tabla.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (1, 0), (1, 0), 0),
+    ]))
+    return tabla
 
 
 def _dec(datos, clave):
@@ -55,10 +94,14 @@ def generar_recibo_pdf(recibo):
 
     elements = []
 
-    # ── Encabezado ──
+    # ── Encabezado corporativo ──
+    elements.append(_bloque_empresa(styles))
+    elements.append(Spacer(1, 8))
+    elements.append(HRFlowable(width='100%', thickness=2, color=ROJO_HELLBAM))
+    elements.append(Spacer(1, 10))
     elements.append(Paragraph('RECIBO DE NÓMINA', styles['Title']))
     elements.append(Spacer(1, 4))
-    elements.append(HRFlowable(width='100%', thickness=2, color=AZUL))
+    elements.append(HRFlowable(width='100%', thickness=1, color=AZUL))
     elements.append(Spacer(1, 12))
 
     periodo = f"{MESES[recibo.month]} {recibo.year}"
