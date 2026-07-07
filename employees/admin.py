@@ -9,6 +9,7 @@ from .models import (
     ManualKpiEntry, SiteConfiguration,
     JobProfile, KPIBonusTier, DolibarrInstance, DolibarrUserIdentity,
     SalesRecord, ProductCreationLog, WebhookLog, CommissionBalance,
+    TipoAusencia, SolicitudAusencia, ReciboNomina,
 )
 
 @admin.register(SiteConfiguration)
@@ -354,4 +355,40 @@ class WebhookLogAdmin(admin.ModelAdmin):
         return '-'
 
     def has_add_permission(self, request):
+        return False
+
+
+@admin.register(TipoAusencia)
+class TipoAusenciaAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'descuenta_saldo', 'es_remunerada', 'activo')
+    list_filter = ('activo',)
+
+
+@admin.register(SolicitudAusencia)
+class SolicitudAusenciaAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'tipo', 'fecha_inicio', 'fecha_fin',
+                    'dias_habiles', 'estado', 'decidida_por', 'decidida_en')
+    list_filter = ('estado', 'tipo')
+    search_fields = ('employee__name',)
+    readonly_fields = ('dias_habiles', 'creada_en', 'decidida_en', 'decidida_por')
+    date_hierarchy = 'fecha_inicio'
+
+    def has_delete_permission(self, request, obj=None):
+        # Las decisiones quedan en el historial; usar estado CANCELADA
+        return request.user.is_superuser
+
+
+@admin.register(ReciboNomina)
+class ReciboNominaAdmin(admin.ModelAdmin):
+    """Snapshots inmutables: solo lectura, se generan desde /nomina/."""
+    list_display = ('employee', 'year', 'month', 'total', 'generado_en', 'generado_por')
+    list_filter = ('year', 'month')
+    search_fields = ('employee__name',)
+    readonly_fields = ('employee', 'year', 'month', 'datos', 'total',
+                       'generado_en', 'generado_por')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False

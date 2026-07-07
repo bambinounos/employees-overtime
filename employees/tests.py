@@ -396,3 +396,76 @@ class SalaryViewTest(TestCase):
         # work_pay is still 1500. Overtime pay is extra.
         self.assertAlmostEqual(response.context['lost_lateness'], Decimal('100.00'))
         self.assertAlmostEqual(response.context['salary']['overtime_pay'], Decimal('300.00')) # 20 * 15 (1.5x)
+
+
+class ApiSecurityTest(TestCase):
+    """Fase 0 hardening: la API DRF exige sesión y cada empleado solo ve lo suyo."""
+
+    def setUp(self):
+        self.user_a = User.objects.create_user(username='emp_a', password='password')
+        self.employee_a = Employee.objects.create(
+            user=self.user_a, name='Employee A', email='a@example.com', hire_date=date(2023, 1, 1))
+        self.user_b = User.objects.create_user(username='emp_b', password='password')
+        self.employee_b = Employee.objects.create(
+            user=self.user_b, name='Employee B', email='b@example.com', hire_date=date(2023, 1, 1))
+        self.superuser = User.objects.create_superuser('boss', 'boss@example.com', 'password')
+        WorkLog.objects.create(employee=self.employee_a, date=date(2023, 5, 2), hours_worked=8)
+        WorkLog.objects.create(employee=self.employee_b, date=date(2023, 5, 2), hours_worked=8)
+
+    def test_anonymous_cannot_access_worklogs(self):
+        response = APIClient().get('/api/worklogs/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_employee_only_sees_own_worklogs(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user_a)
+        response = client.get('/api/worklogs/')
+        self.assertEqual(response.status_code, 200)
+        employees_in_response = {row['employee'] for row in response.json()}
+        self.assertEqual(employees_in_response, {self.employee_a.id})
+
+    def test_employee_cannot_create_worklog_for_other(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user_a)
+        response = client.post('/api/worklogs/', {
+            'employee': self.employee_b.id, 'date': '2023-05-03',
+            'hours_worked': 8, 'overtime_hours': 0}, format='json')
+        self.assertEqual(response.status_code, 201)
+        # employee is forced to the requester regardless of the payload
+        self.assertEqual(response.json()['employee'], self.employee_a.id)
+
+    def test_superuser_sees_all_worklogs(self):
+        client = APIClient()
+        client.force_authenticate(user=self.superuser)
+        response = client.get('/api/worklogs/')
+        self.assertEqual(len(response.json()), 2)
+
+    def test_salary_view_blocks_other_employee(self):
+        self.client.login(username='emp_a', password='password')
+        response = self.client.get(reverse('employee_salary', args=[self.employee_b.id]))
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(reverse('employee_salary', args=[self.employee_a.id]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_kpi_history_blocks_other_employee(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user_a)
+        response = client.get(f'/api/employees/{self.employee_b.id}/kpi-history/')
+        self.assertEqual(response.status_code, 403)
+        response = client.get(f'/api/employees/{self.employee_a.id}/kpi-history/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_performance_report_blocks_other_employee(self):
+        self.client.login(username='emp_a', password='password')
+        url = reverse('performance_report')
+        response = self.client.get(url, {'employee_id': self.employee_b.id})
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(url, {'employee_id': self.employee_a.id})
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_see_any_salary_and_report(self):
+        self.client.login(username='boss', password='password')
+        response = self.client.get(reverse('employee_salary', args=[self.employee_a.id]))
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(reverse('performance_report'), {'employee_id': self.employee_a.id})
+        self.assertEqual(response.status_code, 200)

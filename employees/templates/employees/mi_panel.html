@@ -1,0 +1,107 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "My Panel" %} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>{% trans "My Panel" %} — {{ employee.name }}</h1>
+    <form method="get" class="form-inline">
+        <input type="number" name="month" min="1" max="12" value="{{ month }}" class="form-control mr-1" style="width: 80px;">
+        <input type="number" name="year" value="{{ year }}" class="form-control mr-1" style="width: 110px;">
+        <button type="submit" class="btn btn-outline-primary">{% trans "View" %}</button>
+    </form>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">{% trans "Salary this month" %}</h6>
+                <h3>{% if salary %}$ {{ salary.total_salary|floatformat:2 }}{% else %}—{% endif %}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">{% trans "Commissions" %}</h6>
+                <h3>$ {{ commission_amount|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">{% trans "Vacation balance" %}</h6>
+                <h3>{{ saldo_vacaciones }} {% trans "days" %}</h3>
+                {% if ausencias_pendientes %}
+                <small class="text-warning">{{ ausencias_pendientes }} {% trans "pending request(s)" %}</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h6 class="text-muted">{% trans "Goal reached" %}</h6>
+                <h3>{{ percentage_potential|floatformat:0 }}%</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if salary %}
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">{% trans "Salary breakdown" %} {{ month|stringformat:"02d" }}/{{ year }}</div>
+            <table class="table table-sm mb-0">
+                <tr><td>{% trans "Pay for hours worked" %} ({{ salary.total_hours_worked }} h)</td>
+                    <td class="text-right">$ {{ salary.work_pay|floatformat:2 }}</td></tr>
+                <tr><td>{% trans "Overtime" %} ({{ salary.total_overtime_hours }} h, 1.5x)</td>
+                    <td class="text-right">$ {{ salary.overtime_pay|floatformat:2 }}</td></tr>
+                <tr><td>{% trans "Performance bonus" %}</td>
+                    <td class="text-right">$ {{ salary.performance_bonus|floatformat:2 }}</td></tr>
+                <tr><td>{% trans "Commissions" %}</td>
+                    <td class="text-right">$ {{ salary.commission_amount|floatformat:2 }}</td></tr>
+                <tr class="font-weight-bold table-active">
+                    <td>{% trans "Total" %}</td>
+                    <td class="text-right">$ {{ salary.total_salary|floatformat:2 }}</td></tr>
+            </table>
+            <div class="card-footer small text-muted">
+                {% trans "Potential bonus not earned" %}: $ {{ lost_bonus|floatformat:2 }}
+                · {% trans "Lost to absence/lateness" %}: $ {{ lost_lateness|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                {% trans "Latest payslips" %}
+                <a href="{% url 'mis_recibos' %}" class="small">{% trans "See all" %}</a>
+            </div>
+            <table class="table table-sm mb-0">
+                {% for r in recibos %}
+                <tr>
+                    <td>{{ r.month|stringformat:"02d" }}/{{ r.year }}</td>
+                    <td>$ {{ r.total|floatformat:2 }}</td>
+                    <td class="text-right">
+                        <a href="{% url 'recibo_pdf' r.employee_id r.year r.month %}" class="btn btn-outline-primary btn-sm">PDF</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td class="text-muted">{% trans "No payslips issued yet." %}</td></tr>
+                {% endfor %}
+            </table>
+            <div class="card-footer">
+                <a href="{% url 'mis_ausencias' %}" class="btn btn-outline-secondary btn-sm">{% trans "Request absence / vacation" %}</a>
+                <a href="{% url 'performance_report' %}?employee_id={{ employee.id }}" class="btn btn-outline-secondary btn-sm">{% trans "My KPIs" %}</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">{% trans "No salary configured for this period yet." %}</div>
+{% endif %}
+{% endblock %}

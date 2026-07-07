@@ -1,0 +1,28 @@
+{% extends "emails/base_email.html" %}
+
+{% block header %}Evaluación psicológica{% endblock %}
+
+{% block body %}
+<p>Hola {{ evaluacion.nombres }},</p>
+<p>
+  Como parte del proceso de selección para el cargo de
+  <strong>{{ evaluacion.cargo_postulado|default:"(no especificado)" }}</strong>,
+  te invitamos a completar una evaluación psicológica en línea.
+</p>
+<p style="text-align:center; margin: 24px 0;">
+  <a href="{{ link }}"
+     style="background:#1e3a5f; color:#ffffff; padding:12px 28px; border-radius:6px;
+            text-decoration:none; font-weight:bold; display:inline-block;">
+    Comenzar la evaluación
+  </a>
+</p>
+<p style="font-size:12px; color:#666666;">
+  Si el botón no funciona, copia este enlace en tu navegador:<br>
+  <a href="{{ link }}">{{ link }}</a>
+</p>
+<ul style="font-size:13px;">
+  <li>El enlace vence el <strong>{{ evaluacion.fecha_expiracion|date:"Y-m-d H:i" }}</strong>.</li>
+  <li>Necesitarás tu número de cédula para verificar tu identidad.</li>
+  <li>Busca un lugar tranquilo: la evaluación toma aproximadamente {{ duracion_estimada|default:"60" }} minutos y se responde de corrido.</li>
+</ul>
+{% endblock %}

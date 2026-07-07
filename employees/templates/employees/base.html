@@ -34,7 +34,21 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'employee_ranking' %}">{% trans "Ranking" %}</a>
                 </li>
+                {% if user.is_authenticated and not user.is_superuser %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'mi_panel' %}">{% trans "My Panel" %}</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'mis_ausencias' %}">{% trans "Absences" %}</a>
+                </li>
+                {% endif %}
                 {% if user.is_superuser %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'ausencias_pendientes' %}">{% trans "Approvals" %}</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'nomina_cierre' %}">{% trans "Payroll" %}</a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'company_settings' %}">{% trans "Settings" %}</a>
                 </li>
@@ -71,7 +85,7 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     {% block javascript %}{% endblock %}
 </body>
 </html>

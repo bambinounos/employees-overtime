@@ -1,0 +1,21 @@
+{% extends "emails/base_email.html" %}
+
+{% block header %}Solicitud de ausencia {{ solicitud.get_estado_display|lower }}{% endblock %}
+
+{% block body %}
+<p>Hola {{ solicitud.employee.name }},</p>
+<p>
+  Tu solicitud de <strong>{{ solicitud.tipo.nombre }}</strong>
+  del <strong>{{ solicitud.fecha_inicio|date:"Y-m-d" }}</strong>
+  al <strong>{{ solicitud.fecha_fin|date:"Y-m-d" }}</strong>
+  ({{ solicitud.dias_habiles }} día(s) hábil(es)) fue
+  <strong style="color:{% if solicitud.estado == 'APROBADA' %}#16a34a{% else %}#dc2626{% endif %};">
+    {{ solicitud.get_estado_display|upper }}</strong>.
+</p>
+{% if solicitud.comentario_decision %}
+<p><em>Comentario: {{ solicitud.comentario_decision }}</em></p>
+{% endif %}
+{% if solicitud.estado == 'APROBADA' and solicitud.tipo.descuenta_saldo %}
+<p>Saldo de vacaciones restante este año: <strong>{{ saldo }}</strong> día(s).</p>
+{% endif %}
+{% endblock %}

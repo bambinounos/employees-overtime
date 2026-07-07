@@ -1,0 +1,25 @@
+{% extends "emails/base_email.html" %}
+
+{% block header %}Recordatorio de tareas{% endblock %}
+
+{% block body %}
+<p>Hola {{ employee.name }},</p>
+<p>Tienes tareas que vencen hoy o están vencidas:</p>
+<table role="presentation" width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse; font-size:13px;">
+  <tr style="background:#eef2f7;">
+    <th align="left" style="border:1px solid #dddddd;">Tarea</th>
+    <th align="left" style="border:1px solid #dddddd;">Vence</th>
+    <th align="left" style="border:1px solid #dddddd;">Estado</th>
+  </tr>
+  {% for task in tareas %}
+  <tr>
+    <td style="border:1px solid #dddddd;">{{ task.title }}</td>
+    <td style="border:1px solid #dddddd;">{{ task.due_date|date:"Y-m-d H:i" }}</td>
+    <td style="border:1px solid #dddddd; color:{% if task.vencida %}#dc2626{% else %}#d97706{% endif %};">
+      {% if task.vencida %}Vencida{% else %}Vence hoy{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+<p style="margin-top:16px;">Entra al <a href="{{ board_url }}">tablero de tareas</a> para actualizarlas.</p>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "My Absences" %} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>{% trans "My Absences" %}</h1>
+    <span class="badge badge-info p-2" style="font-size: 1rem;">
+        {% trans "Vacation balance" %}: {{ saldo }} {% trans "days" %}
+    </span>
+</div>
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">{% trans "New request" %}</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="form-group">
+                        <label>{% trans "Type" %}</label>
+                        {{ form.tipo }}
+                        {{ form.tipo.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label>{% trans "Start date" %}</label>
+                        {{ form.fecha_inicio }}
+                        {{ form.fecha_inicio.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label>{% trans "End date" %}</label>
+                        {{ form.fecha_fin }}
+                        {{ form.fecha_fin.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label>{% trans "Reason" %}</label>
+                        {{ form.motivo }}
+                        {{ form.motivo.errors }}
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">{% trans "Submit request" %}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <table class="table table-sm">
+            <thead class="thead-light">
+                <tr>
+                    <th>{% trans "Type" %}</th>
+                    <th>{% trans "From" %}</th>
+                    <th>{% trans "To" %}</th>
+                    <th>{% trans "Business days" %}</th>
+                    <th>{% trans "Status" %}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in solicitudes %}
+                <tr>
+                    <td>{{ s.tipo.nombre }}</td>
+                    <td>{{ s.fecha_inicio }}</td>
+                    <td>{{ s.fecha_fin }}</td>
+                    <td>{{ s.dias_habiles }}</td>
+                    <td>
+                        {% if s.estado == 'APROBADA' %}<span class="badge badge-success">{{ s.get_estado_display }}</span>
+                        {% elif s.estado == 'RECHAZADA' %}<span class="badge badge-danger" {% if s.comentario_decision %}title="{{ s.comentario_decision }}"{% endif %}>{{ s.get_estado_display }}</span>
+                        {% elif s.estado == 'PENDIENTE' %}<span class="badge badge-warning">{{ s.get_estado_display }}</span>
+                        {% else %}<span class="badge badge-secondary">{{ s.get_estado_display }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if s.estado == 'PENDIENTE' %}
+                        <form method="post" style="display:inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="accion" value="cancelar">
+                            <input type="hidden" name="solicitud_id" value="{{ s.id }}">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">{% trans "Cancel" %}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-muted">{% trans "No absence requests yet." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

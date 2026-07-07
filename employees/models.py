@@ -56,10 +56,26 @@ class Employee(models.Model):
         validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))],
         help_text="Porcentaje de comision sobre ventas netas facturadas (ej: 5.00 = 5%). Maximo 100%."
     )
+    dias_vacaciones_anuales = models.PositiveSmallIntegerField(
+        default=15,
+        help_text="Días de vacaciones por año calendario que descuentan del saldo."
+    )
 
 
     def __str__(self):
         return self.name
+
+    def saldo_vacaciones(self, year=None):
+        """Días de vacaciones disponibles en el año: cupo anual menos los días
+        hábiles de solicitudes APROBADAS de tipos que descuentan saldo."""
+        if year is None:
+            year = date.today().year
+        usados = self.solicitudes_ausencia.filter(
+            estado='APROBADA',
+            tipo__descuenta_saldo=True,
+            fecha_inicio__year=year,
+        ).aggregate(total=Coalesce(Sum('dias_habiles'), Decimal('0')))['total']
+        return Decimal(self.dias_vacaciones_anuales) - usados
 
     @property
     def is_active(self):
@@ -461,12 +477,119 @@ class WorkLog(models.Model):
     date = models.DateField()
     hours_worked = models.DecimalField(max_digits=4, decimal_places=2, default=8)
     overtime_hours = models.DecimalField(max_digits=4, decimal_places=2, default=0)
+    ausencia = models.ForeignKey(
+        'SolicitudAusencia', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='worklogs',
+        help_text="Si el día proviene de una ausencia remunerada aprobada."
+    )
 
     class Meta:
         unique_together = ('employee', 'date')
 
     def __str__(self):
         return f"{self.employee.name} on {self.date}"
+
+
+def contar_dias_habiles(inicio, fin):
+    """Días lunes-viernes en el rango [inicio, fin], ambos inclusive."""
+    dias = 0
+    dia = inicio
+    while dia <= fin:
+        if dia.weekday() < 5:
+            dias += 1
+        dia += timedelta(days=1)
+    return dias
+
+
+class TipoAusencia(models.Model):
+    """Catálogo de tipos de ausencia (vacaciones, permiso médico, etc.)."""
+    nombre = models.CharField(max_length=100, unique=True)
+    descuenta_saldo = models.BooleanField(
+        default=True, help_text="Si los días aprobados descuentan del saldo anual de vacaciones.")
+    es_remunerada = models.BooleanField(
+        default=True, help_text="Si los días aprobados se pagan (generan WorkLog de 8 horas).")
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Tipo de ausencia"
+        verbose_name_plural = "Tipos de ausencia"
+
+    def __str__(self):
+        return self.nombre
+
+
+class SolicitudAusencia(models.Model):
+    """Solicitud de vacaciones o permiso con flujo de aprobación."""
+    ESTADO_CHOICES = [
+        ('PENDIENTE', 'Pendiente'),
+        ('APROBADA', 'Aprobada'),
+        ('RECHAZADA', 'Rechazada'),
+        ('CANCELADA', 'Cancelada'),
+    ]
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='solicitudes_ausencia')
+    tipo = models.ForeignKey(TipoAusencia, on_delete=models.PROTECT)
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    dias_habiles = models.DecimalField(max_digits=4, decimal_places=1, default=0)
+    motivo = models.TextField(blank=True)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='PENDIENTE')
+    decidida_por = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='ausencias_decididas')
+    comentario_decision = models.TextField(blank=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    decidida_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-creada_en']
+        verbose_name = "Solicitud de ausencia"
+        verbose_name_plural = "Solicitudes de ausencia"
+
+    def __str__(self):
+        return f"{self.employee.name}: {self.tipo} {self.fecha_inicio} a {self.fecha_fin} ({self.get_estado_display()})"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.fecha_fin and self.fecha_inicio and self.fecha_fin < self.fecha_inicio:
+            raise ValidationError("La fecha de fin no puede ser anterior a la de inicio.")
+        if self.employee_id and self.fecha_inicio and self.fecha_fin:
+            solapadas = SolicitudAusencia.objects.filter(
+                employee_id=self.employee_id,
+                estado__in=['PENDIENTE', 'APROBADA'],
+                fecha_inicio__lte=self.fecha_fin,
+                fecha_fin__gte=self.fecha_inicio,
+            ).exclude(pk=self.pk)
+            if solapadas.exists():
+                raise ValidationError(
+                    "Ya existe una solicitud pendiente o aprobada que se solapa con esas fechas.")
+
+    def save(self, *args, **kwargs):
+        if self.fecha_inicio and self.fecha_fin:
+            self.dias_habiles = Decimal(contar_dias_habiles(self.fecha_inicio, self.fecha_fin))
+        super().save(*args, **kwargs)
+
+
+class ReciboNomina(models.Model):
+    """Snapshot inmutable de la liquidación mensual de un empleado.
+
+    Se genera explícitamente al cierre de mes; el PDF se renderiza siempre
+    desde `datos`, nunca recalculando, para que el histórico no cambie si
+    cambian reglas de bonos/comisiones."""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='recibos')
+    year = models.PositiveSmallIntegerField()
+    month = models.PositiveSmallIntegerField()
+    datos = models.JSONField(help_text="Desglose completo de calculate_salary al momento de emisión.")
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    generado_en = models.DateTimeField(auto_now_add=True)
+    generado_por = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        unique_together = ('employee', 'year', 'month')
+        ordering = ['-year', '-month']
+        verbose_name = "Recibo de nómina"
+        verbose_name_plural = "Recibos de nómina"
+
+    def __str__(self):
+        return f"Recibo {self.employee.name} {self.year}-{self.month:02d} (${self.total})"
 
 class SalesRecord(models.Model):
     """Tracks a sales event synced from Dolibarr."""
@@ -651,6 +774,9 @@ class Task(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by_manager = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    reminder_sent_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Último aviso por email de vencimiento (idempotencia del cron diario).")
 
     # Recurrence fields
     is_recurring = models.BooleanField(default=False)

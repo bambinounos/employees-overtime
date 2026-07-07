@@ -147,6 +147,57 @@ LOGIN_REDIRECT_URL = '/'
 # Email settings for development (prints emails to console)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
+# Base URL used to build absolute links in emails sent from cron/management
+# commands (no request available there). Override in local_settings.py.
+SITE_BASE_URL = 'http://localhost:8000'
+
+# DRF: without an explicit default, permission falls back to AllowAny and
+# every router endpoint (worklogs, tasks...) is world-readable/writable.
+# The Dolibarr webhook keeps its own explicit AllowAny + HMAC validation.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+
+# Logging: console always; file handler only if logs/ exists (created on the
+# server, not in the repo) so dev environments work without setup.
+LOGS_DIR = BASE_DIR / 'logs'
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{asctime} {levelname} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO'},
+        'employees': {'handlers': ['console'], 'level': 'INFO'},
+        'psicoevaluacion': {'handlers': ['console'], 'level': 'INFO'},
+    },
+}
+if LOGS_DIR.is_dir():
+    LOGGING['handlers']['file'] = {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': str(LOGS_DIR / 'app.log'),
+        'maxBytes': 5 * 1024 * 1024,
+        'backupCount': 5,
+        'formatter': 'verbose',
+    }
+    for _logger in LOGGING['loggers'].values():
+        _logger['handlers'].append('file')
+
 # Allow large uploads for canvas drawings (Base64 encoded, ~3MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 

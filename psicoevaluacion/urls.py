@@ -29,5 +29,6 @@ urlpatterns = [
     path('panel/evaluacion/<int:pk>/calcular/', views.calcular_resultados, name='calcular_resultados'),
     path('panel/evaluacion/<int:pk>/reporte/', views.generar_reporte, name='generar_reporte'),
     path('panel/evaluacion/<int:pk>/veredicto/', views.asignar_veredicto, name='asignar_veredicto'),
+    path('panel/evaluacion/<int:pk>/enviar-link/', views.enviar_link, name='enviar_link'),
     path('panel/comparativo/', views.comparativo, name='comparativo'),
 ]

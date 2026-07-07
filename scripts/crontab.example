@@ -1,0 +1,28 @@
+# ==============================================================================
+# crontab.example - Tareas programadas recomendadas para producción
+#
+# Instalación (usuario ubuntu en el servidor):
+#   crontab -e
+#   (pegar las líneas de abajo ajustando APP_DIR)
+#
+# Este archivo es documentación versionada: NO se instala automáticamente.
+# ==============================================================================
+
+# Ajustar a la ruta real de la instalación
+# APP_DIR=/home/ubuntu/employees_overtime
+
+# Backup diario de PostgreSQL (retención 7 días, ver backup.sh)
+0 2 * * * cd /home/ubuntu/employees_overtime && ./backup.sh >> logs/cron.log 2>&1
+
+# Marcar como EXPIRADA las evaluaciones psicológicas con token vencido
+0 3 * * * cd /home/ubuntu/employees_overtime && venv/bin/python manage.py limpiar_evaluaciones_expiradas >> logs/cron.log 2>&1
+
+# Aviso diario de tareas por vencer / vencidas (7:00, requiere SMTP en local_settings)
+0 7 * * * cd /home/ubuntu/employees_overtime && venv/bin/python manage.py notificar_tareas >> logs/cron.log 2>&1
+
+# Resumen semanal a administradores (lunes 7:00)
+0 7 * * 1 cd /home/ubuntu/employees_overtime && venv/bin/python manage.py resumen_semanal >> logs/cron.log 2>&1
+
+# Cierre de mes automático: genera recibos del mes anterior el día 1 (6:00).
+# Opcional — también se puede hacer a mano desde la pantalla /nomina/.
+# 0 6 1 * * cd /home/ubuntu/employees_overtime && venv/bin/python manage.py generar_recibos >> logs/cron.log 2>&1

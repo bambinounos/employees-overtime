@@ -3,6 +3,7 @@ from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.throttling import AnonRateThrottle
 from .models import WorkLog, TaskBoard, Task, EmployeePerformanceRecord, Employee, DolibarrInstance, DolibarrUserIdentity, SalesRecord, WebhookLog, ProductCreationLog
 from .serializers import WorkLogSerializer, TaskBoardSerializer, TaskSerializer
@@ -29,6 +30,23 @@ class WebhookRateThrottle(AnonRateThrottle):
 class WorkLogViewSet(viewsets.ModelViewSet):
     queryset = WorkLog.objects.all()
     serializer_class = WorkLogSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return WorkLog.objects.all()
+        if hasattr(user, 'employee'):
+            return WorkLog.objects.filter(employee=user.employee)
+        return WorkLog.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.is_superuser:
+            serializer.save()
+            return
+        if not hasattr(user, 'employee'):
+            raise PermissionDenied("No employee profile linked to this user.")
+        serializer.save(employee=user.employee)
 
 class TaskBoardViewSet(viewsets.ReadOnlyModelViewSet):
     """A viewset for viewing task boards."""
@@ -316,6 +334,10 @@ def kpi_history_api(request, employee_id):
         employee = Employee.objects.get(pk=employee_id)
     except Employee.DoesNotExist:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Only the employee themself (or a superuser) may read this history
+    if not request.user.is_superuser and getattr(request.user, 'employee', None) != employee:
+        return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
     # Calculate the date 12 months ago from the first day of the current month
     today = timezone.now().date()

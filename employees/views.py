@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI, BonusRule
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from datetime import date, timedelta
 from decimal import Decimal
 from django.contrib import messages
@@ -28,18 +29,11 @@ def employee_list(request):
     }
     return render(request, 'employees/employee_list.html', context)
 
-@login_required
-def employee_salary(request, employee_id):
-    """Renders the salary calculation page for a specific employee."""
-    employee = Employee.objects.get(pk=employee_id)
-
-    today = date.today()
-    year = int(request.GET.get('year', today.year))
-    month = int(request.GET.get('month', today.month))
-
+def _build_salary_context(employee, year, month):
+    """Builds the salary breakdown + 'striking' metrics context shared by
+    employee_salary and mi_panel."""
     salary = employee.calculate_salary(year, month)
 
-    # Calculate additional "Striking" metrics for the dashboard
     potential_bonus = Decimal('0.00')
     lost_bonus = Decimal('0.00')
     lost_lateness = Decimal('0.00')
@@ -78,7 +72,7 @@ def employee_salary(request, employee_id):
         else:
             percentage_potential = 0
 
-    context = {
+    return {
         'employee': employee,
         'year': year,
         'month': month,
@@ -90,6 +84,22 @@ def employee_salary(request, employee_id):
         'percentage_potential': percentage_potential,
         'commission_amount': commission_amount,
     }
+
+
+@login_required
+def employee_salary(request, employee_id):
+    """Renders the salary calculation page for a specific employee."""
+    employee = Employee.objects.get(pk=employee_id)
+
+    # Salary data is only visible to its owner or a superuser
+    if not request.user.is_superuser and getattr(request.user, 'employee', None) != employee:
+        raise PermissionDenied
+
+    today = date.today()
+    year = int(request.GET.get('year', today.year))
+    month = int(request.GET.get('month', today.month))
+
+    context = _build_salary_context(employee, year, month)
     return render(request, 'employees/employee_salary.html', context)
 
 @login_required
@@ -185,27 +195,47 @@ def performance_report(request):
     all_employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today()))
     selected_employee_id = request.GET.get('employee_id')
 
+    # Non-superusers can only report on themselves
+    if not request.user.is_superuser:
+        own = getattr(request.user, 'employee', None)
+        if own is None:
+            raise PermissionDenied
+        all_employees = all_employees.filter(pk=own.pk)
+        if selected_employee_id and int(selected_employee_id) != own.pk:
+            raise PermissionDenied
+
     records = None
     if selected_employee_id:
         records = EmployeePerformanceRecord.objects.filter(
             employee_id=selected_employee_id
         ).order_by('-date', 'kpi__name').select_related('employee', 'kpi')
 
-        # Check if a CSV export is requested
-        if request.GET.get('format') == 'csv':
+        export_format = request.GET.get('format')
+        if export_format in ('csv', 'xlsx'):
+            headers = ['Period', 'KPI', 'Result', 'Target Met', 'Bonus Awarded']
+            rows = [
+                [record.date.strftime('%Y-%m'), record.kpi.name, record.actual_value,
+                 'Yes' if record.target_met else 'No', record.bonus_awarded]
+                for record in records
+            ]
+
+            if export_format == 'xlsx':
+                from .exports import rows_to_xlsx
+                contenido = rows_to_xlsx(
+                    headers, rows, sheet_name='Desempeño',
+                    title=f"Reporte de desempeño — {records[0].employee.name}" if rows else "Reporte de desempeño")
+                response = HttpResponse(
+                    contenido,
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                response['Content-Disposition'] = f'attachment; filename="performance_report_{selected_employee_id}.xlsx"'
+                return response
+
             response = HttpResponse(content_type='text/csv')
             response['Content-Disposition'] = f'attachment; filename="performance_report_{selected_employee_id}.csv"'
-
             writer = csv.writer(response)
-            writer.writerow(['Period', 'KPI', 'Result', 'Target Met', 'Bonus Awarded'])
-            for record in records:
-                writer.writerow([
-                    record.date.strftime('%Y-%m'),
-                    record.kpi.name,
-                    record.actual_value,
-                    'Yes' if record.target_met else 'No',
-                    record.bonus_awarded
-                ])
+            writer.writerow(headers)
+            for row in rows:
+                writer.writerow(row)
             return response
 
     # If not exporting, render the HTML page as usual
@@ -408,3 +438,207 @@ def terminate_employee(request, employee_id):
             messages.error(request, "Empleado no encontrado.")
 
     return redirect('employee_list')
+
+
+# ============================================================================
+# Autoservicio del empleado: ausencias, recibos y panel personal
+# ============================================================================
+
+def _own_employee_or_403(request):
+    employee = getattr(request.user, 'employee', None)
+    if employee is None:
+        raise PermissionDenied
+    return employee
+
+
+@login_required
+def mis_ausencias(request):
+    """Portal del empleado: saldo de vacaciones, historial y nueva solicitud."""
+    from .forms import SolicitudAusenciaForm
+    from . import ausencias as svc
+
+    employee = _own_employee_or_403(request)
+
+    if request.method == 'POST':
+        if request.POST.get('accion') == 'cancelar':
+            solicitud = employee.solicitudes_ausencia.filter(
+                pk=request.POST.get('solicitud_id'), estado='PENDIENTE').first()
+            if solicitud:
+                svc.cancelar_solicitud(solicitud, request.user)
+                messages.success(request, "Solicitud cancelada.")
+            else:
+                messages.error(request, "Solo se pueden cancelar solicitudes pendientes.")
+            return redirect('mis_ausencias')
+
+        form = SolicitudAusenciaForm(request.POST, employee=employee)
+        if form.is_valid():
+            solicitud = form.save(commit=False)
+            solicitud.employee = employee
+            solicitud.save()
+            messages.success(request, "Solicitud enviada. Queda pendiente de aprobación.")
+            return redirect('mis_ausencias')
+    else:
+        form = SolicitudAusenciaForm(employee=employee)
+
+    context = {
+        'employee': employee,
+        'form': form,
+        'saldo': employee.saldo_vacaciones(),
+        'solicitudes': employee.solicitudes_ausencia.all()[:50],
+    }
+    return render(request, 'employees/ausencias.html', context)
+
+
+@login_required
+def ausencias_pendientes(request):
+    """Bandeja del aprobador (superuser): solicitudes pendientes de decisión."""
+    from .models import SolicitudAusencia
+
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    pendientes = SolicitudAusencia.objects.filter(estado='PENDIENTE').select_related(
+        'employee', 'tipo').order_by('fecha_inicio')
+    recientes = SolicitudAusencia.objects.exclude(estado='PENDIENTE').select_related(
+        'employee', 'tipo')[:20]
+    context = {'pendientes': pendientes, 'recientes': recientes}
+    return render(request, 'employees/ausencias_aprobar.html', context)
+
+
+@login_required
+def decidir_ausencia(request, solicitud_id):
+    """Aprueba o rechaza una solicitud (POST, solo superuser)."""
+    from .models import SolicitudAusencia
+    from . import ausencias as svc
+
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('ausencias_pendientes')
+
+    try:
+        solicitud = SolicitudAusencia.objects.get(pk=solicitud_id)
+    except SolicitudAusencia.DoesNotExist:
+        messages.error(request, "Solicitud no encontrada.")
+        return redirect('ausencias_pendientes')
+
+    decision = request.POST.get('decision')
+    comentario = request.POST.get('comentario', '')
+    try:
+        if decision == 'aprobar':
+            svc.aprobar_solicitud(solicitud, request.user, comentario)
+            messages.success(request, f"Ausencia de {solicitud.employee.name} aprobada.")
+        elif decision == 'rechazar':
+            svc.rechazar_solicitud(solicitud, request.user, comentario)
+            messages.success(request, f"Ausencia de {solicitud.employee.name} rechazada.")
+        else:
+            messages.error(request, "Decisión inválida.")
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    return redirect('ausencias_pendientes')
+
+
+@login_required
+def mis_recibos(request):
+    """Lista de recibos de nómina del empleado autenticado."""
+    employee = _own_employee_or_403(request)
+    context = {
+        'employee': employee,
+        'recibos': employee.recibos.all()[:36],
+    }
+    return render(request, 'employees/mis_recibos.html', context)
+
+
+@login_required
+def recibo_pdf(request, employee_id, year, month):
+    """Descarga el PDF de un recibo (dueño o superuser)."""
+    from .models import ReciboNomina
+    from .report_pdf import generar_recibo_pdf
+
+    try:
+        recibo = ReciboNomina.objects.select_related('employee').get(
+            employee_id=employee_id, year=year, month=month)
+    except ReciboNomina.DoesNotExist:
+        messages.error(request, "Ese recibo todavía no fue emitido.")
+        return redirect('mis_recibos')
+
+    if not request.user.is_superuser and getattr(request.user, 'employee', None) != recibo.employee:
+        raise PermissionDenied
+
+    pdf = generar_recibo_pdf(recibo)
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'attachment; filename="recibo_{recibo.employee_id}_{year}_{month:02d}.pdf"')
+    return response
+
+
+@login_required
+def mi_panel(request):
+    """Panel personal del empleado: salario del mes, saldo y recibos."""
+    employee = _own_employee_or_403(request)
+
+    today = date.today()
+    year = int(request.GET.get('year', today.year))
+    month = int(request.GET.get('month', today.month))
+
+    context = _build_salary_context(employee, year, month)
+    context.update({
+        'saldo_vacaciones': employee.saldo_vacaciones(),
+        'recibos': employee.recibos.all()[:12],
+        'ausencias_pendientes': employee.solicitudes_ausencia.filter(estado='PENDIENTE').count(),
+    })
+    return render(request, 'employees/mi_panel.html', context)
+
+
+@login_required
+def nomina_cierre(request):
+    """Pantalla de cierre de mes (superuser): genera los recibos del período."""
+    from .nomina import generar_recibos_mes
+    from .models import ReciboNomina
+
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    today = date.today()
+    year = int(request.POST.get('year') or request.GET.get('year') or today.year)
+    month = int(request.POST.get('month') or request.GET.get('month') or today.month)
+
+    if request.method == 'POST':
+        generados, omitidos = generar_recibos_mes(year, month, generado_por=request.user)
+        messages.success(request, f"{len(generados)} recibos generados para {month:02d}/{year}.")
+        if omitidos:
+            nombres = ', '.join(e.name for e in omitidos)
+            messages.warning(request, f"Sin salario configurado (omitidos): {nombres}")
+        return redirect(f"{request.path}?year={year}&month={month}")
+
+    recibos = ReciboNomina.objects.filter(year=year, month=month).select_related('employee')
+    context = {'year': year, 'month': month, 'recibos': recibos}
+    return render(request, 'employees/nomina.html', context)
+
+
+@login_required
+def nomina_planilla(request):
+    """Descarga la planilla de nómina XLSX del período (superuser)."""
+    from .exports import PlanillaSinRecibosError, generar_planilla_xlsx
+
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    today = date.today()
+    year = int(request.GET.get('year', today.year))
+    month = int(request.GET.get('month', today.month))
+
+    try:
+        contenido, preliminar = generar_planilla_xlsx(year, month)
+    except PlanillaSinRecibosError as exc:
+        from django.urls import reverse
+        messages.error(request, str(exc))
+        return redirect(f"{reverse('nomina_cierre')}?year={year}&month={month}")
+
+    sufijo = '_PRELIMINAR' if preliminar else ''
+    response = HttpResponse(
+        contenido,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="planilla_nomina_{year}_{month:02d}{sufijo}.xlsx"')
+    return response

@@ -1,0 +1,34 @@
+{% extends "emails/base_email.html" %}
+
+{% block header %}Resumen semanal{% endblock %}
+
+{% block body %}
+<p>Resumen de la semana ({{ desde|date:"Y-m-d" }} — {{ hasta|date:"Y-m-d" }}):</p>
+<ul>
+  <li><strong>{{ tareas_completadas }}</strong> tareas completadas</li>
+  <li><strong>{{ tareas_vencidas }}</strong> tareas vencidas sin completar</li>
+  <li><strong>{{ ausencias_pendientes }}</strong> solicitudes de ausencia esperando decisión</li>
+  <li><strong>{{ evaluaciones_sin_revisar }}</strong> evaluaciones psicológicas completadas sin revisar</li>
+</ul>
+
+{% if detalle_vencidas %}
+<p><strong>Tareas vencidas por empleado:</strong></p>
+<table role="presentation" width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse; font-size:13px;">
+  <tr style="background:#eef2f7;">
+    <th align="left" style="border:1px solid #dddddd;">Empleado</th>
+    <th align="left" style="border:1px solid #dddddd;">Vencidas</th>
+  </tr>
+  {% for fila in detalle_vencidas %}
+  <tr>
+    <td style="border:1px solid #dddddd;">{{ fila.nombre }}</td>
+    <td style="border:1px solid #dddddd;">{{ fila.cantidad }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<p style="margin-top:16px;">
+  <a href="{{ dashboard_url }}">Abrir el dashboard</a>
+  {% if ausencias_pendientes %} · <a href="{{ aprobaciones_url }}">Revisar ausencias pendientes</a>{% endif %}
+</p>
+{% endblock %}

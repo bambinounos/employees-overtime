@@ -705,17 +705,97 @@ def api_guardar_atencion(request):
 
 @login_required
 def dashboard_evaluador(request):
+    import json as json_mod
+    from datetime import timedelta
+
+    from django.core.paginator import Paginator
+    from django.db.models import Count, Q
+
+    from .models import PerfilObjetivo, ResultadoFinal
+
     evaluaciones = Evaluacion.objects.select_related(
         'perfil_objetivo'
     ).order_by('-fecha_creacion')
+
+    # --- Filtros ---
+    estado = request.GET.get('estado', '')
+    perfil_id = request.GET.get('perfil', '')
+    q = request.GET.get('q', '')
+    if estado:
+        evaluaciones = evaluaciones.filter(estado=estado)
+    if perfil_id:
+        evaluaciones = evaluaciones.filter(perfil_objetivo_id=perfil_id)
+    if q:
+        evaluaciones = evaluaciones.filter(Q(nombres__icontains=q) | Q(cedula__icontains=q))
+
+    # --- Agregados para tarjetas y gráficos (sobre TODAS las evaluaciones) ---
+    todas = Evaluacion.objects.all()
+    conteo_estados = {fila['estado']: fila['n']
+                      for fila in todas.values('estado').annotate(n=Count('id'))}
+
+    veredictos = {'APTO': 0, 'NO_APTO': 0, 'REVISION': 0, 'PENDIENTE': 0}
+    for fila in ResultadoFinal.objects.values('veredicto_final', 'veredicto_automatico'):
+        v = fila['veredicto_final'] or fila['veredicto_automatico'] or 'PENDIENTE'
+        veredictos[v] = veredictos.get(v, 0) + 1
+
+    # Evaluaciones creadas por mes, últimos 6 meses
+    hoy = timezone.localtime(timezone.now()).date()
+    labels_meses, datos_meses = [], []
+    year, month = hoy.year, hoy.month
+    puntos = []
+    for _ in range(6):
+        puntos.append((year, month))
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    for y, m in reversed(puntos):
+        labels_meses.append(f"{y}-{m:02d}")
+        datos_meses.append(todas.filter(fecha_creacion__year=y, fecha_creacion__month=m).count())
+
+    paginador = Paginator(evaluaciones, 25)
+    pagina = paginador.get_page(request.GET.get('page'))
+
     return render(request, 'psicoevaluacion/admin/dashboard.html', {
-        'evaluaciones': evaluaciones,
+        'evaluaciones': pagina.object_list,
+        'pagina': pagina,
+        'total': todas.count(),
+        'conteo_estados': conteo_estados,
+        'sin_revisar': conteo_estados.get('COMPLETADA', 0),
+        'veredictos': veredictos,
+        'perfiles': PerfilObjetivo.objects.all(),
+        'filtro_estado': estado,
+        'filtro_perfil': perfil_id,
+        'filtro_q': q,
+        'estados_choices': Evaluacion.ESTADO_CHOICES,
+        'chart_meses_labels': json_mod.dumps(labels_meses),
+        'chart_meses_data': json_mod.dumps(datos_meses),
+        'chart_veredictos': json_mod.dumps(veredictos),
     })
 
 
 @login_required
 def crear_evaluacion(request):
-    return render(request, 'psicoevaluacion/admin/crear_evaluacion.html')
+    """Alta de evaluación desde el panel, con envío opcional del link."""
+    from django.contrib import messages as dj_messages
+
+    from .forms import EvaluacionForm
+    from .notificaciones import enviar_link_evaluacion
+
+    if request.method == 'POST':
+        form = EvaluacionForm(request.POST)
+        if form.is_valid():
+            evaluacion = form.save(commit=False)
+            evaluacion.creado_por = request.user
+            evaluacion.save()
+            dj_messages.success(request, f"Evaluación creada para {evaluacion.nombres}.")
+            if form.cleaned_data.get('enviar_email'):
+                ok, mensaje = enviar_link_evaluacion(evaluacion, request=request)
+                (dj_messages.success if ok else dj_messages.warning)(request, mensaje)
+            return redirect('psicoevaluacion:detalle_evaluacion', pk=evaluacion.pk)
+    else:
+        form = EvaluacionForm()
+
+    return render(request, 'psicoevaluacion/admin/crear_evaluacion.html', {'form': form})
 
 
 @login_required
@@ -730,6 +810,19 @@ def detalle_evaluacion(request, pk):
         'tiene_proyectivas': tiene_proyectivas,
         'proyectivas_pendientes': proyectivas_pendientes,
     })
+
+
+@login_required
+def enviar_link(request, pk):
+    """Envía (o reenvía) el link de la evaluación al correo del candidato."""
+    from django.contrib import messages as dj_messages
+    from .notificaciones import enviar_link_evaluacion
+
+    evaluacion = get_object_or_404(Evaluacion, pk=pk)
+    if request.method == 'POST':
+        ok, mensaje = enviar_link_evaluacion(evaluacion, request=request)
+        (dj_messages.success if ok else dj_messages.warning)(request, mensaje)
+    return redirect('psicoevaluacion:detalle_evaluacion', pk=pk)
 
 
 @login_required
@@ -977,4 +1070,39 @@ def asignar_veredicto(request, pk):
 
 @login_required
 def comparativo(request):
-    return render(request, 'psicoevaluacion/admin/comparativo.html')
+    """Comparación lado a lado de candidatos con resultado calculado."""
+    import json as json_mod
+
+    candidatos = Evaluacion.objects.filter(
+        resultado__isnull=False
+    ).select_related('resultado', 'perfil_objetivo').order_by('-fecha_creacion')
+
+    ids = request.GET.getlist('ev')
+    seleccionadas = []
+    if ids:
+        seleccionadas = [e for e in candidatos if str(e.pk) in ids][:6]
+
+    # Datos para el radar Big Five (una serie por candidato)
+    paleta = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2']
+    series = []
+    for idx, ev in enumerate(seleccionadas):
+        r = ev.resultado
+        series.append({
+            'label': ev.nombres,
+            'data': [
+                float(r.puntaje_apertura or 0),
+                float(r.puntaje_responsabilidad or 0),
+                float(r.puntaje_extroversion or 0),
+                float(r.puntaje_amabilidad or 0),
+                float(r.puntaje_neuroticismo or 0),
+            ],
+            'borderColor': paleta[idx % len(paleta)],
+            'backgroundColor': paleta[idx % len(paleta)] + '22',
+        })
+
+    return render(request, 'psicoevaluacion/admin/comparativo.html', {
+        'candidatos': candidatos,
+        'seleccionadas': seleccionadas,
+        'ids_seleccionados': [str(e.pk) for e in seleccionadas],
+        'radar_series': json_mod.dumps(series),
+    })

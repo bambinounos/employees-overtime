@@ -27,12 +27,74 @@
         .badge-REVISION { background: #fff3cd; color: #856404; }
         .empty { text-align: center; padding: 40px; color: #999; }
         .admin-link { display: inline-block; margin-bottom: 16px; color: #2563eb; font-size: 0.9rem; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+        .btn { display: inline-block; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.9rem; }
+        .btn-primary { background: #2563eb; color: #fff !important; }
+        .btn-primary:hover { text-decoration: none; opacity: 0.92; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .card { background: #fff; border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+        .card .num { font-size: 1.6rem; font-weight: 700; }
+        .card .lbl { font-size: 0.78rem; color: #777; text-transform: uppercase; letter-spacing: 0.4px; }
+        .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .chart-box { background: #fff; border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .chart-box h3 { font-size: 0.9rem; color: #555; margin-bottom: 8px; }
+        @media (max-width: 800px) { .charts { grid-template-columns: 1fr; } }
+        .filtros { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+        .filtros select, .filtros input { padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.88rem; }
+        .paginacion { margin-top: 14px; text-align: center; font-size: 0.9rem; }
+        .paginacion a, .paginacion span { margin: 0 6px; }
     </style>
 </head>
 <body>
 <div class="container">
     <a href="/admin/" class="admin-link">&larr; Volver al Admin</a>
-    <h1>Panel del Evaluador</h1>
+    <div class="toolbar">
+        <h1 style="margin-bottom:0;">Panel del Evaluador</h1>
+        <div>
+            <a href="{% url 'psicoevaluacion:comparativo' %}" class="btn" style="background:#e2d5f1; color:#4a235a;">Comparar candidatos</a>
+            <a href="{% url 'psicoevaluacion:crear_evaluacion' %}" class="btn btn-primary">+ Nueva evaluación</a>
+        </div>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="num">{{ total }}</div><div class="lbl">Total</div></div>
+        <div class="card"><div class="num">{{ conteo_estados.PENDIENTE|default:0 }}</div><div class="lbl">Pendientes</div></div>
+        <div class="card"><div class="num">{{ conteo_estados.EN_CURSO|default:0 }}</div><div class="lbl">En curso</div></div>
+        <div class="card"><div class="num" style="color:#b45309;">{{ sin_revisar }}</div><div class="lbl">Sin revisar</div></div>
+        <div class="card"><div class="num" style="color:#15803d;">{{ veredictos.APTO }}</div><div class="lbl">Aptos</div></div>
+        <div class="card"><div class="num" style="color:#b91c1c;">{{ veredictos.NO_APTO }}</div><div class="lbl">No aptos</div></div>
+    </div>
+
+    <div class="charts">
+        <div class="chart-box">
+            <h3>Evaluaciones creadas por mes</h3>
+            <canvas id="chartMeses" height="110"></canvas>
+        </div>
+        <div class="chart-box">
+            <h3>Veredictos</h3>
+            <canvas id="chartVeredictos" height="220"></canvas>
+        </div>
+    </div>
+
+    <form method="get" class="filtros">
+        <select name="estado">
+            <option value="">Todos los estados</option>
+            {% for valor, nombre in estados_choices %}
+            <option value="{{ valor }}" {% if filtro_estado == valor %}selected{% endif %}>{{ nombre }}</option>
+            {% endfor %}
+        </select>
+        <select name="perfil">
+            <option value="">Todos los perfiles</option>
+            {% for p in perfiles %}
+            <option value="{{ p.id }}" {% if filtro_perfil == p.id|stringformat:"s" %}selected{% endif %}>{{ p.nombre }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="q" placeholder="Nombre o cédula" value="{{ filtro_q }}">
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+        {% if filtro_estado or filtro_perfil or filtro_q %}
+        <a href="{% url 'psicoevaluacion:dashboard_evaluador' %}" class="btn" style="background:#eee;">Limpiar</a>
+        {% endif %}
+    </form>
 
     {% if evaluaciones %}
     <table>
@@ -74,9 +136,57 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if pagina.paginator.num_pages > 1 %}
+    <div class="paginacion">
+        {% if pagina.has_previous %}
+        <a href="?page={{ pagina.previous_page_number }}&estado={{ filtro_estado }}&perfil={{ filtro_perfil }}&q={{ filtro_q }}">&larr; Anterior</a>
+        {% endif %}
+        <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}
+        <a href="?page={{ pagina.next_page_number }}&estado={{ filtro_estado }}&perfil={{ filtro_perfil }}&q={{ filtro_q }}">Siguiente &rarr;</a>
+        {% endif %}
+    </div>
+    {% endif %}
     {% else %}
-    <div class="empty">No hay evaluaciones registradas.</div>
+    <div class="empty">No hay evaluaciones que coincidan con el filtro.</div>
     {% endif %}
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    new Chart(document.getElementById('chartMeses'), {
+        type: 'bar',
+        data: {
+            labels: {{ chart_meses_labels|safe }},
+            datasets: [{
+                label: 'Evaluaciones',
+                data: {{ chart_meses_data|safe }},
+                backgroundColor: 'rgba(37, 99, 235, 0.55)',
+                borderColor: 'rgb(37, 99, 235)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+
+    const veredictos = {{ chart_veredictos|safe }};
+    new Chart(document.getElementById('chartVeredictos'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Apto', 'No apto', 'Revisión', 'Pendiente'],
+            datasets: [{
+                data: [veredictos.APTO, veredictos.NO_APTO, veredictos.REVISION, veredictos.PENDIENTE],
+                backgroundColor: ['#16a34a', '#dc2626', '#d97706', '#9ca3af']
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+});
+</script>
 </body>
 </html>

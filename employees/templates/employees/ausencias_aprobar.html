@@ -1,0 +1,82 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Absence Approvals" %} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">{% trans "Absence Approvals" %}</h1>
+
+<h5>{% trans "Pending requests" %}</h5>
+<table class="table">
+    <thead class="thead-light">
+        <tr>
+            <th>{% trans "Employee" %}</th>
+            <th>{% trans "Type" %}</th>
+            <th>{% trans "From" %}</th>
+            <th>{% trans "To" %}</th>
+            <th>{% trans "Business days" %}</th>
+            <th>{% trans "Balance" %}</th>
+            <th>{% trans "Reason" %}</th>
+            <th>{% trans "Decision" %}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in pendientes %}
+        <tr>
+            <td>{{ s.employee.name }}</td>
+            <td>{{ s.tipo.nombre }}</td>
+            <td>{{ s.fecha_inicio }}</td>
+            <td>{{ s.fecha_fin }}</td>
+            <td>{{ s.dias_habiles }}</td>
+            <td>{{ s.employee.saldo_vacaciones }}</td>
+            <td class="small">{{ s.motivo|truncatechars:80 }}</td>
+            <td style="min-width: 260px;">
+                <form method="post" action="{% url 'decidir_ausencia' s.id %}" class="form-inline">
+                    {% csrf_token %}
+                    <input type="text" name="comentario" class="form-control form-control-sm mb-1 mr-1"
+                           placeholder="{% trans 'Comment (optional)' %}" style="width: 130px;">
+                    <button type="submit" name="decision" value="aprobar" class="btn btn-success btn-sm mr-1">
+                        {% trans "Approve" %}</button>
+                    <button type="submit" name="decision" value="rechazar" class="btn btn-danger btn-sm">
+                        {% trans "Reject" %}</button>
+                </form>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-muted">{% trans "No pending requests." %}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h5 class="mt-4">{% trans "Recent decisions" %}</h5>
+<table class="table table-sm">
+    <thead class="thead-light">
+        <tr>
+            <th>{% trans "Employee" %}</th>
+            <th>{% trans "Type" %}</th>
+            <th>{% trans "From" %}</th>
+            <th>{% trans "To" %}</th>
+            <th>{% trans "Status" %}</th>
+            <th>{% trans "Decided by" %}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in recientes %}
+        <tr>
+            <td>{{ s.employee.name }}</td>
+            <td>{{ s.tipo.nombre }}</td>
+            <td>{{ s.fecha_inicio }}</td>
+            <td>{{ s.fecha_fin }}</td>
+            <td>
+                {% if s.estado == 'APROBADA' %}<span class="badge badge-success">{{ s.get_estado_display }}</span>
+                {% elif s.estado == 'RECHAZADA' %}<span class="badge badge-danger">{{ s.get_estado_display }}</span>
+                {% else %}<span class="badge badge-secondary">{{ s.get_estado_display }}</span>{% endif %}
+            </td>
+            <td>{{ s.decidida_por|default_if_none:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-muted">{% trans "No decisions yet." %}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

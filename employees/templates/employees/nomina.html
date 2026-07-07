@@ -1,0 +1,69 @@
+{% extends 'employees/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Payroll Close" %} - {% trans "Salary Management" %}{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">{% trans "Payroll Close" %}</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="post" class="form-inline">
+            {% csrf_token %}
+            <label class="mr-2">{% trans "Period" %}:</label>
+            <select name="month" class="form-control mr-2">
+                <option value="1" {% if month == 1 %}selected{% endif %}>01</option>
+                <option value="2" {% if month == 2 %}selected{% endif %}>02</option>
+                <option value="3" {% if month == 3 %}selected{% endif %}>03</option>
+                <option value="4" {% if month == 4 %}selected{% endif %}>04</option>
+                <option value="5" {% if month == 5 %}selected{% endif %}>05</option>
+                <option value="6" {% if month == 6 %}selected{% endif %}>06</option>
+                <option value="7" {% if month == 7 %}selected{% endif %}>07</option>
+                <option value="8" {% if month == 8 %}selected{% endif %}>08</option>
+                <option value="9" {% if month == 9 %}selected{% endif %}>09</option>
+                <option value="10" {% if month == 10 %}selected{% endif %}>10</option>
+                <option value="11" {% if month == 11 %}selected{% endif %}>11</option>
+                <option value="12" {% if month == 12 %}selected{% endif %}>12</option>
+            </select>
+            <input type="number" name="year" value="{{ year }}" class="form-control mr-2" style="width: 110px;">
+            <button type="submit" class="btn btn-primary mr-2"
+                    onclick="return confirm('{% trans "Generate/refresh payslips for the whole period?" %}')">
+                {% trans "Generate payslips" %}
+            </button>
+            <a href="{% url 'nomina_planilla' %}?year={{ year }}&month={{ month }}"
+               class="btn btn-outline-success">
+                {% trans "Download payroll sheet (XLSX)" %}
+            </a>
+        </form>
+        <small class="text-muted d-block mt-2">
+            {% trans "Generating freezes each employee's salary breakdown for the period. Re-running refreshes the snapshots with current data." %}
+        </small>
+    </div>
+</div>
+
+<h5>{% trans "Issued payslips for" %} {{ month|stringformat:"02d" }}/{{ year }}</h5>
+<table class="table table-sm">
+    <thead class="thead-light">
+        <tr>
+            <th>{% trans "Employee" %}</th>
+            <th>{% trans "Total" %}</th>
+            <th>{% trans "Issued" %}</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in recibos %}
+        <tr>
+            <td>{{ r.employee.name }}</td>
+            <td>$ {{ r.total|floatformat:2 }}</td>
+            <td>{{ r.generado_en|date:"Y-m-d H:i" }}</td>
+            <td>
+                <a href="{% url 'recibo_pdf' r.employee_id r.year r.month %}" class="btn btn-outline-primary btn-sm">PDF</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted">{% trans "No payslips issued for this period yet." %}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

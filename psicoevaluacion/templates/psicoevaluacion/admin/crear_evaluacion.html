@@ -1,5 +1,100 @@
 <!DOCTYPE html>
-<html><head><title>Crear Evaluación</title></head>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Evaluación</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        .container { max-width: 640px; margin: 0 auto; }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; }
+        a { color: #2563eb; text-decoration: none; }
+        .admin-link { display: inline-block; margin-bottom: 16px; font-size: 0.9rem; }
+        .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 5px; }
+        .form-input { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.95rem; }
+        .form-input:focus { outline: 2px solid #93c5fd; border-color: #2563eb; }
+        .check { display: flex; align-items: center; gap: 8px; }
+        .check label { margin-bottom: 0; font-weight: 600; font-size: 0.9rem; color: #555; }
+        .errores { color: #b91c1c; font-size: 0.83rem; margin-top: 4px; }
+        .mensajes { margin-bottom: 14px; }
+        .mensajes div { padding: 10px 14px; border-radius: 6px; margin-bottom: 6px; font-size: 0.9rem; }
+        .msg-success { background: #d4edda; color: #155724; }
+        .msg-warning { background: #fff3cd; color: #856404; }
+        .msg-error { background: #f8d7da; color: #721c24; }
+        .btn { display: inline-block; padding: 10px 22px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.95rem; background: #2563eb; color: #fff; font-weight: 600; }
+        .btn:hover { opacity: 0.92; }
+        .fila-doble { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 560px) { .fila-doble { grid-template-columns: 1fr; } }
+    </style>
+</head>
 <body>
-<h1>Crear nueva evaluación</h1>
-</body></html>
+<div class="container">
+    <a href="{% url 'psicoevaluacion:dashboard_evaluador' %}" class="admin-link">&larr; Volver al panel</a>
+    <h1>Crear nueva evaluación</h1>
+
+    {% if messages %}
+    <div class="mensajes">
+        {% for message in messages %}
+        <div class="msg-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <form method="post">
+            {% csrf_token %}
+            <div class="field">
+                <label>Nombres completos del candidato *</label>
+                {{ form.nombres }}
+                {% if form.nombres.errors %}<div class="errores">{{ form.nombres.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="fila-doble">
+                <div class="field">
+                    <label>Cédula *</label>
+                    {{ form.cedula }}
+                    {% if form.cedula.errors %}<div class="errores">{{ form.cedula.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label>Teléfono</label>
+                    {{ form.telefono }}
+                    {% if form.telefono.errors %}<div class="errores">{{ form.telefono.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="field">
+                <label>Correo electrónico</label>
+                {{ form.correo }}
+                {% if form.correo.errors %}<div class="errores">{{ form.correo.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="fila-doble">
+                <div class="field">
+                    <label>Cargo al que postula</label>
+                    {{ form.cargo_postulado }}
+                    {% if form.cargo_postulado.errors %}<div class="errores">{{ form.cargo_postulado.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="field">
+                    <label>Perfil objetivo (veredicto)</label>
+                    {{ form.perfil_objetivo }}
+                    {% if form.perfil_objetivo.errors %}<div class="errores">{{ form.perfil_objetivo.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="fila-doble">
+                <div class="field">
+                    <label>{{ form.horas_validez.label }}</label>
+                    {{ form.horas_validez }}
+                    {% if form.horas_validez.errors %}<div class="errores">{{ form.horas_validez.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="field check" style="align-self: end; padding-bottom: 10px;">
+                    {{ form.enviar_email }}
+                    <label for="{{ form.enviar_email.id_for_label }}">{{ form.enviar_email.label }}</label>
+                </div>
+            </div>
+            {% if form.non_field_errors %}<div class="errores">{{ form.non_field_errors }}</div>{% endif %}
+            <button type="submit" class="btn">Crear evaluación</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

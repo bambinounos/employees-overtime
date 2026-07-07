@@ -254,6 +254,8 @@ class Evaluacion(models.Model):
         null=True, blank=True)
     notas_evaluador = models.TextField(blank=True,
         verbose_name="Notas del evaluador")
+    link_enviado_en = models.DateTimeField(null=True, blank=True,
+        help_text="Último envío del link de la evaluación al correo del candidato")
 
     class Meta:
         verbose_name = "Evaluación"

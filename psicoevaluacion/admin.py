@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -69,7 +69,17 @@ class EvaluacionAdmin(admin.ModelAdmin):
     list_filter = ('estado', 'fecha_creacion')
     search_fields = ('nombres', 'cedula', 'correo')
     readonly_fields = ('uuid', 'token', 'fecha_creacion', 'link_evaluacion',
-                       'acciones_proyectivas_detail')
+                       'link_enviado_en', 'acciones_proyectivas_detail')
+    actions = ['enviar_link_por_correo']
+
+    @admin.action(description="Enviar link de evaluación por correo")
+    def enviar_link_por_correo(self, request, queryset):
+        from .notificaciones import enviar_link_evaluacion
+        for evaluacion in queryset:
+            ok, mensaje = enviar_link_evaluacion(evaluacion, request=request)
+            self.message_user(
+                request, f"{evaluacion.nombres}: {mensaje}",
+                level=messages.SUCCESS if ok else messages.WARNING)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "empleado":

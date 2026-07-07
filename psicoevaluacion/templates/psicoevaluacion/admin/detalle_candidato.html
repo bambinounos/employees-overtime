@@ -56,8 +56,24 @@
         {% endif %}
     </p>
 
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
     <!-- Actions -->
     <div class="actions">
+        {% if evaluacion.estado == 'PENDIENTE' or evaluacion.estado == 'EN_CURSO' %}
+        <form method="post" action="{% url 'psicoevaluacion:enviar_link' evaluacion.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success"
+                    {% if not evaluacion.correo %}disabled title="El candidato no tiene correo"{% endif %}>
+                Enviar link por correo
+                {% if evaluacion.link_enviado_en %} (enviado {{ evaluacion.link_enviado_en|date:"d/m H:i" }}){% endif %}
+            </button>
+        </form>
+        {% endif %}
         {% if tiene_proyectivas %}
         <a href="{% url 'psicoevaluacion:revisar_proyectivas' evaluacion.pk %}" class="btn btn-primary">
             Revisar Proyectivas

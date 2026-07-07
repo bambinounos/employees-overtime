@@ -11,6 +11,9 @@ radicale>=3.3.0,<3.4
 # PDF report engine (reportlab 4.x).
 reportlab>=4.0,<5
 
+# XLSX exports (planilla de nómina, reportes).
+openpyxl>=3.1,<4
+
 # Supporting libraries
 asgiref>=3.5.0
 defusedxml>=0.7.1
