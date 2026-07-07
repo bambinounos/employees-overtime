@@ -1,0 +1,23 @@
+{% extends "emails/base_email.html" %}
+
+{% block header %}Advertencia disciplinaria{% endblock %}
+
+{% block body %}
+<p>Hola {{ entry.employee.name }},</p>
+<p>
+  Este es un aviso formal: se registró una <strong>advertencia disciplinaria</strong>
+  en tu expediente el día <strong>{{ entry.date|date:"Y-m-d" }}</strong>,
+  relacionada con el indicador <strong>"{{ entry.kpi.name }}"</strong>.
+</p>
+{% if entry.notes %}
+<p style="background:#fef2f2; border-left:4px solid #dc2626; padding:10px 14px; margin:16px 0;">
+  <strong>Motivo / notas:</strong><br>
+  {{ entry.notes|linebreaksbr }}
+</p>
+{% endif %}
+<p>
+  Por favor, revisa el reglamento interno para evitar futuras incidencias.
+  Si tienes dudas sobre este registro, comunícate con tu supervisor.
+</p>
+<p>Atentamente,<br>Recursos Humanos</p>
+{% endblock %}

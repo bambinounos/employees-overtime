@@ -1,7 +1,6 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.core.mail import send_mail
-from django.conf import settings
+from .emails import send_html_mail
 from .models import ManualKpiEntry, Task, TaskList
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
@@ -62,27 +61,12 @@ def send_warning_notification(sender, instance, created, **kwargs):
     Send an email notification if a ManualKpiEntry for a warning KPI is created.
     """
     if created and instance.kpi.is_warning_kpi:
-        employee = instance.employee
-        subject = f"Notificación de Advertencia Disciplinaria - {employee.name}"
-        message = f"""
-        Hola {employee.name},
-
-        Este es un aviso formal para informarle que se ha registrado una advertencia disciplinaria en su expediente el día {instance.date.strftime('%Y-%m-%d')}.
-
-        Motivo/Notas:
-        {instance.notes}
-
-        Esta advertencia está relacionada con el indicador de rendimiento: "{instance.kpi.name}".
-        Por favor, asegúrese de cumplir con el reglamento interno para evitar futuras incidencias.
-
-        Atentamente,
-        Recursos Humanos
-        """
-        from_email = settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'noreply@example.com'
-        recipient_list = [employee.email]
-
-        send_mail(subject, message, from_email, recipient_list)
-        print(f"Sent warning email to {employee.email}") # For logging in console
+        send_html_mail(
+            subject=f"Advertencia disciplinaria - {instance.employee.name}",
+            template_name='advertencia_disciplinaria.html',
+            context={'entry': instance},
+            to=instance.employee.email,
+        )
 
 
 # --- CalDAV Integration: auto-create calendar reminders for Tasks ---

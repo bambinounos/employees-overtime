@@ -10,7 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .ausencias import aprobar_solicitud
-from .models import Employee, SolicitudAusencia, Task, TaskBoard, TaskList, TipoAusencia
+from .models import (Employee, KPI, ManualKpiEntry, SolicitudAusencia, Task,
+                     TaskBoard, TaskList, TipoAusencia)
 
 
 def _mk_employee(name, password='password'):
@@ -101,6 +102,49 @@ class AusenciaEmailTest(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ['vacacionero@example.com'])
         self.assertIn('APROBADA', mail.outbox[0].body)
+
+
+class AdvertenciaDisciplinariaTest(TestCase):
+    def setUp(self):
+        self.employee = _mk_employee('Advertido')
+        self.kpi_warning = KPI.objects.create(
+            name='Advertencia disciplinaria', measurement_type='count_lt',
+            target_value=Decimal('3'), is_warning_kpi=True)
+        self.kpi_normal = KPI.objects.create(
+            name='Errores de facturación', measurement_type='count_lt',
+            target_value=Decimal('3'))
+
+    def test_entrada_de_warning_kpi_envia_email(self):
+        ManualKpiEntry.objects.create(
+            employee=self.employee, kpi=self.kpi_warning,
+            notes='Llegada tarde sin justificación')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['advertido@example.com'])
+        self.assertIn('Llegada tarde sin justificación', mail.outbox[0].body)
+        self.assertIn('Advertencia disciplinaria', mail.outbox[0].subject)
+
+    def test_entrada_de_kpi_normal_no_envia(self):
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_normal)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_editar_entrada_no_reenvia(self):
+        entry = ManualKpiEntry.objects.create(
+            employee=self.employee, kpi=self.kpi_warning, notes='Original')
+        entry.notes = 'Corregida'
+        entry.save()
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_fallo_smtp_no_rompe_el_guardado(self):
+        with self.settings(EMAIL_BACKEND='employees.tests_notificaciones.BrokenEmailBackend'):
+            entry = ManualKpiEntry.objects.create(
+                employee=self.employee, kpi=self.kpi_warning, notes='SMTP caído')
+        self.assertIsNotNone(entry.pk)
+
+
+class BrokenEmailBackend:
+    """Backend que siempre falla, para probar que el guardado no se rompe."""
+    def __init__(self, *args, **kwargs):
+        raise ConnectionError('SMTP caído (simulado)')
 
 
 class EnviarLinkEvaluacionTest(TestCase):
