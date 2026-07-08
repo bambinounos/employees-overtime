@@ -278,9 +278,13 @@ class JobProfileAdmin(admin.ModelAdmin):
 
 @admin.register(DolibarrInstance)
 class DolibarrInstanceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'professional_id')
+    list_display = ('name', 'professional_id', 'push_habilitado')
     search_fields = ('name', 'professional_id')
     inlines = [DolibarrUserIdentityInline]
+
+    @admin.display(boolean=True, description="Push nómina")
+    def push_habilitado(self, obj):
+        return obj.push_habilitado
 
 
 @admin.register(DolibarrUserIdentity)
@@ -381,11 +385,13 @@ class SolicitudAusenciaAdmin(admin.ModelAdmin):
 @admin.register(ReciboNomina)
 class ReciboNominaAdmin(admin.ModelAdmin):
     """Snapshots inmutables: solo lectura, se generan desde /nomina/."""
-    list_display = ('employee', 'year', 'month', 'total', 'generado_en', 'generado_por')
+    list_display = ('employee', 'year', 'month', 'total', 'generado_en',
+                    'generado_por', 'dolibarr_salary_id')
     list_filter = ('year', 'month')
     search_fields = ('employee__name',)
     readonly_fields = ('employee', 'year', 'month', 'datos', 'total',
-                       'generado_en', 'generado_por')
+                       'generado_en', 'generado_por', 'dolibarr_salary_id',
+                       'dolibarr_synced_at', 'dolibarr_error')
 
     def has_add_permission(self, request):
         return False

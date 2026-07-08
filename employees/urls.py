@@ -21,6 +21,7 @@ urlpatterns = [
     path('mis-recibos/', views.mis_recibos, name='mis_recibos'),
     path('recibos/<int:employee_id>/<int:year>/<int:month>/pdf/', views.recibo_pdf, name='recibo_pdf'),
     path('nomina/', views.nomina_cierre, name='nomina_cierre'),
+    path('nomina/enviar-dolibarr/', views.nomina_enviar_dolibarr, name='nomina_enviar_dolibarr'),
     path('nomina/planilla/', views.nomina_planilla, name='nomina_planilla'),
     path('post-login/', views.post_login, name='post_login'),
     path('login/', auth_views.LoginView.as_view(template_name='employees/login.html'), name='login'),

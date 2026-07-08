@@ -24,9 +24,20 @@ class DolibarrInstance(models.Model):
     name = models.CharField(max_length=255, help_text="Friendly name, e.g., 'Empresa A'")
     professional_id = models.CharField(max_length=100, unique=True, help_text="ID Profesional 1 from Dolibarr Admin Panel")
     api_secret = models.CharField(max_length=128, help_text="Secret key for HMAC validation of webhooks")
-    
+    api_base_url = models.URLField(
+        blank=True, default='',
+        help_text="URL raíz de Dolibarr, ej: https://erp.empresa.com (sin /api). Vacío = sin push de nómina.")
+    api_key = models.CharField(
+        max_length=128, blank=True, default='',
+        help_text="DOLAPIKEY de un usuario Dolibarr con permiso salaries → write. Vacío = sin push de nómina.")
+
     def __str__(self):
         return f"{self.name} ({self.professional_id})"
+
+    @property
+    def push_habilitado(self):
+        """True si la instancia tiene URL y clave para enviar nómina."""
+        return bool(self.api_base_url and self.api_key)
 
 class DolibarrUserIdentity(models.Model):
     """Links a local Employee to a user in a specific Dolibarr instance."""
@@ -581,6 +592,13 @@ class ReciboNomina(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2)
     generado_en = models.DateTimeField(auto_now_add=True)
     generado_por = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    dolibarr_salary_id = models.IntegerField(
+        null=True, blank=True,
+        help_text="rowid en llx_salary si el recibo ya fue enviado a Dolibarr.")
+    dolibarr_synced_at = models.DateTimeField(null=True, blank=True)
+    dolibarr_error = models.TextField(
+        blank=True, default='',
+        help_text="Último error al intentar el envío a Dolibarr; vacío si OK o nunca intentado.")
 
     class Meta:
         unique_together = ('employee', 'year', 'month')

@@ -627,6 +627,35 @@ def nomina_cierre(request):
 
 
 @login_required
+def nomina_enviar_dolibarr(request):
+    """Envía los recibos del período a Dolibarr como salarios (superuser, POST)."""
+    from django.urls import reverse
+    from .nomina import enviar_recibos_dolibarr
+
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('nomina_cierre')
+
+    today = date.today()
+    year = int(request.POST.get('year') or today.year)
+    month = int(request.POST.get('month') or today.month)
+    resultado = enviar_recibos_dolibarr(year, month)
+
+    if resultado['enviados']:
+        messages.success(request, f"{len(resultado['enviados'])} recibos enviados a Dolibarr.")
+    if resultado['ya_sincronizados']:
+        messages.info(request, f"{len(resultado['ya_sincronizados'])} ya estaban sincronizados.")
+    if resultado['sin_mapeo']:
+        nombres = ', '.join(e.name for e in resultado['sin_mapeo'])
+        messages.warning(request, f"Sin identidad Dolibarr (omitidos): {nombres}")
+    if resultado['con_error']:
+        nombres = ', '.join(r.employee.name for r, _ in resultado['con_error'])
+        messages.error(request, f"Error al enviar (ver detalle en la tabla): {nombres}")
+    return redirect(f"{reverse('nomina_cierre')}?year={year}&month={month}")
+
+
+@login_required
 def nomina_planilla(request):
     """Descarga la planilla de nómina XLSX del período (superuser)."""
     from .exports import PlanillaSinRecibosError, generar_planilla_xlsx
