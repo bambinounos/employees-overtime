@@ -22,6 +22,7 @@ urlpatterns = [
     path('recibos/<int:employee_id>/<int:year>/<int:month>/pdf/', views.recibo_pdf, name='recibo_pdf'),
     path('nomina/', views.nomina_cierre, name='nomina_cierre'),
     path('nomina/planilla/', views.nomina_planilla, name='nomina_planilla'),
+    path('post-login/', views.post_login, name='post_login'),
     path('login/', auth_views.LoginView.as_view(template_name='employees/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='index'), name='logout'),
     path('api/', include('employees.api_urls')),

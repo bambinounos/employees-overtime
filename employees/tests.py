@@ -469,3 +469,43 @@ class ApiSecurityTest(TestCase):
         self.assertEqual(response.status_code, 200)
         response = self.client.get(reverse('performance_report'), {'employee_id': self.employee_a.id})
         self.assertEqual(response.status_code, 200)
+
+
+class PostLoginRedirectTest(TestCase):
+    """El aterrizaje post-login redirige por rol y respeta ?next=."""
+
+    def setUp(self):
+        self.boss = User.objects.create_superuser('boss', 'boss@example.com', 'password')
+        self.user_emp = User.objects.create_user('empleado', password='password')
+        Employee.objects.create(user=self.user_emp, name='Empleada', email='e@example.com',
+                                hire_date=date(2023, 1, 1))
+        self.user_solo = User.objects.create_user('solo', password='password')
+
+    def test_superuser_aterriza_en_dashboard(self):
+        response = self.client.post(reverse('login'),
+                                    {'username': 'boss', 'password': 'password', 'next': ''},
+                                    follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request['PATH_INFO'], reverse('strategic_dashboard'))
+
+    def test_empleado_aterriza_en_mi_panel(self):
+        response = self.client.post(reverse('login'),
+                                    {'username': 'empleado', 'password': 'password', 'next': ''},
+                                    follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request['PATH_INFO'], reverse('mi_panel'))
+
+    def test_usuario_sin_employee_no_da_403(self):
+        response = self.client.post(reverse('login'),
+                                    {'username': 'solo', 'password': 'password', 'next': ''},
+                                    follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request['PATH_INFO'], reverse('index'))
+
+    def test_respeta_next(self):
+        response = self.client.post(reverse('login'),
+                                    {'username': 'empleado', 'password': 'password',
+                                     'next': reverse('task_board')},
+                                    follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request['PATH_INFO'], reverse('task_board'))

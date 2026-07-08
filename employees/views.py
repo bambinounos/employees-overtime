@@ -14,6 +14,16 @@ def index(request):
     """Renders the home page."""
     return render(request, 'employees/index.html')
 
+
+@login_required
+def post_login(request):
+    """Aterrizaje tras el login: redirige según el rol del usuario."""
+    if request.user.is_superuser:
+        return redirect('strategic_dashboard')
+    if getattr(request.user, 'employee', None) is not None:
+        return redirect('mi_panel')
+    return redirect('index')
+
 @login_required
 def employee_list(request):
     """Renders the employee list page."""
