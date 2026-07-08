@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework.test import APIClient
 from .models import (
-    Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard, TaskList, Task,
+    Employee, Salary, WorkLog, KPI, BonusRule, KPIBonusTier, TaskBoard, TaskList, Task,
     ManualKpiEntry, EmployeePerformanceRecord, JobProfile
 )
 from decimal import Decimal
@@ -83,6 +83,37 @@ class PerformanceAndSalaryTest(TestCase):
         # Total = 400 + 75 + 50 = $525
         salary_details = self.employee.calculate_salary(2024, 8)
         self.assertEqual(salary_details['total_salary'], Decimal('525.00'))
+
+    def test_count_lt_tier_premia_a_los_mejores(self):
+        """En un KPI 'menos es mejor', el escalón se alcanza con MENOS errores."""
+        # Escalón: 1 error o menos -> $80 (mejor que el estándar de $50).
+        KPIBonusTier.objects.create(kpi=self.kpi_errors, threshold=Decimal('1'),
+                                    bonus_amount=Decimal('80.00'))
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_errors,
+                                      date=date(2024, 8, 10), value=1)  # 1 error
+
+        self.employee.calculate_performance_bonus(2024, 8)
+        record = EmployeePerformanceRecord.objects.get(
+            employee=self.employee, kpi=self.kpi_errors, date=date(2024, 8, 31))
+        self.assertTrue(record.target_met)
+        self.assertEqual(record.bonus_awarded, Decimal('80.00'))
+
+    def test_count_lt_tier_no_paga_a_los_peores(self):
+        """Regresión: con MÁS errores que el umbral (y que la meta) no hay bono.
+
+        Con el bug anterior, 3 errores >= umbral 1 pagaba erróneamente el escalón."""
+        KPIBonusTier.objects.create(kpi=self.kpi_errors, threshold=Decimal('1'),
+                                    bonus_amount=Decimal('80.00'))
+        for dia in (5, 15, 25):  # 3 errores: falla la meta (<3) y el escalón (<=1)
+            ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_errors,
+                                          date=date(2024, 8, dia), value=1)
+
+        self.employee.calculate_performance_bonus(2024, 8)
+        record = EmployeePerformanceRecord.objects.get(
+            employee=self.employee, kpi=self.kpi_errors, date=date(2024, 8, 31))
+        self.assertFalse(record.target_met)
+        self.assertEqual(record.bonus_awarded, Decimal('0.00'))
+
 
 class ViewsAndAPITest(TestCase):
     def setUp(self):

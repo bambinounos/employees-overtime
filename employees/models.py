@@ -367,12 +367,16 @@ class Employee(models.Model):
                 bonus_amount_for_kpi = rule.bonus_amount
 
             # 2. Check Tiered Bonuses (Overrides standard if higher)
-            tiers = kpi.tiers.all()
-            for tier in tiers:
-                if actual_value >= tier.threshold:
-                    if tier.bonus_amount > bonus_amount_for_kpi:
-                        bonus_amount_for_kpi = tier.bonus_amount
-                        target_met = True
+            # For count_lt ("fewer is better") a tier is reached when the value
+            # is at or below the threshold; otherwise when it is at or above.
+            for tier in kpi.tiers.all():
+                if kpi.measurement_type == 'count_lt':
+                    tier_reached = actual_value <= tier.threshold
+                else:
+                    tier_reached = actual_value >= tier.threshold
+                if tier_reached and tier.bonus_amount > bonus_amount_for_kpi:
+                    bonus_amount_for_kpi = tier.bonus_amount
+                    target_met = True
 
             total_bonus += bonus_amount_for_kpi
 
