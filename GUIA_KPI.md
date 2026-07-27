@@ -267,6 +267,54 @@ Si empleado crea 15 productos:
   → Gana $40 (el mas alto alcanzado)
 ```
 
+### Como se comparan los umbrales
+
+- KPIs "mas es mejor" (percentage, count_gt, internal codes): el tier se alcanza
+  con valor **igual o mayor** al threshold. Con exactamente 10 productos ya se
+  gana el tier de 10.
+- KPIs "menos es mejor" (count_lt): el tier se alcanza con valor **igual o
+  menor** al threshold (premia a los que cometen menos errores).
+
+### Solo tiers, sin BonusRule (configuracion valida)
+
+Si un KPI tiene tiers pero **ninguna BonusRule**, el `Target Value` no paga
+dinero por si solo — el bono lo deciden unicamente los tiers. El campo sigue
+siendo obligatorio en el formulario; se recomienda ponerle el mismo valor del
+tier mas bajo, para que el "✓ meta cumplida" del dashboard coincida con los
+meses en que si hay bono.
+
+**Advertencia:** nunca configures `Target Value = 0` en un KPI "mas es mejor"
+que SI tenga BonusRule: la condicion `valor >= 0` se cumple siempre y pagaria
+el bono todos los meses, aun sin actividad.
+
+**Nota sobre `Min Volume Threshold`:** solo tiene efecto en el KPI con internal
+code `SALES_EFFECTIVENESS`. En cualquier otro KPI se guarda pero se ignora —
+dejalo en 0.
+
+---
+
+## Cuando se recalculan los bonos
+
+Los reportes y dashboards muestran la **foto del ultimo calculo** guardado
+(`EmployeePerformanceRecord`). Guardar o editar un KPI, sus tiers o sus
+BonusRules **no recalcula nada** por si solo.
+
+El recalculo de un mes ocurre cuando:
+
+1. Un admin consulta el salario del empleado:
+   `/employees/<id>/salary/?year=YYYY&month=M`
+2. El empleado abre **Mi Panel** en ese mes.
+3. Se generan los recibos de nomina del mes.
+4. Corre el cron nocturno (si esta instalado segun `scripts/crontab.example`).
+
+Detalles a tener en cuenta:
+
+- La pagina `/reports/` resume el **mes anterior**, no el actual. Si cambiaste
+  la configuracion y quieres ver el efecto ahi, recalcula ese mes (punto 1) y
+  recarga el reporte.
+- Los **recibos de nomina ya emitidos quedan congelados** y no cambian aunque
+  se recalcule — es intencional, son el registro de lo realmente pagado.
+
 ---
 
 ## Comisiones (independiente de KPIs)
