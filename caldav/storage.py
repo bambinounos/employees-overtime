@@ -23,6 +23,19 @@ from radicale import item as radicale_item
 logger = logging.getLogger(__name__)
 
 
+def _http_date(event):
+    """Last-Modified RFC 1123 para los Item. Radicale exige un valor truthy en
+    GET (`radicale/app/get.py: assert item.last_modified`). El modelo no guarda
+    timestamp de edición, así que se deriva del start_date (estable entre
+    requests — los clientes detectan cambios por ETag, no por esta fecha)."""
+    import calendar as _cal
+    from email.utils import formatdate
+    dt = getattr(event, 'start_date', None)
+    if dt is None or not hasattr(dt, 'utctimetuple'):
+        return formatdate(usegmt=True)
+    return formatdate(_cal.timegm(dt.utctimetuple()), usegmt=True)
+
+
 def serialize_event_to_ical(event):
     """Convert a CalendarEvent to iCalendar string."""
     cal = vobject.iCalendar()
@@ -157,10 +170,14 @@ class Collection(BaseCollection):
         for event in CalendarEvent.objects.filter(user=self._user):
             href = f"{event.uid or f'event-{event.id}@payroll'}.ics"
             ical_text = serialize_event_to_ical(event)
+            # collection= es obligatorio: radicale/app/propfind.py hace
+            # `assert item.collection is not None` sobre cada item listado.
             yield radicale_item.Item(
+                collection=self,
                 collection_path=self._path,
                 href=href,
                 text=ical_text,
+                last_modified=_http_date(event),
             )
 
     def get_multi(self, hrefs):
@@ -173,9 +190,11 @@ class Collection(BaseCollection):
                 event = CalendarEvent.objects.get(user=self._user, uid=uid)
                 ical_text = serialize_event_to_ical(event)
                 yield (href, radicale_item.Item(
+                    collection=self,
                     collection_path=self._path,
                     href=href,
                     text=ical_text,
+                    last_modified=_http_date(event),
                 ))
             except CalendarEvent.DoesNotExist:
                 yield (href, None)
@@ -224,9 +243,11 @@ class Collection(BaseCollection):
         new_ical = serialize_event_to_ical(event)
         new_href = f"{event.uid}.ics"
         return radicale_item.Item(
+            collection=self,
             collection_path=self._path,
             href=new_href,
             text=new_ical,
+            last_modified=_http_date(event),
         )
 
     def delete(self, href=None):
@@ -319,10 +340,15 @@ class Storage(BaseStorage):
                 try:
                     event = CalendarEvent.objects.get(user=user, uid=uid)
                     ical_text = serialize_event_to_ical(event)
+                    col = Collection(self, f"{username}/default", user=user,
+                                     tag="VCALENDAR")
+                    # last_modified truthy: radicale/app/get.py lo asserta.
                     yield radicale_item.Item(
+                        collection=col,
                         collection_path=f"{username}/default",
                         href=event_href,
                         text=ical_text,
+                        last_modified=_http_date(event),
                     )
                 except CalendarEvent.DoesNotExist:
                     return
