@@ -590,16 +590,24 @@ Tests incluidos:
 | `test_thunderbird_reschedule_no_loop` | No se crean duplicados por loop de signals |
 | `test_unlinked_event_no_task_update` | Eventos sin tarea no causan errores |
 
-### 11.6. Problemas Comunes
+### 11.6. Compatibilidad Avanzada con Thunderbird (Dismiss / Snooze / ETags)
+
+El backend de Radicale/Django implementa las siguientes garantías RFC 5545 / RFC 4791 para clientes avanzados como Thunderbird:
+
+1. **Invalidación Dinámica de ETag**: El ETag de la colección y de los eventos incluye microsegundos del timestamp `updated_at`. Cuando Thunderbird envía una actualización (ej. descartar o posponer una alarma), el ETag cambia inmediatamente, evitando advertencias de "el elemento ya ha sido modificado en el servidor".
+2. **Preservación de `raw_ical` y `X-MOZ-LASTACK`**: El modelo `CalendarEvent` almacena el payload RFC 5545 original en el campo `raw_ical`. Esto permite preservar el estado de alarmas silenciadas (`X-MOZ-LASTACK`, `X-MOZ-SNOOZE-TIME`) sin perder atributos al reconstruir el evento.
+
+### 11.7. Problemas Comunes
 
 | Problema | Causa | Solucion |
 |---|---|---|
 | `LXML is not available` | Falta la libreria lxml | `pip install lxml` |
 | `ModuleNotFoundError: 'wsgidav'` | Dependencias no instaladas | `pip install WsgiDAV vobject` |
 | `401 Unauthorized` en cliente | Credenciales incorrectas | Verificar usuario/contrasena en Django admin |
-| Eventos no aparecen en Thunderbird | URL incorrecta | Verificar formato: `http://ip:8080/username` |
+| Eventos no aparecen en Thunderbird | URL incorrecta | Verificar formato: `http://ip:8080/username/default` |
 | Evento se crea pero sin alarma | `alarm_minutes` es None | Verificar que la tarea tiene `due_date` asignada |
 | Reprogramar en Thunderbird no actualiza tarea | Evento sin `task_id` | Solo eventos creados desde Django admin tienen vinculo |
+| Alarma vuelve a sonar tras Dismiss en Thunderbird | Falta soporte `X-MOZ-LASTACK` | Aplicado en migración `0004_calendarevent_raw_ical` |
 | `Address already in use` al iniciar | Puerto 8080 ocupado | Cambiar puerto en `wsgidav.conf` o detener el proceso existente |
 | `No module named 'caldav'` | Path de Python incorrecto | Verificar que ejecuta desde la raiz del proyecto |
 

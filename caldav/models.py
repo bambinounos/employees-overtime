@@ -13,6 +13,9 @@ class CalendarEvent(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
     alarm_minutes = models.IntegerField(null=True, blank=True, help_text="Minutes before the event to trigger an alarm.")
     uid = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    raw_ical = models.TextField(blank=True, default='', help_text="Full RFC 5545 iCalendar content to preserve client-specific extensions like X-MOZ-LASTACK.")
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.title

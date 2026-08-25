@@ -24,20 +24,20 @@ logger = logging.getLogger(__name__)
 
 
 def _http_date(event):
-    """Last-Modified RFC 1123 para los Item. Radicale exige un valor truthy en
-    GET (`radicale/app/get.py: assert item.last_modified`). El modelo no guarda
-    timestamp de edición, así que se deriva del start_date (estable entre
-    requests — los clientes detectan cambios por ETag, no por esta fecha)."""
+    """Last-Modified RFC 1123 para los Item. Usa updated_at o fallback a start_date."""
     import calendar as _cal
     from email.utils import formatdate
-    dt = getattr(event, 'start_date', None)
+    dt = getattr(event, 'updated_at', None) or getattr(event, 'start_date', None)
     if dt is None or not hasattr(dt, 'utctimetuple'):
         return formatdate(usegmt=True)
     return formatdate(_cal.timegm(dt.utctimetuple()), usegmt=True)
 
 
 def serialize_event_to_ical(event):
-    """Convert a CalendarEvent to iCalendar string."""
+    """Convert a CalendarEvent to iCalendar string. Preserves raw_ical if available."""
+    if getattr(event, 'raw_ical', None):
+        return event.raw_ical
+
     cal = vobject.iCalendar()
     vevent = cal.add('vevent')
     vevent.add('summary').value = event.title
@@ -142,9 +142,10 @@ class Collection(BaseCollection):
         CalendarEvent = _get_event_model()
         from django.db.models import Max, Count
         agg = CalendarEvent.objects.filter(user=self._user).aggregate(
-            max_id=Max('id'), cnt=Count('id')
+            max_upd=Max('updated_at'), max_id=Max('id'), cnt=Count('id')
         )
-        return f'"{agg["max_id"] or 0}-{agg["cnt"]}"'
+        upd_str = agg["max_upd"].strftime("%Y%m%d%H%M%S%f") if agg.get("max_upd") else "0"
+        return f'"{agg["max_id"] or 0}-{upd_str}-{agg["cnt"]}"'
 
     @property
     def last_modified(self):
@@ -219,6 +220,7 @@ class Collection(BaseCollection):
             uid = str(uuid.uuid4())
 
         # Create or update
+        raw_text = item.serialize() if hasattr(item, 'serialize') else getattr(item, 'text', '')
         event, created = CalendarEvent.objects.update_or_create(
             uid=uid,
             user=self._user,
@@ -228,6 +230,7 @@ class Collection(BaseCollection):
                 'end_date': data['end_date'],
                 'description': data['description'],
                 'alarm_minutes': data['alarm_minutes'],
+                'raw_ical': raw_text,
             }
         )
 

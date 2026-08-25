@@ -179,6 +179,53 @@ class BidirectionalSyncTest(TestCase):
         self.assertIsNone(event.task)
         self.assertEqual(event.start_date, start)
 
+    def test_etag_changes_on_event_update(self):
+        uid = str(uuid.uuid4())
+        start1 = self.utc.localize(datetime(2024, 1, 1, 10))
+        end1 = self.utc.localize(datetime(2024, 1, 1, 11))
+        ical1 = self._create_ical(uid, 'Original', start1, end1)
+        self.collection.upload(f"{uid}.ics", self._make_item(ical1, f"{uid}.ics"))
+        etag1 = self.collection.etag
+
+        import time
+        time.sleep(0.01)
+
+        # Update the event
+        start2 = self.utc.localize(datetime(2024, 1, 1, 12))
+        end2 = self.utc.localize(datetime(2024, 1, 1, 13))
+        ical2 = self._create_ical(uid, 'Updated', start2, end2)
+        self.collection.upload(f"{uid}.ics", self._make_item(ical2, f"{uid}.ics"))
+        etag2 = self.collection.etag
+
+        self.assertNotEqual(etag1, etag2)
+
+    def test_preserves_x_moz_lastack_and_raw_ical(self):
+        uid = str(uuid.uuid4())
+        raw_text = (
+            "BEGIN:VCALENDAR\r\n"
+            "VERSION:2.0\r\n"
+            "BEGIN:VEVENT\r\n"
+            f"UID:{uid}\r\n"
+            "SUMMARY:Alarma Descartada\r\n"
+            "DTSTART:20260825T100000Z\r\n"
+            "DTEND:20260825T110000Z\r\n"
+            "X-MOZ-LASTACK:20260825T103000Z\r\n"
+            "BEGIN:VALARM\r\n"
+            "ACTION:DISPLAY\r\n"
+            "TRIGGER:-PT15M\r\n"
+            "X-MOZ-LASTACK:20260825T103000Z\r\n"
+            "END:VALARM\r\n"
+            "END:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        )
+        item = self._make_item(raw_text, f"{uid}.ics")
+        self.collection.upload(f"{uid}.ics", item)
+
+        event = CalendarEvent.objects.get(uid=uid)
+        self.assertIn("X-MOZ-LASTACK:20260825T103000Z", event.raw_ical)
+        serialized = serialize_event_to_ical(event)
+        self.assertIn("X-MOZ-LASTACK:20260825T103000Z", serialized)
+
 
 class ScriptNameMiddlewareTest(TestCase):
     """The WSGI wrapper must advertise the proxy mount prefix to Radicale so
