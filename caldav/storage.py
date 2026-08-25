@@ -44,14 +44,19 @@ def serialize_event_to_ical(event):
 
     start = event.start_date
     end = event.end_date
+    dtstamp = getattr(event, 'updated_at', None) or getattr(event, 'start_date', None)
     if start and hasattr(start, 'astimezone'):
         start = start.astimezone(pytz.UTC)
     if end and hasattr(end, 'astimezone'):
         end = end.astimezone(pytz.UTC)
+    if dtstamp and hasattr(dtstamp, 'astimezone'):
+        dtstamp = dtstamp.astimezone(pytz.UTC)
 
     vevent.add('uid').value = event.uid or f"event-{event.id}@payroll"
     vevent.add('dtstart').value = start
     vevent.add('dtend').value = end
+    if dtstamp:
+        vevent.add('dtstamp').value = dtstamp
     vevent.add('description').value = event.description or ''
 
     if event.alarm_minutes:

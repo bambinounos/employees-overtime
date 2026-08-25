@@ -226,6 +226,29 @@ class BidirectionalSyncTest(TestCase):
         serialized = serialize_event_to_ical(event)
         self.assertIn("X-MOZ-LASTACK:20260825T103000Z", serialized)
 
+    def test_deterministic_serialization_and_etag(self):
+        """Legacy events without raw_ical must serialize with fixed dtstamp producing stable ETags."""
+        import time
+        from radicale.item import get_etag
+        from caldav.storage import serialize_event_to_ical
+
+        event = CalendarEvent.objects.create(
+            user=self.user,
+            title='Deterministic Test',
+            start_date=self.utc.localize(datetime(2026, 8, 25, 10, 0)),
+            end_date=self.utc.localize(datetime(2026, 8, 25, 11, 0)),
+            raw_ical='',
+        )
+        ical1 = serialize_event_to_ical(event)
+        etag1 = get_etag(ical1)
+
+        time.sleep(0.1)
+        ical2 = serialize_event_to_ical(event)
+        etag2 = get_etag(ical2)
+
+        self.assertEqual(ical1, ical2)
+        self.assertEqual(etag1, etag2)
+
 
 class ScriptNameMiddlewareTest(TestCase):
     """The WSGI wrapper must advertise the proxy mount prefix to Radicale so
@@ -259,3 +282,4 @@ class ScriptNameMiddlewareTest(TestCase):
         app, captured = self._capture_app()
         wrapped = with_script_name(app, '')
         self.assertIs(wrapped, app)  # no wrapping when prefix is empty
+
