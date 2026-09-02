@@ -107,26 +107,26 @@ class Employee(models.Model):
         target inalcanzable. Para el mes en curso se usan los días hábiles
         transcurridos a la fecha, de modo que el índice sea legible a mitad
         de mes; los meses cerrados siempre usan el mes completo.
+
+        Solo cuentan las tareas con fecha límite (due_date): una tarea sin
+        fecha no acredita productividad y antes inflaba el índice sin
+        riesgo de atraso (contaba en el numerador pero se excluía del
+        factor de puntualidad).
         """
-        # 1. Get all tasks completed in the given month and year
+        # 1. Tasks completed in the given month/year, with a due date.
         completed_tasks = Task.objects.filter(
             assigned_to=self,
             completed_at__year=year,
             completed_at__month=month
-        )
+        ).exclude(due_date__isnull=True)
         num_completed_tasks = completed_tasks.count()
 
         if num_completed_tasks == 0:
             return Decimal('0.00')
 
-        # 2. On-time Factor (considers tasks with a due date)
-        tasks_with_due_date = completed_tasks.exclude(due_date__isnull=True)
-        num_tasks_with_due_date = tasks_with_due_date.count()
-        if num_tasks_with_due_date > 0:
-            on_time_count = tasks_with_due_date.filter(completed_at__date__lte=F('due_date')).count()
-            on_time_factor = Decimal(on_time_count) / Decimal(num_tasks_with_due_date)
-        else:
-            on_time_factor = Decimal('1.0') # Assume 100% if no due dates are set
+        # 2. On-time Factor
+        on_time_count = completed_tasks.filter(completed_at__date__lte=F('due_date')).count()
+        on_time_factor = Decimal(on_time_count) / Decimal(num_completed_tasks)
 
         # 3. Quality Factor (based on manually logged errors)
         # This assumes that any KPI measured as 'count_lt' (less is better) is an error-tracking KPI.

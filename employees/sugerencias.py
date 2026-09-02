@@ -149,16 +149,20 @@ def build_sugerencias(employee, year, month):
                                     'monto': monto})
 
         elif kpi.measurement_type == 'composite_ipac':
+            # Misma regla que calculate_ipac: solo cuentan tareas con fecha.
             completadas = Task.objects.filter(
                 assigned_to=employee,
                 completed_at__year=year, completed_at__month=month)
-            n = completadas.count()
-            if n == 0:
-                continue
             con_fecha = completadas.exclude(due_date__isnull=True)
-            nf = con_fecha.count()
-            on_time = con_fecha.filter(completed_at__date__lte=F('due_date')).count() if nf else 0
-            pct = int(on_time / nf * 100) if nf else 100
+            n = con_fecha.count()
+            if n == 0:
+                if completadas.count() > 0:
+                    sugerencias.append({'tipo': 'info', 'titulo': titulo,
+                                        'detalle': "Sus tareas completadas este mes no tienen fecha límite y no cuentan para el IPAC. Solicite que se las asignen con fecha de vencimiento.",
+                                        'monto': monto})
+                continue
+            on_time = con_fecha.filter(completed_at__date__lte=F('due_date')).count()
+            pct = int(on_time / n * 100)
             bd = _business_days_elapsed(year, month)
             error_kpis = KPI.objects.filter(measurement_type='count_lt')
             num_errors = ManualKpiEntry.objects.filter(

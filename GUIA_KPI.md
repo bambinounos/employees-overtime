@@ -214,12 +214,25 @@ El factor puntualidad solo considera tareas con fecha de vencimiento
 (`completada el mismo dia o antes`), y el factor calidad descuenta los
 errores registrados en KPIs count_lt.
 
+**Nota (2026-09):** solo cuentan las tareas **con fecha de vencimiento**.
+Una tarea sin `due_date` no acredita productividad: antes contaba en el
+numerador pero se excluia del factor puntualidad, inflando el indice sin
+riesgo de atraso. Completa siempre la fecha de vencimiento al crear
+tareas.
+
 **Nota (2026-09):** la version original dividia por el tiempo promedio
 creado->completado en horas. Eso media tiempo de cola (la tarea esperando
 en el tablero), castigaba crear tareas con anticipacion y hacia el target
 inalcanzable (maximo historico 0.46 contra target 5). Ahora divide por
 dias habiles; para el mes en curso usa los dias habiles transcurridos a
 la fecha, de modo que el indice sea legible a mitad de mes.
+
+**Control anti-gaming (2026-09):** crear, editar o eliminar tareas esta
+reservado a supervisores (superusers, ej. RH desde el admin de Django).
+Los empleados solo pueden mover tareas dentro de su tablero (asi las
+completan). Esto evita que un empleado se auto-asigne tareas triviales
+para inflar su IPAC o que edite la fecha de vencimiento de una tarea ya
+completada tarde.
 
 | Campo | Valor |
 |-------|-------|

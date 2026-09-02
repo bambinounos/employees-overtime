@@ -183,7 +183,16 @@ class TaskViewSet(viewsets.ModelViewSet):
         Overrides the create method to handle recurring tasks.
         If a task is marked as recurring, it creates a parent "template" task
         and then generates a series of individual child tasks.
+
+        Solo superusers (RH/supervisores) pueden crear tareas: un empleado
+        que se auto-asigne tareas infla su IPAC sin trabajo real.
         """
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Solo un supervisor puede crear tareas."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -218,6 +227,35 @@ class TaskViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _solo_supervisor(self, request):
+        """Crear, editar o borrar tareas (due_date, asignación) permite
+        alterar el IPAC: reservado a supervisores. El empleado conserva
+        `move` para avanzar tareas en su tablero."""
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Solo un supervisor puede crear, editar o eliminar tareas."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return None
+
+    def update(self, request, *args, **kwargs):
+        denied = self._solo_supervisor(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._solo_supervisor(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._solo_supervisor(request)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
 
 
     @action(detail=True, methods=['post'])

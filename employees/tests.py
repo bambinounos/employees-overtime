@@ -588,14 +588,25 @@ class IPACFormulaTest(TestCase):
     def test_ipac_sin_tareas_es_cero(self):
         self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.00'))
 
-    def test_ipac_tareas_sin_fecha_no_afectan_puntualidad(self):
-        # 2 tareas sin vencimiento completadas: factor puntualidad = 1.0
+    def test_ipac_tareas_sin_fecha_no_cuentan(self):
+        # Una tarea sin vencimiento no acredita productividad: IPAC = 0.
         for _ in range(2):
             Task.objects.create(list=self.list_done, assigned_to=self.employee,
                                 title="S/F", order=0,
                                 completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
-        self.assertEqual(self.employee.calculate_ipac(2024, 8),
-                         (Decimal(2) / Decimal(22)).quantize(Decimal('0.01')))
+        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.00'))
+
+    def test_ipac_solo_cuenta_tareas_con_fecha(self):
+        # 2 con fecha (a tiempo) + 3 sin fecha -> solo cuentan las 2 primeras.
+        # 2 x 1 x 1 / 22 = 0.09
+        due = timezone.make_aware(datetime(2024, 8, 15))
+        for _ in range(2):
+            self._tarea(due, timezone.make_aware(datetime(2024, 8, 14, 12)))
+        for _ in range(3):
+            Task.objects.create(list=self.list_done, assigned_to=self.employee,
+                                title="S/F", order=0,
+                                completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
+        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.09'))
 
     @mock.patch('employees.models.timezone.now', return_value=FROZEN_NOW)
     def test_ipac_mes_en_curso_usa_dias_transcurridos(self, _now):
@@ -705,3 +716,87 @@ class SugerenciasTest(TestCase):
         out = StringIO()
         call_command('coaching_semanal', '--dry-run', stdout=out)
         self.assertIn('DRY RUN', out.getvalue())
+
+
+class TaskApiPermissionsTest(TestCase):
+    """Anti-gaming IPAC: los empleados no pueden auto-crearse tareas ni
+    editar due_date. Solo pueden moverlas en su tablero (y con ello
+    completarlas)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='empleado', password='password')
+        self.employee = Employee.objects.create(user=self.user, name='Empleado',
+                                                email='emp@example.com', hire_date=date(2024, 1, 1))
+        self.boss = User.objects.create_superuser('boss', 'boss@example.com', 'password')
+        self.board = TaskBoard.objects.create(employee=self.employee, name="Board")
+        self.list_todo = TaskList.objects.create(board=self.board, name="Pendiente", order=1)
+        self.list_done = TaskList.objects.create(board=self.board, name="Hecho", order=2)
+        self.task = Task.objects.create(list=self.list_todo, assigned_to=self.employee,
+                                        title="Tarea RH", order=0,
+                                        due_date=timezone.make_aware(datetime(2024, 8, 15)))
+
+    def test_empleado_no_puede_crear_tareas(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = client.post('/api/tasks/', {
+            'title': 'Tarea inflada', 'list': self.list_done.id,
+            'assigned_to': self.employee.id, 'order': 0}, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Task.objects.filter(title='Tarea inflada').exists())
+
+    def test_empleado_no_puede_editar_ni_borrar(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = client.patch(f'/api/tasks/{self.task.id}/',
+                                {'due_date': '2030-12-31T12:00:00'}, format='json')
+        self.assertEqual(response.status_code, 403)
+        response = client.delete(f'/api/tasks/{self.task.id}/')
+        self.assertEqual(response.status_code, 403)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.due_date.year, 2024)
+
+    def test_empleado_puede_mover_tareas(self):
+        # Mover a "Hecho" es el flujo normal del tablero: debe seguir abierto.
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = client.post(f'/api/tasks/{self.task.id}/move/',
+                               {'list_id': self.list_done.id, 'order': 0}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.completed_at)
+
+    def test_supervisor_puede_crear_tareas(self):
+        client = APIClient()
+        client.force_authenticate(user=self.boss)
+        response = client.post('/api/tasks/', {
+            'title': 'Tarea de RH', 'list': self.list_todo.id,
+            'assigned_to': self.employee.id, 'order': 0,
+            'due_date': '2024-08-20T12:00:00'}, format='json')
+        self.assertEqual(response.status_code, 201)
+
+
+class SugerenciaIpacSinFechaTest(TestCase):
+    """Si todas las tareas completadas carecen de fecha, la sugerencia lo
+    dice en vez de fingir puntualidad del 100%."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='password')
+        self.employee = Employee.objects.create(user=self.user, name='Test Employee',
+                                                email='test@example.com', hire_date=date(2024, 1, 1))
+        self.kpi_ipac = KPI.objects.create(name="IPAC", measurement_type='composite_ipac',
+                                           target_value=Decimal('1.20'))
+        BonusRule.objects.create(kpi=self.kpi_ipac, bonus_amount=Decimal('50.00'))
+        self.profile = JobProfile.objects.create(name='Perfil Test')
+        self.profile.kpis.add(self.kpi_ipac)
+        self.employee.profile = self.profile
+        self.employee.save()
+        self.board = TaskBoard.objects.create(employee=self.employee, name="Board")
+        self.list_done = TaskList.objects.create(board=self.board, name="Hecho", order=1)
+
+    def test_info_cuando_todas_sin_fecha(self):
+        Task.objects.create(list=self.list_done, assigned_to=self.employee,
+                            title="S/F", order=0,
+                            completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
+        sugerencia = build_sugerencias(self.employee, 2024, 8)[0]
+        self.assertEqual(sugerencia['tipo'], 'info')
+        self.assertIn('no tienen fecha', sugerencia['detalle'])
