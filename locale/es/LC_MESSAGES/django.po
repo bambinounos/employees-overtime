@@ -114,3 +114,21 @@ msgstr "Cumplió"
 
 msgid "Bonus"
 msgstr "Bono"
+
+msgid "How to improve your bonus this month"
+msgstr "Cómo mejorar tu bono este mes"
+
+msgid "At the limit"
+msgstr "Al límite"
+
+msgid "Action needed"
+msgstr "Acción requerida"
+
+msgid "Lost this month"
+msgstr "Perdido este mes"
+
+msgid "On track"
+msgstr "En camino"
+
+msgid "Info"
+msgstr "Info"

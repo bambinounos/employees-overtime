@@ -206,15 +206,33 @@ actual_value = 3
 **Ejemplo:** Indice de Productividad Ajustado por Calidad
 
 **Que mide:** Formula compuesta:
-`IPAC = (Tareas completadas x Factor puntualidad x Factor calidad) / Promedio horas ejecucion`
+`IPAC = (Tareas completadas x Factor puntualidad x Factor calidad) / Dias habiles del mes`
+
+El resultado son **tareas efectivas por dia habil**: cuantas tareas
+completadas a tiempo y sin errores entrega el empleado por cada dia laboral.
+El factor puntualidad solo considera tareas con fecha de vencimiento
+(`completada el mismo dia o antes`), y el factor calidad descuenta los
+errores registrados en KPIs count_lt.
+
+**Nota (2026-09):** la version original dividia por el tiempo promedio
+creado->completado en horas. Eso media tiempo de cola (la tarea esperando
+en el tablero), castigaba crear tareas con anticipacion y hacia el target
+inalcanzable (maximo historico 0.46 contra target 5). Ahora divide por
+dias habiles; para el mes en curso usa los dias habiles transcurridos a
+la fecha, de modo que el indice sea legible a mitad de mes.
 
 | Campo | Valor |
 |-------|-------|
 | Measurement Type | Composite IPAC |
 | Internal Code | (vacio) |
-| Target Value | 5 |
+| Target Value | calibrar segun escala nueva (ver abajo) |
 
 Este KPI se calcula automaticamente desde las tareas del tablero.
+
+**Calibracion del target:** con la formula nueva, un empleado que completa
+~1 tarea efectiva por dia habil ronda IPAC 1.0. Fija el target en funcion
+de la distribucion real de tu equipo (ej: 1.20 hace que solo los mejores
+meses cobren).
 
 ---
 

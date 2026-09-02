@@ -99,7 +99,14 @@ class Employee(models.Model):
     def calculate_ipac(self, year, month):
         """
         Calculates the Quality-Adjusted Productivity Index (IPAC) for a given month.
-        IPAC = (Completed Tasks * On-time Factor * Quality Factor) / Avg. Execution Time (in hours)
+        IPAC = (Completed Tasks * On-time Factor * Quality Factor) / Business Days
+
+        El resultado son "tareas efectivas por día hábil". El tiempo de
+        ejecución (creado -> completado) se eliminó deliberadamente: medía
+        tiempo de cola, castigaba crear tareas con anticipación y hacía el
+        target inalcanzable. Para el mes en curso se usan los días hábiles
+        transcurridos a la fecha, de modo que el índice sea legible a mitad
+        de mes; los meses cerrados siempre usan el mes completo.
         """
         # 1. Get all tasks completed in the given month and year
         completed_tasks = Task.objects.filter(
@@ -134,26 +141,22 @@ class Employee(models.Model):
         error_rate = Decimal(num_errors) / Decimal(num_completed_tasks)
         quality_factor = max(Decimal('0.0'), Decimal('1.0') - error_rate)
 
-        # 4. Average Execution Time (in hours)
-        avg_duration = completed_tasks.aggregate(
-            avg_duration=Avg(F('completed_at') - F('created_at'))
-        )['avg_duration']
-
-        if not avg_duration:
-            avg_duration = timedelta(hours=1) # Fallback to 1 hour to prevent errors
-
-        avg_execution_hours = Decimal(avg_duration.total_seconds()) / Decimal('3600')
-
-        # Prevent division by zero or extremely small denominators
-        MIN_AVG_HOURS = Decimal('0.01') # ~36 seconds
-        if avg_execution_hours < MIN_AVG_HOURS:
-            avg_execution_hours = MIN_AVG_HOURS
+        # 4. Business days (Mon-Fri): full month for closed periods,
+        #    elapsed days so far for the current month.
+        import calendar
+        today = timezone.localtime(timezone.now()).date()
+        last_day = calendar.monthrange(year, month)[1]
+        if (year, month) == (today.year, today.month):
+            last_day = min(last_day, today.day)
+        business_days = sum(
+            1 for d in range(1, last_day + 1)
+            if date(year, month, d).weekday() < 5
+        )
+        business_days = max(business_days, 1)
 
         # 5. Final IPAC Calculation
-        # The formula provided is: (Tareas Completadas × Puntualidad % × (100% - % Errores)) / Tiempo Promedio
-        # To make the scale reasonable, we use factors (0-1) and the raw number of tasks.
         numerator = Decimal(num_completed_tasks) * on_time_factor * quality_factor
-        ipac_score = numerator / avg_execution_hours
+        ipac_score = numerator / Decimal(business_days)
 
         return ipac_score.quantize(Decimal('0.01'))
 

@@ -138,6 +138,35 @@
         </div>
     </div>
 </div>
+
+{% if sugerencias %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white d-flex align-items-center">
+                <span class="mr-2">&#128161;</span>
+                <strong>{% trans "How to improve your bonus this month" %}</strong>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for s in sugerencias %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ s.titulo }}</strong>
+                        <br>
+                        <span class="small">{{ s.detalle }}</span>
+                    </div>
+                    {% if s.tipo == 'warning' %}<span class="badge badge-warning p-2">&#9888; {% trans "At the limit" %}</span>
+                    {% elif s.tipo == 'action' %}<span class="badge badge-primary p-2">&#8594; {% trans "Action needed" %}</span>
+                    {% elif s.tipo == 'lost' %}<span class="badge badge-danger p-2">&#10007; {% trans "Lost this month" %}</span>
+                    {% elif s.tipo == 'ok' %}<span class="badge badge-success p-2">&#10003; {% trans "On track" %}</span>
+                    {% else %}<span class="badge badge-secondary p-2">{% trans "Info" %}</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% else %}
 <div class="alert alert-info">{% trans "No salary configured for this period yet." %}</div>
 {% endif %}

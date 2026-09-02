@@ -1,0 +1,38 @@
+{% extends "emails/base_email.html" %}
+
+{% block header %}Cómo mejorar tu bono{% endblock %}
+
+{% block body %}
+<p>Hola {{ empleado.name }},</p>
+<p>Este es tu resumen semanal de {{ periodo }}. Así va tu bono de este mes y qué puedes hacer para mejorarlo:</p>
+
+<table role="presentation" width="100%" cellpadding="6" cellspacing="0" style="border-collapse:collapse; font-size:13px;">
+  <tr style="background:#eef2f7;">
+    <th align="left" style="border:1px solid #dddddd;">KPI</th>
+    <th align="left" style="border:1px solid #dddddd;">Sugerencia</th>
+    <th align="center" style="border:1px solid #dddddd;">Estado</th>
+  </tr>
+  {% for s in sugerencias %}
+  <tr>
+    <td style="border:1px solid #dddddd;"><strong>{{ s.titulo }}</strong></td>
+    <td style="border:1px solid #dddddd;">{{ s.detalle }}</td>
+    <td align="center" style="border:1px solid #dddddd;">
+      {% if s.tipo == 'warning' %}&#9888; Al límite
+      {% elif s.tipo == 'action' %}&#8594; Acción
+      {% elif s.tipo == 'lost' %}&#10007; Perdido
+      {% elif s.tipo == 'ok' %}&#10003; En camino
+      {% else %}Info{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p style="margin-top:16px;">
+  <strong>Bono acumulado del mes hasta hoy: ${{ bono_actual|floatformat:2 }}</strong>
+  {% if bono_potencial > bono_actual %}(potencial: ${{ bono_potencial|floatformat:2 }}){% endif %}
+</p>
+
+<p>
+  <a href="{{ panel_url }}">Ver mi panel completo</a>
+</p>
+{% endblock %}

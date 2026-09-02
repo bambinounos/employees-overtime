@@ -8,6 +8,7 @@ from .models import (
     Employee, Salary, WorkLog, KPI, BonusRule, KPIBonusTier, TaskBoard, TaskList, Task,
     ManualKpiEntry, EmployeePerformanceRecord, JobProfile
 )
+from .sugerencias import build_sugerencias
 from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
@@ -540,3 +541,155 @@ class PostLoginRedirectTest(TestCase):
                                     follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.request['PATH_INFO'], reverse('task_board'))
+
+
+class IPACFormulaTest(TestCase):
+    """IPAC = (completadas x puntualidad x calidad) / dias habiles.
+
+    Regresion: la version anterior dividia por horas creado->completado,
+    lo que castigaba crear tareas con anticipacion."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='password')
+        self.employee = Employee.objects.create(user=self.user, name='Test Employee',
+                                                email='test@example.com', hire_date=date(2024, 1, 1))
+        self.kpi_errors = KPI.objects.create(name="Calidad Administrativa",
+                                             measurement_type='count_lt', target_value=Decimal('2.00'))
+        self.board = TaskBoard.objects.create(employee=self.employee, name="Board")
+        self.list_done = TaskList.objects.create(board=self.board, name="Hecho", order=1)
+
+    def _tarea(self, due, completada):
+        return Task.objects.create(list=self.list_done, assigned_to=self.employee,
+                                   title="T", order=0, due_date=due, completed_at=completada)
+
+    def test_ipac_dias_habiles(self):
+        # Agosto 2024 tiene 22 dias habiles. 10 tareas: 5 a tiempo, 5 tarde,
+        # 1 error -> 10 x 0.5 x 0.9 / 22 = 0.20
+        due = timezone.make_aware(datetime(2024, 8, 15))
+        for _ in range(5):
+            self._tarea(due, timezone.make_aware(datetime(2024, 8, 14, 12)))
+        for _ in range(5):
+            self._tarea(due, timezone.make_aware(datetime(2024, 8, 20, 12)))
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_errors,
+                                      date=date(2024, 8, 10), value=1)
+        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.20'))
+
+    def test_ipac_no_castiga_planificacion_anticipada(self):
+        # Tareas creadas 30 dias antes: mismo resultado que si se crearan hoy.
+        # 4 tareas a tiempo, sin errores -> 4 x 1 x 1 / 22 = 0.18
+        due = timezone.make_aware(datetime(2024, 8, 15))
+        tarea = self._tarea(due, timezone.make_aware(datetime(2024, 8, 14, 12)))
+        tarea.created_at = timezone.make_aware(datetime(2024, 7, 15))
+        tarea.save()
+        for _ in range(3):
+            self._tarea(due, timezone.make_aware(datetime(2024, 8, 14, 12)))
+        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.18'))
+
+    def test_ipac_sin_tareas_es_cero(self):
+        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.00'))
+
+    def test_ipac_tareas_sin_fecha_no_afectan_puntualidad(self):
+        # 2 tareas sin vencimiento completadas: factor puntualidad = 1.0
+        for _ in range(2):
+            Task.objects.create(list=self.list_done, assigned_to=self.employee,
+                                title="S/F", order=0,
+                                completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
+        self.assertEqual(self.employee.calculate_ipac(2024, 8),
+                         (Decimal(2) / Decimal(22)).quantize(Decimal('0.01')))
+
+    @mock.patch('employees.models.timezone.now', return_value=FROZEN_NOW)
+    def test_ipac_mes_en_curso_usa_dias_transcurridos(self, _now):
+        # FROZEN_NOW = lun 16-jun-2025 12:00 local. Dias habiles transcurridos: 11.
+        # 2 tareas a tiempo, sin errores -> 2 / 11 = 0.18
+        due = timezone.make_aware(datetime(2025, 6, 16, 18))
+        for _ in range(2):
+            self._tarea(due, FROZEN_NOW)
+        self.assertEqual(self.employee.calculate_ipac(2025, 6), Decimal('0.18'))
+
+
+class SugerenciasTest(TestCase):
+    """La tarjeta 'Como mejorar tu bono' y el email semanal comparten
+    employees.sugerencias.build_sugerencias."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='password')
+        self.employee = Employee.objects.create(user=self.user, name='Test Employee',
+                                                email='test@example.com', hire_date=date(2024, 1, 1))
+        self.kpi_prod = KPI.objects.create(name="Productividad General",
+                                           measurement_type='percentage', target_value=Decimal('95.00'))
+        self.kpi_err = KPI.objects.create(name="Calidad Administrativa",
+                                          measurement_type='count_lt', target_value=Decimal('2.00'))
+        self.kpi_pub = KPI.objects.create(name="Publicaciones",
+                                          measurement_type='count_gt', target_value=Decimal('5.00'))
+        BonusRule.objects.create(kpi=self.kpi_prod, bonus_amount=Decimal('50.00'))
+        BonusRule.objects.create(kpi=self.kpi_err, bonus_amount=Decimal('30.00'))
+        BonusRule.objects.create(kpi=self.kpi_pub, bonus_amount=Decimal('100.00'))
+        self.profile = JobProfile.objects.create(name='Perfil Test')
+        self.profile.kpis.add(self.kpi_prod, self.kpi_err, self.kpi_pub)
+        self.employee.profile = self.profile
+        self.employee.save()
+
+        self.board = TaskBoard.objects.create(employee=self.employee, name="Board")
+        self.list_todo = TaskList.objects.create(board=self.board, name="Pendiente", order=1)
+        self.list_done = TaskList.objects.create(board=self.board, name="Hecho", order=2)
+
+    def _por_titulo(self, sugerencias, titulo):
+        return next(s for s in sugerencias if s['titulo'] == titulo)
+
+    def test_sugerencias_por_kpi(self):
+        due = timezone.make_aware(datetime(2024, 8, 15))
+        # Productividad: 1 de 2 completada -> accion
+        Task.objects.create(list=self.list_done, assigned_to=self.employee, kpi=self.kpi_prod,
+                            title="A", order=0, due_date=due,
+                            completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
+        Task.objects.create(list=self.list_todo, assigned_to=self.employee, kpi=self.kpi_prod,
+                            title="B", order=1, due_date=due)
+        # Calidad: 1 error con maximo 1 permitido -> warning al limite
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_err,
+                                      date=date(2024, 8, 10), value=1)
+        # Publicaciones: 3 de 5 -> faltan 2
+        for _ in range(3):
+            Task.objects.create(list=self.list_done, assigned_to=self.employee, kpi=self.kpi_pub,
+                                title="P", order=0, due_date=due,
+                                completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
+
+        sugerencias = build_sugerencias(self.employee, 2024, 8)
+        tipos = [s['tipo'] for s in sugerencias]
+        # El warning (al limite) va primero
+        self.assertEqual(tipos[0], 'warning')
+
+        s_prod = self._por_titulo(sugerencias, 'Productividad General')
+        self.assertEqual(s_prod['tipo'], 'action')
+        self.assertIn('1 de 2 tareas', s_prod['detalle'])
+
+        s_err = self._por_titulo(sugerencias, 'Calidad Administrativa')
+        self.assertEqual(s_err['tipo'], 'warning')
+        self.assertEqual(s_err['monto'], Decimal('30.00'))
+
+        s_pub = self._por_titulo(sugerencias, 'Publicaciones')
+        self.assertEqual(s_pub['tipo'], 'action')
+        self.assertIn('Te faltan 2', s_pub['detalle'])
+
+    def test_sugerencias_bono_perdido(self):
+        # 2 errores con target 2 -> bono perdido
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_err,
+                                      date=date(2024, 8, 10), value=1)
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_err,
+                                      date=date(2024, 8, 20), value=1)
+        sugerencias = build_sugerencias(self.employee, 2024, 8)
+        s_err = self._por_titulo(sugerencias, 'Calidad Administrativa')
+        self.assertEqual(s_err['tipo'], 'lost')
+
+    def test_sugerencias_sin_perfil(self):
+        self.employee.profile = None
+        self.employee.save()
+        self.assertEqual(build_sugerencias(self.employee, 2024, 8), [])
+
+    def test_coaching_semanal_dry_run(self):
+        from django.core.management import call_command
+        from io import StringIO
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_err,
+                                      date=date.today(), value=1)
+        out = StringIO()
+        call_command('coaching_semanal', '--dry-run', stdout=out)
+        self.assertIn('DRY RUN', out.getvalue())

@@ -23,6 +23,9 @@
 # Resumen semanal a administradores (lunes 7:00)
 0 7 * * 1 cd /home/ubuntu/employees_overtime && venv/bin/python manage.py resumen_semanal >> logs/cron.log 2>&1
 
+# Coaching semanal a empleados: estado del bono y sugerencias (lunes 7:30)
+30 7 * * 1 cd /home/ubuntu/employees_overtime && venv/bin/python manage.py coaching_semanal >> logs/cron.log 2>&1
+
 # Cierre de mes automático: genera recibos del mes anterior el día 1 (6:00).
 # Opcional — también se puede hacer a mano desde la pantalla /nomina/.
 # 0 6 1 * * cd /home/ubuntu/employees_overtime && venv/bin/python manage.py generar_recibos >> logs/cron.log 2>&1

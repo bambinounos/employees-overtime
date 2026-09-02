@@ -2,6 +2,7 @@ import csv
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI, BonusRule
+from .sugerencias import build_sugerencias
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from datetime import date, timedelta
@@ -633,6 +634,7 @@ def mi_panel(request):
         'saldo_vacaciones': employee.saldo_vacaciones(),
         'recibos': employee.recibos.all()[:12],
         'ausencias_pendientes': employee.solicitudes_ausencia.filter(estado='PENDIENTE').count(),
+        'sugerencias': build_sugerencias(employee, year, month),
     })
     return render(request, 'employees/mi_panel.html', context)
 
