@@ -90,7 +90,7 @@ def build_sugerencias(employee, year, month):
                                     'monto': monto})
             else:
                 sugerencias.append({'tipo': 'action', 'titulo': titulo,
-                                    'detalle': f"Te faltan {meta - creados} productos para la meta de {meta}.{_money_phrase(monto)}.{left_phrase}",
+                                    'detalle': f"Te faltan {meta - creados} productos para la meta de {meta}{_money_phrase(monto)}.{left_phrase}",
                                     'monto': monto})
             continue
 
