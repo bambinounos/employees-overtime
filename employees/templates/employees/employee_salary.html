@@ -101,13 +101,52 @@
                         </div>
                         <span class="text-success font-weight-bold">+ ${{ salary.overtime_pay|floatformat:2 }}</span>
                     </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>{% trans "Performance Bonus" %}</strong>
-                            <br>
-                            <small class="text-muted">{% trans "KPI targets met" %}</small>
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{% trans "Performance Bonus" %}</strong>
+                                <br>
+                                <small class="text-muted">{% trans "KPI targets met" %}</small>
+                            </div>
+                            <span class="text-success font-weight-bold">+ ${{ salary.performance_bonus|floatformat:2 }}</span>
                         </div>
-                        <span class="text-success font-weight-bold">+ ${{ salary.performance_bonus|floatformat:2 }}</span>
+                        {% if bonus_breakdown %}
+                        <button class="btn btn-outline-secondary btn-sm btn-block mt-2" type="button"
+                                data-toggle="collapse" data-target="#bonusBreakdown" aria-expanded="false">
+                            {% trans "Bonus detail by KPI" %} ({{ bonus_breakdown|length }})
+                        </button>
+                        <div class="collapse mt-2" id="bonusBreakdown">
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0">
+                                    <thead>
+                                        <tr class="small text-muted">
+                                            <th>{% trans "KPI" %}</th>
+                                            <th>{% trans "Result" %}</th>
+                                            <th>{% trans "Target" %}</th>
+                                            <th class="text-center">{% trans "Met" %}</th>
+                                            <th class="text-right">{% trans "Bonus" %}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for b in bonus_breakdown %}
+                                        <tr>
+                                            <td>{{ b.name }}</td>
+                                            <td>{{ b.actual }}</td>
+                                            <td>{{ b.target_label }}</td>
+                                            <td class="text-center">
+                                                {% if b.met %}<span class="text-success">&#10003;</span>
+                                                {% else %}<span class="text-danger">&#10007;</span>{% endif %}
+                                            </td>
+                                            <td class="text-right {% if b.bonus > 0 %}text-success font-weight-bold{% else %}text-muted{% endif %}">
+                                                {% if b.bonus > 0 %}+ {% endif %}${{ b.bonus|floatformat:2 }}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
                     </li>
                     {% if salary.commission_percentage > 0 %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">

@@ -39,6 +39,13 @@ def employee_list(request):
     }
     return render(request, 'employees/employee_list.html', context)
 
+def _fmt_number(value):
+    """Decimal for display without trailing zeros: 2.00 -> '2', 0.22 -> '0.22'."""
+    d = value.normalize()
+    if d == d.to_integral_value():
+        d = d.quantize(Decimal(1))
+    return f"{d:n}"
+
 def _build_salary_context(employee, year, month):
     """Builds the salary breakdown + 'striking' metrics context shared by
     employee_salary and mi_panel."""
@@ -82,6 +89,35 @@ def _build_salary_context(employee, year, month):
         else:
             percentage_potential = 0
 
+    # Per-KPI bonus breakdown. calculate_salary() above refreshes the
+    # EmployeePerformanceRecord rows, so this always reflects the latest
+    # configuration (target values, bonus rules and tiers).
+    bonus_breakdown = []
+    if salary is not None:
+        records = (EmployeePerformanceRecord.objects
+                   .filter(employee=employee, date__year=year, date__month=month)
+                   .select_related('kpi')
+                   .order_by('-bonus_awarded', 'kpi__name'))
+        for record in records:
+            kpi = record.kpi
+            is_percentage = (kpi.measurement_type == 'percentage'
+                             or kpi.internal_code == 'SALES_EFFECTIVENESS')
+            target = _fmt_number(kpi.target_value)
+            if kpi.measurement_type == 'count_lt':
+                target_label = f"menos de {target}"
+            elif is_percentage:
+                target_label = f"{target}% o más"
+            else:
+                target_label = f"{target} o más"
+            actual = f"{_fmt_number(record.actual_value)}%" if is_percentage else _fmt_number(record.actual_value)
+            bonus_breakdown.append({
+                'name': kpi.name,
+                'actual': actual,
+                'target_label': target_label,
+                'met': record.target_met,
+                'bonus': record.bonus_awarded,
+            })
+
     return {
         'employee': employee,
         'year': year,
@@ -93,6 +129,7 @@ def _build_salary_context(employee, year, month):
         'total_potential': total_potential,
         'percentage_potential': percentage_potential,
         'commission_amount': commission_amount,
+        'bonus_breakdown': bonus_breakdown,
     }
 
 

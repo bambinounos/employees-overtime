@@ -96,3 +96,21 @@ msgstr "Salario total para"
 
 msgid "Could not calculate salary. Please make sure the employee has a base salary and work logs for the selected period."
 msgstr "No se pudo calcular el salario. Asegúrese de que el empleado tenga un salario base y registros de trabajo para el período seleccionado."
+
+msgid "Bonus detail by KPI"
+msgstr "Detalle del bono por KPI"
+
+msgid "KPI"
+msgstr "KPI"
+
+msgid "Result"
+msgstr "Resultado"
+
+msgid "Target"
+msgstr "Meta"
+
+msgid "Met"
+msgstr "Cumplió"
+
+msgid "Bonus"
+msgstr "Bono"
