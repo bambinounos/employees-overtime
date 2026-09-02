@@ -90,7 +90,7 @@ def build_sugerencias(employee, year, month):
                                     'monto': monto})
             else:
                 sugerencias.append({'tipo': 'action', 'titulo': titulo,
-                                    'detalle': f"Te faltan {meta - creados} productos para la meta de {meta}{_money_phrase(monto)}.{left_phrase}",
+                                    'detalle': f"Le faltan {meta - creados} productos para alcanzar la meta de {meta}{_money_phrase(monto)}.{left_phrase}",
                                     'monto': monto})
             continue
 
@@ -108,11 +108,11 @@ def build_sugerencias(employee, year, month):
             elif completadas < total:
                 pct = int(completadas / total * 100)
                 sugerencias.append({'tipo': 'action', 'titulo': titulo,
-                                    'detalle': f"Te quedan {total - completadas} de {total} tareas por completar ({pct}% avanzado). Completarlas todas asegura el bono{_money_phrase(monto)}.{left_phrase}",
+                                    'detalle': f"Le quedan {total - completadas} de {total} tareas por completar ({pct}% avanzado). Completarlas todas asegura el bono{_money_phrase(monto)}.{left_phrase}",
                                     'monto': monto})
             else:
                 sugerencias.append({'tipo': 'ok', 'titulo': titulo,
-                                    'detalle': f"Tus {total} tareas están completadas: bono asegurado{_money_phrase(monto)}.",
+                                    'detalle': f"Sus {total} tareas están completadas: bono asegurado{_money_phrase(monto)}.",
                                     'monto': monto})
 
         elif kpi.measurement_type == 'count_lt':
@@ -123,15 +123,15 @@ def build_sugerencias(employee, year, month):
             permitidos = max(int(kpi.target_value) - 1, 0)
             if errores > permitidos:
                 sugerencias.append({'tipo': 'lost', 'titulo': titulo,
-                                    'detalle': f"Con {_errores_txt(errores)} el bono de este mes se perdió (se permiten menos de {kpi.target_value:n}){_money_phrase(monto)}.",
+                                    'detalle': f"Con {_errores_txt(errores)} se perdió el bono de este mes: se permiten menos de {kpi.target_value:n}{_money_phrase(monto)}.",
                                     'monto': monto})
             elif errores == permitidos:
                 sugerencias.append({'tipo': 'warning', 'titulo': titulo,
-                                    'detalle': f"Al límite: {_errores_txt(errores)} y el máximo es {permitidos}. Un error más pierde el bono{_money_phrase(monto)}.",
+                                    'detalle': f"Al límite: lleva {_errores_txt(errores)} y el máximo es {permitidos}. Un error más le haría perder el bono{_money_phrase(monto)}.",
                                     'monto': monto})
             else:
                 sugerencias.append({'tipo': 'ok', 'titulo': titulo,
-                                    'detalle': f"Llevas {_errores_txt(errores)} de {permitidos} permitidos: bono asegurado por ahora{_money_phrase(monto)}.",
+                                    'detalle': f"Lleva {_errores_txt(errores)} y el máximo permitido es {permitidos}: bono asegurado{_money_phrase(monto)}.",
                                     'monto': monto})
 
         elif kpi.measurement_type == 'count_gt':
@@ -145,7 +145,7 @@ def build_sugerencias(employee, year, month):
                                     'monto': monto})
             else:
                 sugerencias.append({'tipo': 'action', 'titulo': titulo,
-                                    'detalle': f"Te faltan {meta - hechas} para la meta de {meta}{_money_phrase(monto)}.{left_phrase}",
+                                    'detalle': f"Le faltan {meta - hechas} para alcanzar la meta de {meta}{_money_phrase(monto)}.{left_phrase}",
                                     'monto': monto})
 
         elif kpi.measurement_type == 'composite_ipac':
@@ -170,11 +170,11 @@ def build_sugerencias(employee, year, month):
             ipac_potencial = (Decimal(n) * quality / Decimal(bd)).quantize(Decimal('0.01'))
             if pct >= 80:
                 sugerencias.append({'tipo': 'ok', 'titulo': titulo,
-                                    'detalle': f"Puntualidad {pct}%: tu IPAC va en {ipac_actual:n} (tareas efectivas por día hábil).",
+                                    'detalle': f"Puntualidad {pct}%: su IPAC va en {ipac_actual:n} (tareas efectivas por día hábil).",
                                     'monto': monto})
             else:
                 sugerencias.append({'tipo': 'action', 'titulo': titulo,
-                                    'detalle': f"Completaste {pct}% de tus tareas a tiempo. Completándolas el día del vencimiento tu IPAC subiría de {ipac_actual:n} a ~{ipac_potencial:n}.",
+                                    'detalle': f"Ha completado el {pct}% de sus tareas a tiempo. Mientras antes complete sus tareas (a más tardar el día del vencimiento), mejor: si ninguna se atrasa, su IPAC subiría de {ipac_actual:n} a ~{ipac_potencial:n}.",
                                     'monto': monto})
 
     prioridad = {'warning': 0, 'action': 1, 'lost': 2, 'ok': 3, 'info': 4}

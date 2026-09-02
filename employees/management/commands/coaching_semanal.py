@@ -61,7 +61,7 @@ class Command(BaseCommand):
                 'bono_potencial': bono_potencial,
                 'panel_url': f"{base_url}/mi-panel/",
             }
-            asunto = f"Cómo mejorar tu bono de {periodo}"
+            asunto = f"Cómo mejorar su bono de {periodo}"
             if options['dry_run']:
                 self.stdout.write(f"[DRY RUN] {empleado.name}: "
                                   f"{len(sugerencias)} sugerencias, "

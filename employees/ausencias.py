@@ -29,7 +29,7 @@ def _notificar_decision(solicitud):
         return
     saldo = solicitud.employee.saldo_vacaciones(solicitud.fecha_inicio.year)
     transaction.on_commit(lambda: send_html_mail(
-        subject=f"Tu solicitud de {solicitud.tipo.nombre} fue {solicitud.get_estado_display().lower()}",
+        subject=f"Su solicitud de {solicitud.tipo.nombre} fue {solicitud.get_estado_display().lower()}",
         template_name='ausencia_decidida.html',
         context={'solicitud': solicitud, 'saldo': saldo},
         to=destinatario,

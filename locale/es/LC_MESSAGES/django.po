@@ -116,7 +116,7 @@ msgid "Bonus"
 msgstr "Bono"
 
 msgid "How to improve your bonus this month"
-msgstr "Cómo mejorar tu bono este mes"
+msgstr "Cómo mejorar su bono este mes"
 
 msgid "At the limit"
 msgstr "Al límite"

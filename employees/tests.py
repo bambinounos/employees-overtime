@@ -608,7 +608,7 @@ class IPACFormulaTest(TestCase):
 
 
 class SugerenciasTest(TestCase):
-    """La tarjeta 'Como mejorar tu bono' y el email semanal comparten
+    """La tarjeta 'Cómo mejorar su bono' y el email semanal comparten
     employees.sugerencias.build_sugerencias."""
 
     def setUp(self):
@@ -660,7 +660,7 @@ class SugerenciasTest(TestCase):
 
         s_prod = self._por_titulo(sugerencias, 'Productividad General')
         self.assertEqual(s_prod['tipo'], 'action')
-        self.assertIn('1 de 2 tareas', s_prod['detalle'])
+        self.assertIn('Le quedan 1 de 2 tareas', s_prod['detalle'])
 
         s_err = self._por_titulo(sugerencias, 'Calidad Administrativa')
         self.assertEqual(s_err['tipo'], 'warning')
@@ -668,7 +668,19 @@ class SugerenciasTest(TestCase):
 
         s_pub = self._por_titulo(sugerencias, 'Publicaciones')
         self.assertEqual(s_pub['tipo'], 'action')
-        self.assertIn('Te faltan 2', s_pub['detalle'])
+        self.assertIn('Le faltan 2', s_pub['detalle'])
+
+    def test_sugerencias_lenguaje_formal_de_usted(self):
+        """Los mensajes van dirigidos de usted: sin formas de tú."""
+        due = timezone.make_aware(datetime(2024, 8, 15))
+        Task.objects.create(list=self.list_todo, assigned_to=self.employee, kpi=self.kpi_prod,
+                            title="B", order=1, due_date=due)
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_err,
+                                      date=date(2024, 8, 10), value=1)
+        for sugerencia in build_sugerencias(self.employee, 2024, 8):
+            for informal in ('Te quedan', 'Te faltan', 'tus tareas', 'Completaste',
+                             'Llevas ', 'tu IPAC', 'tu bono'):
+                self.assertNotIn(informal, sugerencia['detalle'])
 
     def test_sugerencias_bono_perdido(self):
         # 2 errores con target 2 -> bono perdido

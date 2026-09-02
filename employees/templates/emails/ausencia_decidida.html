@@ -3,9 +3,9 @@
 {% block header %}Solicitud de ausencia {{ solicitud.get_estado_display|lower }}{% endblock %}
 
 {% block body %}
-<p>Hola {{ solicitud.employee.name }},</p>
+<p>Hola {{ solicitud.employee.name }}:</p>
 <p>
-  Tu solicitud de <strong>{{ solicitud.tipo.nombre }}</strong>
+  Su solicitud de <strong>{{ solicitud.tipo.nombre }}</strong>
   del <strong>{{ solicitud.fecha_inicio|date:"Y-m-d" }}</strong>
   al <strong>{{ solicitud.fecha_fin|date:"Y-m-d" }}</strong>
   ({{ solicitud.dias_habiles }} día(s) hábil(es)) fue
