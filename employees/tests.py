@@ -800,3 +800,26 @@ class SugerenciaIpacSinFechaTest(TestCase):
         sugerencia = build_sugerencias(self.employee, 2024, 8)[0]
         self.assertEqual(sugerencia['tipo'], 'info')
         self.assertIn('no tienen fecha', sugerencia['detalle'])
+
+    def test_errores_mencionan_factor_calidad(self):
+        # 2 tareas (1 a tiempo) + 2 errores -> factor calidad 0: la sugerencia
+        # debe explicar que los errores anulan el indice y como recuperarlo.
+        kpi_err = KPI.objects.create(name="Calidad Administrativa",
+                                     measurement_type='count_lt', target_value=Decimal('2.00'))
+        due = timezone.make_aware(datetime(2024, 8, 15))
+        Task.objects.create(list=self.list_done, assigned_to=self.employee,
+                            title="A", order=0, due_date=due,
+                            completed_at=timezone.make_aware(datetime(2024, 8, 14, 12)))
+        Task.objects.create(list=self.list_done, assigned_to=self.employee,
+                            title="B", order=1, due_date=due,
+                            completed_at=timezone.make_aware(datetime(2024, 8, 20, 12)))
+        for _ in range(2):
+            ManualKpiEntry.objects.create(employee=self.employee, kpi=kpi_err,
+                                          date=date(2024, 8, 10), value=1)
+        sugerencia = build_sugerencias(self.employee, 2024, 8)[0]
+        self.assertEqual(sugerencia['tipo'], 'action')
+        self.assertIn('errores registrados', sugerencia['detalle'])
+        self.assertIn('factor calidad 0.00', sugerencia['detalle'])
+        self.assertIn('sin errores nuevos lo recupera', sugerencia['detalle'])
+        # Con calidad 0 el "subiria de X a ~Y" no aporta: no debe incluirlo.
+        self.assertNotIn('subiría', sugerencia['detalle'])

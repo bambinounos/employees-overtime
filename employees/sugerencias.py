@@ -169,16 +169,27 @@ def build_sugerencias(employee, year, month):
                 employee=employee, kpi__in=error_kpis,
                 date__year=year, date__month=month,
             ).aggregate(total=Sum('value'))['total'] or 0
+            num_errors = int(num_errors)
             quality = max(Decimal('0'), Decimal('1') - Decimal(num_errors) / Decimal(n))
             ipac_actual = employee.calculate_ipac(year, month)
             ipac_potencial = (Decimal(n) * quality / Decimal(bd)).quantize(Decimal('0.01'))
-            if pct >= 80:
+            if pct >= 80 and quality >= Decimal('0.9'):
                 sugerencias.append({'tipo': 'ok', 'titulo': titulo,
-                                    'detalle': f"Puntualidad {pct}%: su IPAC va en {ipac_actual:n} (tareas efectivas por día hábil).",
+                                    'detalle': f"Puntualidad {pct}% y factor calidad {quality:.2f}: su IPAC va en {ipac_actual:n} (tareas efectivas por día hábil).",
                                     'monto': monto})
             else:
+                frases = []
+                if pct < 80:
+                    frases.append("Ha completado el {pct}% de sus tareas a tiempo: mientras antes las complete (a más tardar el día del vencimiento), mejor".format(pct=pct))
+                if quality < Decimal('1'):
+                    errores_txt = (f"{num_errors} error registrado" if num_errors == 1
+                                   else f"{num_errors} errores registrados")
+                    frases.append(f"lleva {errores_txt} este mes, que reducen todo el índice (factor calidad {quality:.2f}): cada tarea completada sin errores nuevos lo recupera")
+                detalle = '; '.join(frases).capitalize() + '.'
+                if ipac_potencial - ipac_actual >= Decimal('0.05'):
+                    detalle += f" Si ninguna tarea se atrasa, su IPAC subiría de {ipac_actual:n} a ~{ipac_potencial:n}."
                 sugerencias.append({'tipo': 'action', 'titulo': titulo,
-                                    'detalle': f"Ha completado el {pct}% de sus tareas a tiempo. Mientras antes complete sus tareas (a más tardar el día del vencimiento), mejor: si ninguna se atrasa, su IPAC subiría de {ipac_actual:n} a ~{ipac_potencial:n}.",
+                                    'detalle': detalle,
                                     'monto': monto})
 
     prioridad = {'warning': 0, 'action': 1, 'lost': 2, 'ok': 3, 'info': 4}
