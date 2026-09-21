@@ -4,7 +4,8 @@ import sys
 import threading
 import logging
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import timedelta, datetime, date
+import re as _re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "salary_management.settings")
@@ -76,16 +77,33 @@ def parse_ical_event(ical_text):
     uid = getattr(vevent, 'uid', None)
     uid = uid.value if uid else None
 
-    title = vevent.summary.value
-    start_date = vevent.dtstart.value
-    end_date = vevent.dtend.value
+    title = vevent.summary.value if hasattr(vevent, 'summary') else ''
+    start_date = vevent.dtstart.value if hasattr(vevent, 'dtstart') else None
+    if hasattr(vevent, 'dtend'):
+        end_date = vevent.dtend.value
+    elif hasattr(vevent, 'duration') and start_date:
+        end_date = start_date + vevent.duration.value
+    elif start_date:
+        end_date = start_date + timedelta(minutes=30)
+    else:
+        end_date = None
+
+    # Handle all-day events (date objects converted to datetime for DateTimeField)
+    if isinstance(start_date, date) and not isinstance(start_date, datetime):
+        start_date = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=pytz.UTC)
+    if isinstance(end_date, date) and not isinstance(end_date, datetime):
+        end_date = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=pytz.UTC)
+
     description = vevent.description.value if hasattr(vevent, 'description') else ''
 
     alarm_minutes = None
     if hasattr(vevent, 'valarm'):
-        trigger = vevent.valarm.trigger.value
-        if isinstance(trigger, timedelta):
-            alarm_minutes = int(abs(trigger.total_seconds()) / 60)
+        try:
+            trigger = vevent.valarm.trigger.value
+            if isinstance(trigger, timedelta):
+                alarm_minutes = int(abs(trigger.total_seconds()) / 60)
+        except Exception:
+            pass
 
     return {
         'uid': uid,
@@ -224,8 +242,10 @@ class Collection(BaseCollection):
             import uuid
             uid = str(uuid.uuid4())
 
-        # Create or update
+        # Create or update (RFC 4791 §5.1: strip any METHOD header from stored iCal)
         raw_text = item.serialize() if hasattr(item, 'serialize') else getattr(item, 'text', '')
+        if raw_text and "METHOD:" in raw_text:
+            raw_text = _re.sub(r"METHOD:[^\r\n]+\r?\n", "", raw_text, flags=_re.IGNORECASE)
         event, created = CalendarEvent.objects.update_or_create(
             uid=uid,
             user=self._user,

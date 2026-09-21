@@ -283,3 +283,90 @@ class ScriptNameMiddlewareTest(TestCase):
         wrapped = with_script_name(app, '')
         self.assertIs(wrapped, app)  # no wrapping when prefix is empty
 
+
+class OptimizeCalDAVTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='licitaciones', password='password')
+        self.utc = pytz.UTC
+
+    def test_upload_strips_method_header_rfc4791(self):
+        """RFC 4791 §5.1: Collections must not store METHOD in items."""
+        from radicale import item as radicale_item
+        storage = Mock()
+        col = Collection(storage, "licitaciones/default", user=self.user, tag="VCALENDAR")
+        uid = str(uuid.uuid4())
+        raw_text = (
+            "BEGIN:VCALENDAR\r\n"
+            "VERSION:2.0\r\n"
+            "METHOD:PUBLISH\r\n"
+            "BEGIN:VEVENT\r\n"
+            f"UID:{uid}\r\n"
+            "SUMMARY:Prueba RFC 4791\r\n"
+            "DTSTART:20260921T150000Z\r\n"
+            "DTEND:20260921T153000Z\r\n"
+            "END:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        )
+        item = radicale_item.Item(collection_path="licitaciones/default", href=f"{uid}.ics", text=raw_text)
+        col.upload(f"{uid}.ics", item)
+
+        event = CalendarEvent.objects.get(uid=uid)
+        self.assertNotIn("METHOD:", event.raw_ical)
+        self.assertNotIn("PUBLISH", event.raw_ical)
+
+    def test_parse_ical_event_without_dtend_uses_duration_or_fallback(self):
+        from caldav.storage import parse_ical_event
+        raw = (
+            "BEGIN:VCALENDAR\r\n"
+            "VERSION:2.0\r\n"
+            "BEGIN:VEVENT\r\n"
+            "UID:no-dtend\r\n"
+            "SUMMARY:Sin Dtend\r\n"
+            "DTSTART:20260921T150000Z\r\n"
+            "DURATION:PT45M\r\n"
+            "END:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        )
+        data = parse_ical_event(raw)
+        self.assertEqual(data['uid'], 'no-dtend')
+        self.assertIsNotNone(data['end_date'])
+        self.assertEqual(data['end_date'] - data['start_date'], timedelta(minutes=45))
+
+    def test_optimize_caldav_command(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        # Event 1: empty raw_ical
+        ev1 = CalendarEvent.objects.create(
+            user=self.user,
+            title='Vacio',
+            start_date=self.utc.localize(datetime(2026, 9, 21, 10, 0)),
+            end_date=self.utc.localize(datetime(2026, 9, 21, 11, 0)),
+            uid='ev-vacio',
+            raw_ical='',
+        )
+        # Event 2: contains METHOD:PUBLISH
+        ev2 = CalendarEvent.objects.create(
+            user=self.user,
+            title='Con Publish',
+            start_date=self.utc.localize(datetime(2026, 9, 21, 12, 0)),
+            end_date=self.utc.localize(datetime(2026, 9, 21, 13, 0)),
+            uid='ev-publish',
+            raw_ical="BEGIN:VCALENDAR\r\nMETHOD:PUBLISH\r\nBEGIN:VEVENT\r\nUID:ev-publish\r\nEND:VEVENT\r\nEND:VCALENDAR",
+        )
+
+        out = StringIO()
+        call_command('optimize_caldav', username='licitaciones', stdout=out)
+        output = out.getvalue()
+        self.assertIn("Optimización completada", output)
+        self.assertIn("raw_ical generados/poblados: 1", output)
+        self.assertIn("METHOD:PUBLISH limpiados: 1", output)
+
+        ev1.refresh_from_db()
+        self.assertTrue(bool(ev1.raw_ical))
+        self.assertIn("UID:ev-vacio", ev1.raw_ical)
+
+        ev2.refresh_from_db()
+        self.assertNotIn("METHOD:", ev2.raw_ical)
+
+
