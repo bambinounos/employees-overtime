@@ -165,3 +165,89 @@ class DolibarrWebhookIdempotencyTest(TestCase):
         response = self._post(self._propal_payload())
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json().get('status'), 'already_processed')
+
+    def test_bill_validate_with_null_fk_user_author_from_order(self):
+        """Dolibarr sends fk_user_author as null in BILL_VALIDATE.
+        The invoice should be attributed to the employee who created the origin order."""
+        # 1. Create order by employee (dolibarr_user_id=5)
+        self._post(self._order_payload(dolibarr_id=2050, amount='1250.00', ref='SO2609-001'))
+        self.assertEqual(SalesRecord.objects.filter(status='order', dolibarr_id=2050).count(), 1)
+
+        # 2. Send BILL_VALIDATE with fk_user_author=None and fk_commande=2050
+        bill_payload = {
+            'trigger_code': 'BILL_VALIDATE',
+            'object': {
+                'id': 3050,
+                'fk_user_author': None,
+                'ref': 'FA2609-001',
+                'total_ht': '1250.00',
+                'date_validation': '',
+                'type': 0,
+                'fk_propal': None,
+                'fk_commande': 2050,
+            },
+        }
+        res = self._post(bill_payload)
+        self.assertEqual(res.status_code, 200)
+
+        invoiced = SalesRecord.objects.filter(status='invoiced', dolibarr_id=3050).first()
+        self.assertIsNotNone(invoiced)
+        self.assertEqual(invoiced.employee, self.employee)
+        self.assertEqual(invoiced.amount_untaxed, Decimal('1250.00'))
+        self.assertEqual(invoiced.origin_order_id, 2050)
+        self.assertIsNone(invoiced.payment_date)
+
+    def test_payment_updates_invoice_and_commission(self):
+        """Test payment updates payment_date on invoice and calculate_commissions adds it."""
+        self.employee.commission_percentage = Decimal('0.50')
+        self.employee.save()
+
+        # Create proforma, order, and invoice with null author
+        self._post(self._propal_payload(dolibarr_id=1001, amount='2000.00'))
+        self._post(self._order_payload(dolibarr_id=2001, amount='2000.00', fk_propal=1001))
+
+        bill_payload = {
+            'trigger_code': 'BILL_VALIDATE',
+            'object': {
+                'id': 3001,
+                'fk_user_author': None,
+                'ref': 'FA2609-002',
+                'total_ht': '2000.00',
+                'date_validation': '2026-09-15',
+                'type': 0,
+                'fk_propal': 1001,
+                'fk_commande': 2001,
+            },
+        }
+        res = self._post(bill_payload)
+        self.assertEqual(res.status_code, 200)
+
+        # Before payment: commission is 0.00, provisional is 2000.00
+        comm_before = self.employee.calculate_commissions(2026, 9)
+        self.assertEqual(comm_before['commission_amount'], Decimal('0.00'))
+        self.assertEqual(comm_before['provisional_invoiced'], Decimal('2000.00'))
+
+        # Process PAYMENT_CUSTOMER_CREATE
+        payment_payload = {
+            'trigger_code': 'PAYMENT_CUSTOMER_CREATE',
+            'object': {
+                'id': 4001,
+                'ref': 'PAY2609-001',
+                'invoice_ids': [3001],
+                'date_payment': '2026-09-20',
+                'total_amount': 2000.00,
+            },
+        }
+        res_pay = self._post(payment_payload)
+        self.assertEqual(res_pay.status_code, 200)
+
+        # After payment: invoice has payment_date
+        inv = SalesRecord.objects.get(status='invoiced', dolibarr_id=3001)
+        self.assertEqual(inv.payment_date, date(2026, 9, 20))
+
+        # After payment: commission is 2000 * 0.50% = $10.00
+        comm_after = self.employee.calculate_commissions(2026, 9)
+        self.assertEqual(comm_after['confirmed_invoiced'], Decimal('2000.00'))
+        self.assertEqual(comm_after['commission_amount'], Decimal('10.00'))
+        self.assertEqual(comm_after['provisional_invoiced'], Decimal('0.00'))
+

@@ -534,15 +534,20 @@ class DolibarrWebhookView(APIView):
             return None
 
     @staticmethod
-    def _parse_event_date(obj):
-        """Extract the event date from the payload, falling back to today."""
-        date_str = obj.get('date_validation') or obj.get('date_creation')
+    def _parse_event_date(obj, fallback_date=None):
+        """Extract the event date from the payload, falling back to fallback_date or today."""
+        date_str = (
+            obj.get('date_validation')
+            or obj.get('date_creation')
+            or obj.get('date')
+            or obj.get('date_point')
+        )
         if date_str:
             try:
                 return datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
             except (ValueError, TypeError):
                 pass
-        return timezone.now().date()
+        return fallback_date or timezone.now().date()
 
     @staticmethod
     def _validate_int(value, field_name, allow_zero=False):
@@ -576,7 +581,7 @@ class DolibarrWebhookView(APIView):
             logger.warning("Invalid %s: not a valid amount, got %s", field_name, value)
             return None
 
-    def process_bill_validate(self, payload, instance):
+    def process_bill_validate(self, payload, instance, fallback_date=None):
         """
         Process BILL_VALIDATE events.
 
@@ -592,17 +597,32 @@ class DolibarrWebhookView(APIView):
         if not dolibarr_id:
             return
         dolibarr_user_id = self._validate_int(obj.get('fk_user_author'), 'fk_user_author')
-        if not dolibarr_user_id:
-            return
         amount = self._validate_amount(obj.get('total_ht', 0), 'total_ht')
         if amount is None:
             return
 
-        event_date = self._parse_event_date(obj)
+        event_date = self._parse_event_date(obj, fallback_date=fallback_date)
         bill_type = self._validate_int(obj.get('type', 0), 'type', allow_zero=True) or 0
         dolibarr_ref = str(obj.get('ref', ''))[:100]
         origin_proforma_id = self._validate_int(obj.get('fk_propal'), 'fk_propal')
         origin_order_id = self._validate_int(obj.get('fk_commande'), 'fk_commande')
+
+        # Lookup origin records in DB
+        proforma_record = None
+        if origin_proforma_id:
+            proforma_record = SalesRecord.objects.filter(
+                dolibarr_instance=instance,
+                dolibarr_id=origin_proforma_id,
+                status='proforma',
+            ).first()
+
+        order_record = None
+        if origin_order_id:
+            order_record = SalesRecord.objects.filter(
+                dolibarr_instance=instance,
+                dolibarr_id=origin_order_id,
+                status='order',
+            ).first()
 
         if bill_type == 2:
             # --- CREDIT NOTE ---
@@ -625,7 +645,7 @@ class DolibarrWebhookView(APIView):
 
             if original_invoice:
                 target_employee = original_invoice.employee
-            else:
+            elif dolibarr_user_id:
                 target_employee = self._resolve_employee(instance, dolibarr_user_id)
                 if not target_employee:
                     return
@@ -633,6 +653,16 @@ class DolibarrWebhookView(APIView):
                     "Credit note %s: could not find original invoice, "
                     "attributing to issuer %s", dolibarr_ref, target_employee.name
                 )
+            elif order_record:
+                target_employee = order_record.employee
+            elif proforma_record:
+                target_employee = proforma_record.employee
+            else:
+                logger.warning(
+                    "Credit note %s: could not resolve employee (no original invoice, no user_id, no origin order/proforma)",
+                    dolibarr_ref
+                )
+                return
 
             # Credit notes must be negative
             record, created = SalesRecord.objects.update_or_create(
@@ -654,44 +684,49 @@ class DolibarrWebhookView(APIView):
                 logger.info("Credit note %s attributed to employee %s", dolibarr_ref, target_employee.name)
         else:
             # --- REGULAR INVOICE ---
-            employee = self._resolve_employee(instance, dolibarr_user_id)
+            # Dolibarr sends fk_user_author as null in BILL_VALIDATE triggers.
+            # If absent, resolve the employee from the origin order or proforma.
+            employee = None
+            if dolibarr_user_id:
+                employee = self._resolve_employee(instance, dolibarr_user_id)
+            elif order_record:
+                employee = order_record.employee
+            elif proforma_record:
+                employee = proforma_record.employee
+
             if not employee:
+                logger.warning(
+                    "Invoice %s rejected: unable to resolve employee (user_id=%s, order_id=%s, proforma_id=%s)",
+                    dolibarr_ref, dolibarr_user_id, origin_order_id, origin_proforma_id
+                )
                 return
+
+            # Inherit origin_proforma_id from order if not directly provided
+            if not origin_proforma_id and order_record and order_record.origin_proforma_id:
+                origin_proforma_id = order_record.origin_proforma_id
 
             # Invoice must have originated from a proforma or order by the same employee
             origin_validated = False
 
             # Check proforma ownership
-            if origin_proforma_id:
-                proforma_record = SalesRecord.objects.filter(
-                    dolibarr_instance=instance,
-                    dolibarr_id=origin_proforma_id,
-                    status='proforma',
-                ).first()
-                if proforma_record:
-                    if proforma_record.employee_id != employee.pk:
-                        logger.warning(
-                            "Invoice %s by %s rejected: proforma belongs to %s",
-                            dolibarr_ref, employee.name, proforma_record.employee.name
-                        )
-                        return
-                    origin_validated = True
+            if proforma_record:
+                if proforma_record.employee_id != employee.pk:
+                    logger.warning(
+                        "Invoice %s by %s rejected: proforma belongs to %s",
+                        dolibarr_ref, employee.name, proforma_record.employee.name
+                    )
+                    return
+                origin_validated = True
 
             # Check order ownership (Pedido → Factura flow)
-            if not origin_validated and origin_order_id:
-                order_record = SalesRecord.objects.filter(
-                    dolibarr_instance=instance,
-                    dolibarr_id=origin_order_id,
-                    status='order',
-                ).first()
-                if order_record:
-                    if order_record.employee_id != employee.pk:
-                        logger.warning(
-                            "Invoice %s by %s rejected: order belongs to %s",
-                            dolibarr_ref, employee.name, order_record.employee.name
-                        )
-                        return
-                    origin_validated = True
+            if not origin_validated and order_record:
+                if order_record.employee_id != employee.pk:
+                    logger.warning(
+                        "Invoice %s by %s rejected: order belongs to %s",
+                        dolibarr_ref, employee.name, order_record.employee.name
+                    )
+                    return
+                origin_validated = True
 
             # Reject invoices without proforma or order (not a valid workflow)
             if not origin_validated:
