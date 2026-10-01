@@ -123,7 +123,7 @@ def build_sugerencias(employee, year, month):
             permitidos = max(int(kpi.target_value) - 1, 0)
             if errores > permitidos:
                 sugerencias.append({'tipo': 'lost', 'titulo': titulo,
-                                    'detalle': f"Con {_errores_txt(errores)} se perdió el bono de este mes: se permiten menos de {kpi.target_value:n}{_money_phrase(monto)}.",
+                                    'detalle': f"Con {_errores_txt(errores)} se perdió el bono de este mes: el máximo permitido es {permitidos}{_money_phrase(monto)}.",
                                     'monto': monto})
             elif errores == permitidos:
                 sugerencias.append({'tipo': 'warning', 'titulo': titulo,

@@ -105,7 +105,11 @@ def _build_salary_context(employee, year, month):
                              or kpi.internal_code == 'SALES_EFFECTIVENESS')
             target = _fmt_number(kpi.target_value)
             if kpi.measurement_type == 'count_lt':
-                target_label = f"menos de {target}"
+                if kpi.target_value == int(kpi.target_value):
+                    max_allowed = max(int(kpi.target_value) - 1, 0)
+                    target_label = f"máximo {max_allowed}"
+                else:
+                    target_label = f"menos de {target}"
             elif is_percentage:
                 target_label = f"{target}% o más"
             else:

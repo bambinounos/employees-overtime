@@ -823,3 +823,23 @@ class SugerenciaIpacSinFechaTest(TestCase):
         self.assertIn('sin errores nuevos lo recupera', sugerencia['detalle'])
         # Con calidad 0 el "subiria de X a ~Y" no aporta: no debe incluirlo.
         self.assertNotIn('subiría', sugerencia['detalle'])
+
+    def test_count_lt_target_label_and_sugerencia_maximo(self):
+        from employees.views import _build_salary_context
+        kpi_punt = KPI.objects.create(name="Puntualidad", measurement_type='count_lt', target_value=Decimal('2.00'))
+        BonusRule.objects.create(kpi=kpi_punt, bonus_amount=Decimal('20.00'), description='Máximo 1 atraso')
+        Salary.objects.create(employee=self.employee, base_amount=Decimal('500.00'), effective_date=date(2024, 1, 1))
+        if self.employee.profile:
+            self.employee.profile.kpis.add(kpi_punt)
+        # 2 atrasos
+        ManualKpiEntry.objects.create(employee=self.employee, kpi=kpi_punt, date=date(2024, 8, 5), value=2)
+        self.employee.calculate_salary(2024, 8)
+        ctx = _build_salary_context(self.employee, 2024, 8)
+        breakdown = {b['name']: b for b in ctx['bonus_breakdown']}
+        self.assertEqual(breakdown['Puntualidad']['target_label'], 'máximo 1')
+        self.assertFalse(breakdown['Puntualidad']['met'])
+
+        sugs = build_sugerencias(self.employee, 2024, 8)
+        sug_punt = next(s for s in sugs if s['titulo'] == 'Puntualidad')
+        self.assertIn('el máximo permitido es 1', sug_punt['detalle'])
+
