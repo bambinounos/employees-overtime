@@ -22,3 +22,4 @@ db.sqlite3-journal
 .DS_Store
 .vscode/
 /salary_management/local_settings.py
+Gemini_Generated_Image_*.png
