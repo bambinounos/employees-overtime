@@ -52,7 +52,7 @@ class RetroactiveBonusDeductionTests(TestCase):
         self.kpi_ipac = KPI.objects.create(
             name='IPAC',
             measurement_type='composite_ipac',
-            target_value=Decimal('1.20'),
+            target_value=Decimal('1.50'),
         )
         BonusRule.objects.create(kpi=self.kpi_ipac, bonus_amount=Decimal('50.00'))
 
@@ -156,15 +156,15 @@ class RetroactiveBonusDeductionTests(TestCase):
 
     def test_option_a_recalculates_both_count_lt_and_ipac_when_threshold_crossed(self):
         """
-        Opción A: En agosto (21 días hábiles) el empleado completó 27 tareas a tiempo y tuvo
-        1 error a tiempo -> IPAC = 26 / 21 = 1.24 (>= 1.20, gana $50) y Calidad = 1 (< 2, gana $30).
+        Opción A: En agosto (21 días hábiles) el empleado completó 36 tareas a tiempo y tuvo
+        1 error a tiempo -> IPAC = 36 * 0.90 / 21 = 1.54 (>= 1.50, gana $50) y Calidad = 1 (< 2, gana $30).
         Total bono cobrado en agosto = $80.00.
         En septiembre se descubre un 2.º error ocurrido en agosto:
         - Calidad en agosto pasa de 1 a 2 errores -> pierde $30.00.
-        - IPAC en agosto pasa a 25 / 21 = 1.19 (< 1.20) -> pierde $50.00.
+        - IPAC en agosto pasa a 36 * 0.80 / 21 = 1.37 (< 1.50) -> pierde $50.00.
         - Total descuento retroactivo en septiembre = $80.00.
         """
-        self._create_completed_tasks(2026, 8, 27)
+        self._create_completed_tasks(2026, 8, 36)
         e1 = ManualKpiEntry.objects.create(
             employee=self.employee,
             kpi=self.kpi_calidad,

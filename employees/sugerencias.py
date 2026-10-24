@@ -165,12 +165,15 @@ def build_sugerencias(employee, year, month):
             pct = int(on_time / n * 100)
             bd = _business_days_elapsed(year, month)
             error_kpis = KPI.objects.filter(measurement_type='count_lt')
+            cutoff = employee._period_closing_cutoff(year, month)
             num_errors = ManualKpiEntry.objects.filter(
                 employee=employee, kpi__in=error_kpis,
                 date__year=year, date__month=month,
+                created_at__lte=cutoff,
             ).aggregate(total=Sum('value'))['total'] or 0
             num_errors = int(num_errors)
-            quality = max(Decimal('0'), Decimal('1') - Decimal(num_errors) / Decimal(n))
+            error_rate = max(Decimal(num_errors) / Decimal(n), Decimal(num_errors) * Decimal('0.10'))
+            quality = max(Decimal('0'), Decimal('1') - error_rate)
             ipac_actual = employee.calculate_ipac(year, month)
             ipac_potencial = (Decimal(n) * quality / Decimal(bd)).quantize(Decimal('0.01'))
             if pct >= 80 and quality >= Decimal('0.9'):

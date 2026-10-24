@@ -564,7 +564,7 @@ class IPACFormulaTest(TestCase):
 
     def test_ipac_dias_habiles(self):
         # Agosto 2024 tiene 22 dias habiles. 10 tareas: 5 a tiempo, 5 tarde,
-        # 1 error -> 10 x 0.5 x 0.9 / 22 = 0.20
+        # 1 error -> 5 (a tiempo) x 0.5 (factor puntualidad) x 0.9 (calidad) / 22 = 0.10
         due = timezone.make_aware(datetime(2024, 8, 15))
         for _ in range(5):
             self._tarea(due, timezone.make_aware(datetime(2024, 8, 14, 12)))
@@ -572,7 +572,7 @@ class IPACFormulaTest(TestCase):
             self._tarea(due, timezone.make_aware(datetime(2024, 8, 20, 12)))
         ManualKpiEntry.objects.create(employee=self.employee, kpi=self.kpi_errors,
                                       date=date(2024, 8, 10), value=1)
-        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.20'))
+        self.assertEqual(self.employee.calculate_ipac(2024, 8), Decimal('0.10'))
 
     def test_ipac_no_castiga_planificacion_anticipada(self):
         # Tareas creadas 30 dias antes: mismo resultado que si se crearan hoy.

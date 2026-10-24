@@ -148,7 +148,8 @@ class Employee(models.Model):
         on_time_factor = Decimal(on_time_count) / Decimal(num_completed_tasks)
 
         # 3. Quality Factor (based on manually logged errors)
-        # This assumes that any KPI measured as 'count_lt' (less is better) is an error-tracking KPI.
+        # Cada error resta como mínimo un 10% (0.10) para evitar que un alto
+        # volumen de tareas recurrentes diluya las faltas administrativas/disciplinarias.
         error_kpis = KPI.objects.filter(measurement_type='count_lt')
         error_qs = ManualKpiEntry.objects.filter(
             employee=self,
@@ -161,7 +162,10 @@ class Employee(models.Model):
             error_qs = error_qs.filter(created_at__lte=cutoff)
         num_errors = error_qs.aggregate(total_errors=Coalesce(Sum('value'), Decimal('0')))['total_errors']
 
-        error_rate = Decimal(num_errors) / Decimal(num_completed_tasks)
+        error_rate = max(
+            Decimal(num_errors) / Decimal(num_completed_tasks),
+            Decimal(num_errors) * Decimal('0.10'),
+        )
         quality_factor = max(Decimal('0.0'), Decimal('1.0') - error_rate)
 
         # 4. Business days (Mon-Fri): full month for closed periods,
@@ -178,7 +182,9 @@ class Employee(models.Model):
         business_days = max(business_days, 1)
 
         # 5. Final IPAC Calculation
-        numerator = Decimal(num_completed_tasks) * on_time_factor * quality_factor
+        # Se pondera on_time_count por on_time_factor para que las tareas
+        # entregadas fuera de plazo penalicen efectivamente el índice.
+        numerator = Decimal(on_time_count) * on_time_factor * quality_factor
         ipac_score = numerator / Decimal(business_days)
 
         return ipac_score.quantize(Decimal('0.01'))
