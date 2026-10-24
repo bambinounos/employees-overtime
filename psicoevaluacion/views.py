@@ -64,7 +64,6 @@ def _serializar_preguntas(preguntas, tipo):
             'texto': p.texto,
             'orden': p.orden,
             'dimension': p.dimension,
-            'es_inversa': p.es_inversa,
         }
         if tipo == 'MEMORIA':
             item['secuencia_correcta'] = p.secuencia_correcta
@@ -75,10 +74,15 @@ def _serializar_preguntas(preguntas, tipo):
             opciones = list(p.opciones.all().order_by('orden'))
             if tipo in ('MATRICES', 'SITUACIONAL'):
                 random.shuffle(opciones)
-            item['opciones'] = [
-                {'id': o.id, 'texto': o.texto, 'valor': o.valor, 'orden': o.orden}
-                for o in opciones
-            ]
+                item['opciones'] = [
+                    {'id': o.id, 'texto': o.texto, 'orden': o.orden}
+                    for o in opciones
+                ]
+            else:
+                item['opciones'] = [
+                    {'id': o.id, 'texto': o.texto, 'valor': o.valor, 'orden': o.orden}
+                    for o in opciones
+                ]
         resultado.append(item)
     return resultado
 
@@ -441,8 +445,8 @@ def api_guardar_situacional(request):
     justificacion = data.get('justificacion', '')
     tiempo = data.get('tiempo_respuesta_seg')
 
-    if not pregunta_id or valor is None:
-        return JsonResponse({'error': 'pregunta_id y valor requeridos'}, status=400)
+    if not pregunta_id or (opcion_id is None and valor is None):
+        return JsonResponse({'error': 'pregunta_id y opcion_id requeridos'}, status=400)
 
     try:
         pregunta = Pregunta.objects.get(id=pregunta_id)
@@ -452,9 +456,10 @@ def api_guardar_situacional(request):
     opcion = None
     if opcion_id:
         try:
-            opcion = Opcion.objects.get(id=opcion_id)
+            opcion = Opcion.objects.get(id=opcion_id, pregunta=pregunta)
+            valor = opcion.valor
         except Opcion.DoesNotExist:
-            pass
+            return JsonResponse({'error': 'Opcion no encontrada para esta pregunta'}, status=404)
 
     _, created = RespuestaSituacional.objects.update_or_create(
         evaluacion=evaluacion,

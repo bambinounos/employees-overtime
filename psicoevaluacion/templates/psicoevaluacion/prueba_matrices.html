@@ -62,7 +62,7 @@
 
                     <p class="text-muted small mb-2">Seleccione la respuesta correcta:</p>
                     {% for opcion in pregunta.shuffled_opciones %}
-                    <div class="opcion-matriz" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
+                    <div class="opcion-matriz" data-opcion-id="{{ opcion.id }}">
                         <div class="d-flex align-items-center">
                             <input type="radio" name="matriz_{{ pregunta.id }}"
                                    value="{{ opcion.id }}" class="mr-2">

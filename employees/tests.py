@@ -843,3 +843,79 @@ class SugerenciaIpacSinFechaTest(TestCase):
         sug_punt = next(s for s in sugs if s['titulo'] == 'Puntualidad')
         self.assertIn('el máximo permitido es 1', sug_punt['detalle'])
 
+
+class LoginRedirectAndSecurityHardeningTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username='Admin-RH', email='rh@example.com', password='secret')
+        self.user_a = User.objects.create_user(username='emp_a', password='secret')
+        self.emp_a = Employee.objects.create(user=self.user_a, name='Emp A', email='a@example.com', hire_date=date(2024, 1, 1))
+        self.user_b = User.objects.create_user(username='emp_b', password='secret')
+        self.emp_b = Employee.objects.create(user=self.user_b, name='Emp B', email='b@example.com', hire_date=date(2024, 1, 1))
+
+    def test_admin_login_with_employee_next_redirects_to_dashboard(self):
+        response = self.client.post(
+            '/login/?next=/mi-panel/',
+            {'username': 'Admin-RH', 'password': 'secret'},
+        )
+        self.assertRedirects(response, '/dashboard/')
+
+    def test_employee_login_with_admin_next_redirects_to_mi_panel(self):
+        response = self.client.post(
+            '/login/?next=/dashboard/',
+            {'username': 'emp_a', 'password': 'secret'},
+        )
+        self.assertRedirects(response, '/mi-panel/')
+
+    def test_employee_login_with_other_employee_salary_next_redirects_to_mi_panel(self):
+        response = self.client.post(
+            f'/login/?next=/employees/{self.emp_b.id}/salary/',
+            {'username': 'emp_a', 'password': 'secret'},
+        )
+        self.assertRedirects(response, '/mi-panel/')
+
+    def test_employee_login_with_own_salary_next_is_preserved(self):
+        target = f'/employees/{self.emp_a.id}/salary/'
+        response = self.client.post(
+            f'/login/?next={target}',
+            {'username': 'emp_a', 'password': 'secret'},
+        )
+        self.assertRedirects(response, target)
+
+    def test_accounts_login_and_profile_redirect(self):
+        r1 = self.client.get('/accounts/login/')
+        self.assertEqual(r1.status_code, 302)
+        self.assertEqual(r1.url, '/login/')
+        self.client.force_login(self.user_a)
+        r2 = self.client.get('/accounts/profile/')
+        self.assertRedirects(r2, '/mi-panel/')
+
+    def test_company_settings_requires_superuser(self):
+        self.client.force_login(self.user_a)
+        resp = self.client.get('/settings/')
+        self.assertEqual(resp.status_code, 403)
+        self.client.force_login(self.admin)
+        resp_admin = self.client.get('/settings/')
+        self.assertEqual(resp_admin.status_code, 200)
+
+    def test_employee_list_restricted_for_non_superuser(self):
+        self.client.force_login(self.user_a)
+        resp = self.client.get('/employees/?show_inactive=true')
+        self.assertEqual(resp.status_code, 200)
+        employees_in_ctx = list(resp.context['employees'])
+        self.assertEqual(employees_in_ctx, [self.emp_a])
+
+    def test_task_move_across_boards_rejected(self):
+        board_a = TaskBoard.objects.create(employee=self.emp_a, name='Board A')
+        list_a = TaskList.objects.create(board=board_a, name='Por Hacer', order=0)
+        board_b = TaskBoard.objects.create(employee=self.emp_b, name='Board B')
+        list_b = TaskList.objects.create(board=board_b, name='Hecho', order=0)
+        task = Task.objects.create(list=list_a, assigned_to=self.emp_a, title='T1', order=0)
+
+        api = APIClient()
+        api.force_authenticate(user=self.user_a)
+        resp = api.post(f'/api/tasks/{task.id}/move/', {'list_id': list_b.id, 'order': 0}, format='json')
+        self.assertEqual(resp.status_code, 403)
+        task.refresh_from_db()
+        self.assertEqual(task.list_id, list_a.id)
+
+

@@ -58,7 +58,7 @@
 
             <div class="opciones-container mb-3">
                 {% for opcion in pregunta.shuffled_opciones %}
-                <div class="opcion-card" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
+                <div class="opcion-card" data-opcion-id="{{ opcion.id }}">
                     <div class="d-flex align-items-start">
                         <input type="radio" name="opcion_{{ pregunta.id }}"
                                value="{{ opcion.id }}" class="mt-1">
@@ -179,7 +179,6 @@
             if (!selected) return;
 
             var opcionId = parseInt(selected.dataset.opcionId);
-            var valor = parseInt(selected.dataset.valor);
             var justificacion = card.querySelector('.justificacion-input').value;
             var tiempo = startTimes[idx] ? Math.round((Date.now() - startTimes[idx]) / 1000) : null;
 
@@ -190,7 +189,6 @@
                 evaluacion_token: '{{ token }}',
                 pregunta_id: preguntaId,
                 opcion_id: opcionId,
-                valor: valor,
                 justificacion: justificacion,
                 tiempo_respuesta_seg: tiempo
             };

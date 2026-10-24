@@ -1,8 +1,7 @@
-from django.urls import path
+from django.urls import path, include
+from django.views.generic.base import RedirectView
 from . import views
 from django.contrib.auth import views as auth_views
-
-from django.urls import path, include
 
 urlpatterns = [
     path('', views.index, name='index'),
@@ -24,7 +23,9 @@ urlpatterns = [
     path('nomina/enviar-dolibarr/', views.nomina_enviar_dolibarr, name='nomina_enviar_dolibarr'),
     path('nomina/planilla/', views.nomina_planilla, name='nomina_planilla'),
     path('post-login/', views.post_login, name='post_login'),
-    path('login/', auth_views.LoginView.as_view(template_name='employees/login.html'), name='login'),
+    path('login/', views.SafeLoginView.as_view(template_name='employees/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='index'), name='logout'),
+    path('accounts/login/', RedirectView.as_view(pattern_name='login', query_string=True)),
+    path('accounts/profile/', views.post_login),
     path('api/', include('employees.api_urls')),
 ]

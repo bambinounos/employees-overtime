@@ -98,7 +98,7 @@
                         <h5 class="mb-4">{{ pregunta.texto }}</h5>
 
                         {% for opcion in pregunta.shuffled_opciones %}
-                        <div class="opcion-mv" data-opcion-id="{{ opcion.id }}" data-valor="{{ opcion.valor }}">
+                        <div class="opcion-mv" data-opcion-id="{{ opcion.id }}">
                             <input type="radio" name="mv_{{ pregunta.id }}" value="{{ opcion.id }}">
                             {{ opcion.texto }}
                         </div>

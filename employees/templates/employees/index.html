@@ -9,5 +9,10 @@
     <p class="lead">{% trans "This system allows you to manage employee salaries, work logs, and overtime." %}</p>
     <hr class="my-4">
     <p>{% trans "Use the navigation bar to get started." %}</p>
+    {% if user.is_authenticated %}
+    <a class="btn btn-primary btn-lg mt-2" href="{% url 'post_login' %}" role="button">Ir a mi panel &raquo;</a>
+    {% else %}
+    <a class="btn btn-primary btn-lg mt-2" href="{% url 'login' %}" role="button">Iniciar Sesión &raquo;</a>
+    {% endif %}
 </div>
 {% endblock %}

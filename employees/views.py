@@ -1,6 +1,10 @@
 import csv
+import re
+from urllib.parse import urlsplit
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
+from django.urls import reverse
+from django.contrib.auth import views as auth_views
 from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI, BonusRule
 from .sugerencias import build_sugerencias
 from django.contrib.auth.decorators import login_required
@@ -11,6 +15,66 @@ from django.contrib import messages
 import calendar
 from django.db.models import Max, Sum, Q
 
+
+def _default_landing_for_user(user):
+    """Devuelve la URL de aterrizaje por defecto según el rol del usuario."""
+    if user.is_superuser:
+        return reverse('strategic_dashboard')
+    if getattr(user, 'employee', None) is not None:
+        return reverse('mi_panel')
+    return reverse('index')
+
+
+def _is_next_url_allowed_for_user(user, next_url):
+    """Verifica que `next_url` sea accesible para el usuario que acaba de iniciar sesión,
+    evitando redirecciones post-login hacia páginas 403/404 de otro rol o empleado."""
+    if not next_url:
+        return False
+    path = urlsplit(next_url).path or '/'
+    if path in ('/', '/login/', '/logout/', '/accounts/login/', '/accounts/profile/', '/post-login/'):
+        return False
+
+    own_emp = getattr(user, 'employee', None)
+
+    # Si es superuser sin perfil Employee, vistas exclusivas de empleado darían 403
+    if user.is_superuser and own_emp is None:
+        if path.startswith(('/mi-panel', '/mis-recibos')) or path.rstrip('/') == '/ausencias':
+            return False
+        return True
+
+    # Si NO es superuser, bloquear rutas exclusivas de superuser/admin
+    if not user.is_superuser:
+        if path.startswith(('/dashboard', '/nomina', '/settings', '/ausencias/aprobar', '/admin')):
+            return False
+        # Verificar si apunta al salario o recibo de otro empleado
+        m_sal = re.match(r'^/employees/(\d+)/salary/', path)
+        if m_sal:
+            target_emp_id = int(m_sal.group(1))
+            if own_emp is None or own_emp.id != target_emp_id:
+                return False
+        m_rec = re.match(r'^/recibos/(\d+)/', path)
+        if m_rec:
+            target_emp_id = int(m_rec.group(1))
+            if own_emp is None or own_emp.id != target_emp_id:
+                return False
+        if own_emp is None and path.startswith(('/mi-panel', '/ausencias', '/mis-recibos', '/reports')):
+            return False
+
+    return True
+
+
+class SafeLoginView(auth_views.LoginView):
+    """LoginView que sanea `?next=` según el rol del usuario autenticado
+    para evitar errores 403/404 al redireccionar tras iniciar sesión."""
+    template_name = 'employees/login.html'
+
+    def get_success_url(self):
+        redirect_to = self.get_redirect_url()
+        if _is_next_url_allowed_for_user(self.request.user, redirect_to):
+            return redirect_to
+        return _default_landing_for_user(self.request.user)
+
+
 def index(request):
     """Renders the home page."""
     return render(request, 'employees/index.html')
@@ -19,20 +83,23 @@ def index(request):
 @login_required
 def post_login(request):
     """Aterrizaje tras el login: redirige según el rol del usuario."""
-    if request.user.is_superuser:
-        return redirect('strategic_dashboard')
-    if getattr(request.user, 'employee', None) is not None:
-        return redirect('mi_panel')
-    return redirect('index')
+    next_url = request.GET.get('next', '')
+    if _is_next_url_allowed_for_user(request.user, next_url):
+        return redirect(next_url)
+    return redirect(_default_landing_for_user(request.user))
 
 @login_required
 def employee_list(request):
     """Renders the employee list page."""
-    show_inactive = request.GET.get('show_inactive') == 'true'
-    if show_inactive:
-        employees = Employee.objects.all().order_by('name')
+    show_inactive = request.user.is_superuser and (request.GET.get('show_inactive') == 'true')
+    if request.user.is_superuser:
+        if show_inactive:
+            employees = Employee.objects.all().order_by('name')
+        else:
+            employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today())).order_by('name')
     else:
-        employees = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=date.today())).order_by('name')
+        own = getattr(request.user, 'employee', None)
+        employees = Employee.objects.filter(pk=own.pk) if own else Employee.objects.none()
 
     context = {
         'employees': employees,
@@ -302,8 +369,11 @@ def performance_report(request):
 @login_required
 def company_settings(request):
     """
-    View to manage company-wide settings.
+    View to manage company-wide settings (superuser only).
     """
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
     settings = CompanySettings.load()
 
     if request.method == 'POST':
@@ -506,6 +576,8 @@ def _own_employee_or_403(request):
 @login_required
 def mis_ausencias(request):
     """Portal del empleado: saldo de vacaciones, historial y nueva solicitud."""
+    if request.user.is_superuser and getattr(request.user, 'employee', None) is None:
+        return redirect('ausencias_pendientes')
     from .forms import SolicitudAusenciaForm
     from . import ausencias as svc
 
@@ -593,6 +665,8 @@ def decidir_ausencia(request, solicitud_id):
 @login_required
 def mis_recibos(request):
     """Lista de recibos de nómina del empleado autenticado."""
+    if request.user.is_superuser and getattr(request.user, 'employee', None) is None:
+        return redirect('nomina_cierre')
     employee = _own_employee_or_403(request)
     context = {
         'employee': employee,
@@ -627,6 +701,8 @@ def recibo_pdf(request, employee_id, year, month):
 @login_required
 def mi_panel(request):
     """Panel personal del empleado: salario del mes, saldo y recibos."""
+    if request.user.is_superuser and getattr(request.user, 'employee', None) is None:
+        return redirect('strategic_dashboard')
     employee = _own_employee_or_403(request)
 
     today = date.today()

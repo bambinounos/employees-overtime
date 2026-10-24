@@ -48,6 +48,20 @@ class WorkLogViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("No employee profile linked to this user.")
         serializer.save(employee=user.employee)
 
+    def perform_update(self, serializer):
+        user = self.request.user
+        if user.is_superuser:
+            serializer.save()
+            return
+        if not hasattr(user, 'employee'):
+            raise PermissionDenied("No employee profile linked to this user.")
+        serializer.save(employee=user.employee)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied("Solo un supervisor puede eliminar registros de asistencia.")
+        return super().destroy(request, *args, **kwargs)
+
 class TaskBoardViewSet(viewsets.ReadOnlyModelViewSet):
     """A viewset for viewing task boards."""
     queryset = TaskBoard.objects.all()
@@ -276,6 +290,11 @@ class TaskViewSet(viewsets.ModelViewSet):
             from datetime import datetime
 
             new_list = TaskList.objects.get(id=new_list_id)
+            if task.list and new_list.board_id != task.list.board_id:
+                return Response(
+                    {'error': 'No se puede mover una tarea a la lista de otro tablero.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
             task.list = new_list
             task.order = new_order
 
