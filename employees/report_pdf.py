@@ -146,6 +146,17 @@ def generar_recibo_pdf(recibo):
         if arrastre != 0:
             filas.append(['   Saldo arrastrado de meses previos', '', _money(arrastre)])
 
+    desc_retro = _dec(datos, 'retroactive_bonus_deduction')
+    if desc_retro > 0:
+        items_retro = datos.get('retroactive_deductions') or []
+        periodos_origen = ', '.join(sorted({str(i.get('origin_period', '')) for i in items_retro if i.get('origin_period')}))
+        detalle_retro = f"Origen: {periodos_origen}" if periodos_origen else "Ajuste meses previos"
+        filas.append([
+            'Descuento retroactivo de bono',
+            detalle_retro,
+            f"- {_money(desc_retro)}",
+        ])
+
     filas.append(['TOTAL A PAGAR', '', _money(recibo.total)])
 
     tabla = Table(filas, colWidths=[3.3 * inch, 2.2 * inch, 1.3 * inch])
@@ -178,6 +189,16 @@ def generar_recibo_pdf(recibo):
         elements.append(Paragraph(
             f"Saldo pendiente por notas de crédito que se descontará de comisiones futuras: {_money(abs(deuda))}.",
             styles['SubInfo']))
+
+    if desc_retro > 0:
+        items_retro = datos.get('retroactive_deductions') or []
+        for item in items_retro:
+            motivo = item.get('reason') or f"{item.get('kpi_name', 'KPI')} ({item.get('origin_period', '')})"
+            monto_item = _dec(item, 'amount')
+            elements.append(Spacer(1, 4))
+            elements.append(Paragraph(
+                f"Detalle descuento retroactivo: {motivo} (-{_money(monto_item)}).",
+                styles['SubInfo']))
 
     elements.append(Spacer(1, 24))
     elements.append(HRFlowable(width='100%', thickness=0.5, color=GRIS))

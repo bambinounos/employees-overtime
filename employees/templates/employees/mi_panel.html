@@ -56,19 +56,32 @@
     <div class="col-lg-6 mb-4">
         <div class="card">
             <div class="card-header">{% trans "Salary breakdown" %} {{ month|stringformat:"02d" }}/{{ year }}</div>
-            <table class="table table-sm mb-0">
-                <tr><td>{% trans "Pay for hours worked" %} ({{ salary.total_hours_worked }} h)</td>
-                    <td class="text-right">$ {{ salary.work_pay|floatformat:2 }}</td></tr>
-                <tr><td>{% trans "Overtime" %} ({{ salary.total_overtime_hours }} h, 1.5x)</td>
-                    <td class="text-right">$ {{ salary.overtime_pay|floatformat:2 }}</td></tr>
-                <tr><td>{% trans "Performance bonus" %}</td>
-                    <td class="text-right">$ {{ salary.performance_bonus|floatformat:2 }}</td></tr>
-                <tr><td>{% trans "Commissions" %}</td>
-                    <td class="text-right">$ {{ salary.commission_amount|floatformat:2 }}</td></tr>
-                <tr class="font-weight-bold table-active">
-                    <td>{% trans "Total" %}</td>
-                    <td class="text-right">$ {{ salary.total_salary|floatformat:2 }}</td></tr>
-            </table>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <tr><td>{% trans "Pay for hours worked" %} ({{ salary.total_hours_worked }} h)</td>
+                        <td class="text-right">$ {{ salary.work_pay|floatformat:2 }}</td></tr>
+                    <tr><td>{% trans "Overtime" %} ({{ salary.total_overtime_hours }} h, 1.5x)</td>
+                        <td class="text-right">$ {{ salary.overtime_pay|floatformat:2 }}</td></tr>
+                    <tr><td>{% trans "Performance bonus" %}</td>
+                        <td class="text-right">$ {{ salary.performance_bonus|floatformat:2 }}</td></tr>
+                    <tr><td>{% trans "Commissions" %}</td>
+                        <td class="text-right">$ {{ salary.commission_amount|floatformat:2 }}</td></tr>
+                    {% if salary.retroactive_bonus_deduction and salary.retroactive_bonus_deduction > 0 %}
+                    <tr class="text-danger">
+                        <td>
+                            <strong>Descuento retroactivo de bono</strong>
+                            {% for d in salary.retroactive_deductions %}
+                            <div class="small text-muted">{{ d.reason }}</div>
+                            {% endfor %}
+                        </td>
+                        <td class="text-right font-weight-bold">- $ {{ salary.retroactive_bonus_deduction|floatformat:2 }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr class="font-weight-bold table-active">
+                        <td>{% trans "Total" %}</td>
+                        <td class="text-right">$ {{ salary.total_salary|floatformat:2 }}</td></tr>
+                </table>
+            </div>
             {% if bonus_breakdown %}
             <div class="px-3 py-2 border-bottom">
                 <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button"
@@ -76,33 +89,35 @@
                     {% trans "Bonus detail by KPI" %} ({{ bonus_breakdown|length }})
                 </button>
                 <div class="collapse" id="bonusBreakdownPanel">
-                    <table class="table table-sm mb-0 mt-1">
-                        <thead>
-                            <tr class="small text-muted">
-                                <th>{% trans "KPI" %}</th>
-                                <th>{% trans "Result" %}</th>
-                                <th>{% trans "Target" %}</th>
-                                <th class="text-center">{% trans "Met" %}</th>
-                                <th class="text-right">{% trans "Bonus" %}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for b in bonus_breakdown %}
-                            <tr>
-                                <td>{{ b.name }}</td>
-                                <td>{{ b.actual }}</td>
-                                <td>{{ b.target_label }}</td>
-                                <td class="text-center">
-                                    {% if b.met %}<span class="text-success">&#10003;</span>
-                                    {% else %}<span class="text-danger">&#10007;</span>{% endif %}
-                                </td>
-                                <td class="text-right {% if b.bonus > 0 %}text-success font-weight-bold{% else %}text-muted{% endif %}">
-                                    {% if b.bonus > 0 %}+ {% endif %}${{ b.bonus|floatformat:2 }}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0 mt-1">
+                            <thead>
+                                <tr class="small text-muted">
+                                    <th>{% trans "KPI" %}</th>
+                                    <th>{% trans "Result" %}</th>
+                                    <th>{% trans "Target" %}</th>
+                                    <th class="text-center">{% trans "Met" %}</th>
+                                    <th class="text-right">{% trans "Bonus" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for b in bonus_breakdown %}
+                                <tr>
+                                    <td>{{ b.name }}</td>
+                                    <td>{{ b.actual }}</td>
+                                    <td>{{ b.target_label }}</td>
+                                    <td class="text-center">
+                                        {% if b.met %}<span class="text-success">&#10003;</span>
+                                        {% else %}<span class="text-danger">&#10007;</span>{% endif %}
+                                    </td>
+                                    <td class="text-right {% if b.bonus > 0 %}text-success font-weight-bold{% else %}text-muted{% endif %}">
+                                        {% if b.bonus > 0 %}+ {% endif %}${{ b.bonus|floatformat:2 }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             {% endif %}

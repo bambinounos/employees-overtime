@@ -96,7 +96,26 @@ class Employee(models.Model):
             return True
         return self.end_date >= date.today()
 
-    def calculate_ipac(self, year, month):
+    def _period_closing_cutoff(self, year, month):
+        """
+        Devuelve el instante límite (timezone-aware datetime) del período (year, month)
+        para distinguir los errores/eventos registrados dentro del propio mes (on-time)
+        frente a hallazgos registrados en meses posteriores (retroactivos).
+        """
+        import calendar
+        from datetime import datetime, time
+        last_day = calendar.monthrange(year, month)[1]
+        tz = timezone.get_current_timezone()
+        month_end_dt = timezone.make_aware(
+            datetime.combine(date(year, month, last_day), time(23, 59, 59, 999999)),
+            tz,
+        )
+        recibo = self.recibos.filter(year=year, month=month, dolibarr_salary_id__isnull=False).first()
+        if recibo and recibo.generado_en and recibo.generado_en < month_end_dt:
+            return recibo.generado_en
+        return month_end_dt
+
+    def calculate_ipac(self, year, month, include_retroactive=False):
         """
         Calculates the Quality-Adjusted Productivity Index (IPAC) for a given month.
         IPAC = (Completed Tasks * On-time Factor * Quality Factor) / Business Days
@@ -131,12 +150,16 @@ class Employee(models.Model):
         # 3. Quality Factor (based on manually logged errors)
         # This assumes that any KPI measured as 'count_lt' (less is better) is an error-tracking KPI.
         error_kpis = KPI.objects.filter(measurement_type='count_lt')
-        num_errors = ManualKpiEntry.objects.filter(
+        error_qs = ManualKpiEntry.objects.filter(
             employee=self,
             kpi__in=error_kpis,
             date__year=year,
             date__month=month
-        ).aggregate(total_errors=Coalesce(Sum('value'), Decimal('0')))['total_errors']
+        )
+        if not include_retroactive:
+            cutoff = self._period_closing_cutoff(year, month)
+            error_qs = error_qs.filter(created_at__lte=cutoff)
+        num_errors = error_qs.aggregate(total_errors=Coalesce(Sum('value'), Decimal('0')))['total_errors']
 
         error_rate = Decimal(num_errors) / Decimal(num_completed_tasks)
         quality_factor = max(Decimal('0.0'), Decimal('1.0') - error_rate)
@@ -272,33 +295,27 @@ class Employee(models.Model):
             'commission_percentage': pct,
         }
 
-    def calculate_performance_bonus(self, year, month):
+    def _evaluate_kpis_for_period(self, year, month, include_retroactive=False):
         """
-        Calculates the total performance bonus for a given employee, year, and month.
-        It also creates EmployeePerformanceRecord entries for each KPI.
+        Evalúa todos los KPIs del perfil del empleado para (year, month).
+        - Si include_retroactive=False: usa solo los ManualKpiEntry registrados hasta
+          el corte del período (lo que realmente se pagó al cierre de ese mes).
+        - Si include_retroactive=True: incluye también los ManualKpiEntry con fecha
+          en (year, month) que fueron descubiertos/registrados en meses posteriores.
+        Devuelve un dict:
+            {kpi.id: {'kpi': kpi, 'actual_value': Decimal, 'target_met': bool, 'bonus': Decimal}}
         """
-        total_bonus = Decimal('0.00')
-        
-        # Determine eligible KPIs based on profile
-        # Employees without a profile assigned get NO KPIs evaluated (no bonuses)
         if not self.profile:
-            return Decimal('0.00')
+            return {}
         eligible_kpis = self.profile.kpis.all()
-
-        # Use the last day of the month for the record date
-        import calendar
-        last_day = calendar.monthrange(year, month)[1]
-        record_date = date(year, month, last_day)
+        cutoff = None if include_retroactive else self._period_closing_cutoff(year, month)
+        results = {}
 
         for kpi in eligible_kpis:
             target_met = False
-            actual_value = 0
+            actual_value = Decimal('0.00')
 
-            # --- Evaluate KPI based on internal_code or measurement_type ---
-            
             if kpi.internal_code == 'SALES_EFFECTIVENESS':
-                # (Invoices with proforma / Total proformas) * 100
-                # Only counts proforma→invoice flow, not direct orders
                 sales_records = self.sales_records.filter(
                     date__year=year,
                     date__month=month
@@ -312,52 +329,46 @@ class Employee(models.Model):
                     ).count()
                     actual_value = (Decimal(invoices_count) / Decimal(total_proformas)) * 100
                 else:
-                    actual_value = 0
+                    actual_value = Decimal('0.00')
 
             elif kpi.internal_code == 'PRODUCT_CREATION':
-                # Count unique products created this month, excluding duplicates
-                actual_value = ProductCreationLog.objects.filter(
+                actual_value = Decimal(ProductCreationLog.objects.filter(
                     employee=self,
                     created_at__year=year,
                     created_at__month=month,
                     is_suspect_duplicate=False,
-                ).count()
+                ).count())
 
             elif kpi.measurement_type == 'percentage':
-                # e.g., "Productividad General"
                 tasks = Task.objects.filter(assigned_to=self, kpi=kpi, due_date__year=year, due_date__month=month)
                 total_tasks = tasks.count()
                 if total_tasks > 0:
                     completed_tasks = tasks.filter(completed_at__isnull=False, list__name__iexact="Hecho").count()
-                    actual_value = (completed_tasks / total_tasks) * 100
+                    actual_value = (Decimal(completed_tasks) / Decimal(total_tasks)) * 100
                 else:
-                    # If no tasks assigned, is it 100% or 0%? Defaulting to 0 effectively or handling elsewhere.
-                    actual_value = 0
+                    actual_value = Decimal('0.00')
 
             elif kpi.measurement_type == 'count_lt':
-                # e.g., "Calidad Administrativa" (fewer than X errors)
-                # No entries = 0 errors = target met (employee is perfect)
-                entries = ManualKpiEntry.objects.filter(employee=self, kpi=kpi, date__year=year, date__month=month)
-                actual_value = sum(entry.value for entry in entries)
+                entries = ManualKpiEntry.objects.filter(
+                    employee=self, kpi=kpi, date__year=year, date__month=month
+                )
+                if cutoff is not None:
+                    entries = entries.filter(created_at__lte=cutoff)
+                actual_value = sum((entry.value for entry in entries), Decimal('0.00'))
 
             elif kpi.measurement_type == 'count_gt':
-                # e.g., "Gestión Comercial Pública" (more than X offers)
-                actual_value = Task.objects.filter(
+                actual_value = Decimal(Task.objects.filter(
                     assigned_to=self,
                     kpi=kpi,
                     completed_at__year=year,
                     completed_at__month=month
-                ).count()
+                ).count())
 
             elif kpi.measurement_type == 'composite_ipac':
-                # This KPI is calculated by its own complex method
-                actual_value = self.calculate_ipac(year, month)
+                actual_value = self.calculate_ipac(year, month, include_retroactive=include_retroactive)
 
-            # --- Check Target and Bonus ---
-            
             bonus_amount_for_kpi = Decimal('0.00')
 
-            # 1. Check Standard Target using BonusRule
             if kpi.measurement_type == 'count_lt':
                 if actual_value < kpi.target_value:
                     target_met = True
@@ -369,9 +380,6 @@ class Employee(models.Model):
             if rule and target_met:
                 bonus_amount_for_kpi = rule.bonus_amount
 
-            # 2. Check Tiered Bonuses (Overrides standard if higher)
-            # For count_lt ("fewer is better") a tier is reached when the value
-            # is at or below the threshold; otherwise when it is at or above.
             for tier in kpi.tiers.all():
                 if kpi.measurement_type == 'count_lt':
                     tier_reached = actual_value <= tier.threshold
@@ -381,6 +389,35 @@ class Employee(models.Model):
                     bonus_amount_for_kpi = tier.bonus_amount
                     target_met = True
 
+            results[kpi.id] = {
+                'kpi': kpi,
+                'actual_value': Decimal(str(actual_value)),
+                'target_met': target_met,
+                'bonus': bonus_amount_for_kpi,
+            }
+
+        return results
+
+    def calculate_performance_bonus(self, year, month):
+        """
+        Calculates the total performance bonus for a given employee, year, and month.
+        It also creates EmployeePerformanceRecord entries for each KPI.
+        """
+        if not self.profile:
+            return Decimal('0.00')
+
+        import calendar
+        last_day = calendar.monthrange(year, month)[1]
+        record_date = date(year, month, last_day)
+
+        evaluated = self._evaluate_kpis_for_period(year, month, include_retroactive=False)
+        total_bonus = Decimal('0.00')
+
+        for item in evaluated.values():
+            kpi = item['kpi']
+            actual_value = item['actual_value']
+            target_met = item['target_met']
+            bonus_amount_for_kpi = item['bonus']
             total_bonus += bonus_amount_for_kpi
 
             EmployeePerformanceRecord.objects.update_or_create(
@@ -396,10 +433,150 @@ class Employee(models.Model):
 
         return total_bonus
 
+    def sync_retroactive_bonus_deductions(self):
+        """
+        Sincroniza los descuentos retroactivos de bono (DescuentoRetroactivoBono)
+        cuando existen registros ManualKpiEntry cuya fecha de evento pertenece a
+        un mes pasado/cerrado pero fueron detectados y registrados después del
+        cierre de ese mes.
+
+        Implementa la Opción A (recálculo integral del mes pasado): evalúa tanto
+        el KPI directo ('count_lt') como el IPAC ('composite_ipac') de ese mes
+        pasado y descuenta en el próximo mes abierto únicamente el bono que se
+        cobró en exceso, sin contaminar los KPIs del mes actual ni cobrar dos veces.
+        """
+        def _fmt_num(val):
+            d = Decimal(str(val)).normalize()
+            if d == d.to_integral_value():
+                d = d.quantize(Decimal(1))
+            return f"{d:n}"
+
+        def _next_month(y, m):
+            return (y + 1, 1) if m == 12 else (y, m + 1)
+
+        # Recolectar todos los períodos origen con entradas manuales o descuentos previos
+        entry_dates = ManualKpiEntry.objects.filter(employee=self).values_list('date', flat=True)
+        periods = {(d.year, d.month) for d in entry_dates}
+        existing_origins = DescuentoRetroactivoBono.objects.filter(
+            employee=self
+        ).values_list('origin_year', 'origin_month')
+        periods.update(existing_origins)
+
+        for orig_year, orig_month in sorted(periods):
+            cutoff = self._period_closing_cutoff(orig_year, orig_month)
+            retro_entries = ManualKpiEntry.objects.filter(
+                employee=self,
+                date__year=orig_year,
+                date__month=orig_month,
+                created_at__gt=cutoff,
+            )
+
+            if not retro_entries.exists():
+                # Si no hay entradas retroactivas, limpiar descuentos abiertos de este origen
+                open_deductions = DescuentoRetroactivoBono.objects.filter(
+                    employee=self, origin_year=orig_year, origin_month=orig_month
+                )
+                for ded in open_deductions:
+                    closed = self.recibos.filter(
+                        year=ded.applied_year, month=ded.applied_month,
+                        dolibarr_salary_id__isnull=False
+                    ).exists()
+                    if not closed:
+                        ded.delete()
+                continue
+
+            baseline_eval = self._evaluate_kpis_for_period(orig_year, orig_month, include_retroactive=False)
+            recalc_eval = self._evaluate_kpis_for_period(orig_year, orig_month, include_retroactive=True)
+
+            orig_recibo = self.recibos.filter(year=orig_year, month=orig_month).first()
+            recibo_bonus_by_kpi = {}
+            if orig_recibo and isinstance(orig_recibo.datos, dict):
+                recibo_bonus_by_kpi = orig_recibo.datos.get('bonus_by_kpi') or {}
+
+            latest_reg = timezone.localtime(retro_entries.aggregate(m=models.Max('created_at'))['m'])
+            apply_year, apply_month = latest_reg.year, latest_reg.month
+            if (apply_year, apply_month) <= (orig_year, orig_month):
+                apply_year, apply_month = _next_month(orig_year, orig_month)
+
+            # Si el mes destino ya fue cerrado/enviado a Dolibarr antes del hallazgo, avanzar al siguiente
+            while self.recibos.filter(
+                year=apply_year, month=apply_month
+            ).filter(
+                models.Q(dolibarr_salary_id__isnull=False) | models.Q(generado_en__lt=latest_reg)
+            ).exists():
+                apply_year, apply_month = _next_month(apply_year, apply_month)
+
+            for kpi_id, base_info in baseline_eval.items():
+                kpi = base_info['kpi']
+                curr_info = recalc_eval.get(kpi_id, base_info)
+
+                if str(kpi_id) in recibo_bonus_by_kpi:
+                    base_bonus = Decimal(str(recibo_bonus_by_kpi[str(kpi_id)]))
+                else:
+                    base_bonus = base_info['bonus']
+                curr_bonus = curr_info['bonus']
+
+                total_overpaid = max(Decimal('0.00'), base_bonus - curr_bonus)
+
+                existing_for_kpi = list(DescuentoRetroactivoBono.objects.filter(
+                    employee=self, kpi=kpi, origin_year=orig_year, origin_month=orig_month
+                ))
+                closed_deductions = []
+                open_deductions = []
+                for ded in existing_for_kpi:
+                    is_closed = (
+                        (ded.applied_year, ded.applied_month) != (apply_year, apply_month)
+                        and self.recibos.filter(
+                            year=ded.applied_year, month=ded.applied_month
+                        ).exists()
+                    )
+                    if is_closed:
+                        closed_deductions.append(ded)
+                    else:
+                        open_deductions.append(ded)
+
+                already_deducted = sum((d.amount for d in closed_deductions), Decimal('0.00'))
+                pending_amount = max(Decimal('0.00'), total_overpaid - already_deducted)
+
+                if pending_amount > Decimal('0.00'):
+                    if kpi.measurement_type == 'count_lt':
+                        reason = (
+                            f"{kpi.name} ({orig_month:02d}/{orig_year}): pasó de "
+                            f"{_fmt_num(base_info['actual_value'])} a {_fmt_num(curr_info['actual_value'])} "
+                            f"error(es) tras registro retroactivo"
+                        )
+                    elif kpi.measurement_type == 'composite_ipac':
+                        reason = (
+                            f"{kpi.name} ({orig_month:02d}/{orig_year}): índice bajó de "
+                            f"{_fmt_num(base_info['actual_value'])} a {_fmt_num(curr_info['actual_value'])} "
+                            f"(meta {_fmt_num(kpi.target_value)}) por error retroactivo"
+                        )
+                    else:
+                        reason = f"{kpi.name} ({orig_month:02d}/{orig_year}): ajuste retroactivo de bono"
+
+                    obj, _ = DescuentoRetroactivoBono.objects.update_or_create(
+                        employee=self,
+                        kpi=kpi,
+                        origin_year=orig_year,
+                        origin_month=orig_month,
+                        applied_year=apply_year,
+                        applied_month=apply_month,
+                        defaults={
+                            'amount': pending_amount,
+                            'reason': reason,
+                        },
+                    )
+                    for ded in open_deductions:
+                        if ded.pk != obj.pk:
+                            ded.delete()
+                else:
+                    for ded in open_deductions:
+                        ded.delete()
+
     def calculate_salary(self, year, month):
         """
         Calculates the final salary for a given month and year, including base pay,
-        overtime, and performance bonus.
+        overtime, performance bonus, sales commissions, and retroactive bonus deductions.
         Returns a dictionary with a detailed breakdown of the salary.
         """
         # Find the salary effective on the first day of the target month
@@ -410,6 +587,9 @@ class Employee(models.Model):
         if not salary_record:
             return None
         base_salary = salary_record.base_amount
+
+        # Sincronizar cualquier descuento retroactivo pendiente antes de calcular
+        self.sync_retroactive_bonus_deductions()
 
         # 1. Calculate pay from worked hours and overtime
         work_logs = WorkLog.objects.filter(employee=self, date__year=year, date__month=month)
@@ -447,21 +627,63 @@ class Employee(models.Model):
 
         # 2. Calculate performance bonus
         performance_bonus = self.calculate_performance_bonus(year, month)
+        records_for_month = EmployeePerformanceRecord.objects.filter(
+            employee=self, date__year=year, date__month=month
+        )
+        bonus_by_kpi = {str(r.kpi_id): r.bonus_awarded for r in records_for_month}
 
         # 3. Calculate sales commissions
         commissions = self.calculate_commissions(year, month)
         commission_amount = commissions['commission_amount']
 
-        # 4. Calculate final total salary
-        total_salary = work_pay + overtime_pay + performance_bonus + commission_amount
+        # 4. Calculate retroactive bonus deductions applicable to this month
+        deductions_qs = DescuentoRetroactivoBono.objects.filter(
+            employee=self, applied_year=year, applied_month=month
+        ).select_related('kpi').order_by('origin_year', 'origin_month', 'kpi__name')
+        retroactive_bonus_deduction = sum((d.amount for d in deductions_qs), Decimal('0.00'))
+        retroactive_deductions = [
+            {
+                'id': d.id,
+                'kpi_name': d.kpi.name,
+                'origin_year': d.origin_year,
+                'origin_month': d.origin_month,
+                'origin_period': f"{d.origin_month:02d}/{d.origin_year}",
+                'amount': d.amount,
+                'reason': d.reason,
+            }
+            for d in deductions_qs
+        ]
 
-        # 5. Return a detailed dictionary
+        # Informativo si este mes fue origen de descuentos aplicados en meses futuros
+        origin_deductions_qs = DescuentoRetroactivoBono.objects.filter(
+            employee=self, origin_year=year, origin_month=month
+        ).select_related('kpi').order_by('applied_year', 'applied_month', 'kpi__name')
+        retroactive_from_this_month = [
+            {
+                'id': d.id,
+                'kpi_name': d.kpi.name,
+                'applied_period': f"{d.applied_month:02d}/{d.applied_year}",
+                'amount': d.amount,
+                'reason': d.reason,
+            }
+            for d in origin_deductions_qs
+        ]
+
+        # 5. Calculate final total salary
+        gross_salary = work_pay + overtime_pay + performance_bonus + commission_amount
+        total_salary = max(Decimal('0.00'), gross_salary - retroactive_bonus_deduction)
+
+        # 6. Return a detailed dictionary
         result = {
             'base_salary': base_salary,
             'work_pay': work_pay,
             'overtime_pay': overtime_pay,
             'performance_bonus': performance_bonus,
+            'bonus_by_kpi': bonus_by_kpi,
             'commission_amount': commission_amount,
+            'retroactive_bonus_deduction': retroactive_bonus_deduction,
+            'retroactive_deductions': retroactive_deductions,
+            'retroactive_from_this_month': retroactive_from_this_month,
             'total_salary': total_salary,
             'total_hours_worked': total_hours_worked,
             'total_overtime_hours': total_overtime_hours,
@@ -864,12 +1086,86 @@ class ManualKpiEntry(models.Model):
     """Represents a single, manually logged data point for a KPI."""
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     kpi = models.ForeignKey(KPI, on_delete=models.CASCADE, help_text="The KPI this entry is for, e.g., 'Calidad Administrativa'.")
-    date = models.DateField(default=date.today, help_text="Date the event occurred.")
+    date = models.DateField(
+        default=date.today,
+        help_text="Fecha real en que ocurrió el evento/error. Si pertenece a un mes anterior ya cerrado, se descontará retroactivamente en el sueldo futuro."
+    )
     value = models.DecimalField(max_digits=10, decimal_places=2, default=1, help_text="The value of the entry, e.g., '1' for one error.")
     notes = models.TextField(blank=True, help_text="Additional context or comments.")
+    created_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="Fecha y hora en que se registró el evento en el sistema."
+    )
+
+    @property
+    def is_retroactive(self):
+        """Indica si el evento se registró después del cierre del mes al que corresponde."""
+        if not self.employee_id or not self.date or not self.created_at:
+            return False
+        cutoff = self.employee._period_closing_cutoff(self.date.year, self.date.month)
+        return self.created_at > cutoff
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.employee_id and self.date and self.created_at:
+            cutoff = self.employee._period_closing_cutoff(self.date.year, self.date.month)
+            if self.created_at > cutoff:
+                already_evaluated = (
+                    EmployeePerformanceRecord.objects.filter(
+                        employee_id=self.employee_id,
+                        date__year=self.date.year,
+                        date__month=self.date.month,
+                    ).exists()
+                    or ReciboNomina.objects.filter(
+                        employee_id=self.employee_id,
+                        year=self.date.year,
+                        month=self.date.month,
+                    ).exists()
+                )
+                if not already_evaluated:
+                    self.created_at = cutoff
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Entry for {self.employee.name} regarding {self.kpi.name} on {self.date}"
+
+
+class DescuentoRetroactivoBono(models.Model):
+    """
+    Descuento retroactivo de bono por errores administrativos ('count_lt')
+    detectados después de haberse cerrado/cobrado el mes de origen.
+    El descuento se imputa al sueldo de un período futuro/abierto (applied_year, applied_month).
+    """
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='descuentos_retroactivos',
+        verbose_name="Empleado"
+    )
+    kpi = models.ForeignKey(
+        KPI, on_delete=models.CASCADE, related_name='descuentos_retroactivos',
+        verbose_name="KPI afectado"
+    )
+    origin_year = models.PositiveSmallIntegerField(verbose_name="Año de origen")
+    origin_month = models.PositiveSmallIntegerField(verbose_name="Mes de origen")
+    applied_year = models.PositiveSmallIntegerField(verbose_name="Año de descuento")
+    applied_month = models.PositiveSmallIntegerField(verbose_name="Mes de descuento")
+    amount = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Monto a descontar"
+    )
+    reason = models.TextField(blank=True, verbose_name="Motivo / Detalle")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-applied_year', '-applied_month', '-origin_year', '-origin_month', 'employee__name']
+        unique_together = ('employee', 'kpi', 'origin_year', 'origin_month', 'applied_year', 'applied_month')
+        verbose_name = "Descuento retroactivo de bono"
+        verbose_name_plural = "Descuentos retroactivos de bonos"
+
+    def __str__(self):
+        return (
+            f"{self.employee.name} — {self.kpi.name} "
+            f"(origen {self.origin_month:02d}/{self.origin_year} → descuento {self.applied_month:02d}/{self.applied_year}): "
+            f"-${self.amount}"
+        )
 
 class CompanySettings(models.Model):
     """Singleton model to store company-wide settings."""

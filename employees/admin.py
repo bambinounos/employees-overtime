@@ -6,7 +6,7 @@ from django.http import HttpResponseRedirect
 from .models import (
     Employee, Salary, WorkLog, KPI, BonusRule, TaskBoard,
     TaskList, Task, Checklist, ChecklistItem, Comment, EmployeePerformanceRecord,
-    ManualKpiEntry, SiteConfiguration,
+    ManualKpiEntry, DescuentoRetroactivoBono, SiteConfiguration,
     JobProfile, KPIBonusTier, DolibarrInstance, DolibarrUserIdentity,
     SalesRecord, ProductCreationLog, WebhookLog, CommissionBalance,
     TipoAusencia, SolicitudAusencia, ReciboNomina,
@@ -236,16 +236,37 @@ class EmployeePerformanceRecordAdmin(admin.ModelAdmin):
 
 @admin.register(ManualKpiEntry)
 class ManualKpiEntryAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'kpi', 'date', 'value')
+    list_display = ('employee', 'kpi', 'date', 'value', 'es_retroactivo', 'created_at')
     list_filter = ('date', 'employee', 'kpi')
     search_fields = ('employee__name', 'kpi__name', 'notes')
     autocomplete_fields = ['employee', 'kpi']
+    readonly_fields = ('created_at',)
+
+    @admin.display(boolean=True, description='Retroactivo')
+    def es_retroactivo(self, obj):
+        return obj.is_retroactive
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "employee":
             today = timezone.now().date()
             kwargs["queryset"] = Employee.objects.filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(DescuentoRetroactivoBono)
+class DescuentoRetroactivoBonoAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'kpi', 'periodo_origen', 'periodo_aplicacion', 'amount', 'reason', 'created_at')
+    list_filter = ('applied_year', 'applied_month', 'origin_year', 'origin_month', 'kpi', 'employee')
+    search_fields = ('employee__name', 'kpi__name', 'reason')
+    readonly_fields = ('created_at', 'updated_at')
+
+    @admin.display(description='Mes de origen')
+    def periodo_origen(self, obj):
+        return f"{obj.origin_month:02d}/{obj.origin_year}"
+
+    @admin.display(description='Mes de descuento')
+    def periodo_aplicacion(self, obj):
+        return f"{obj.applied_month:02d}/{obj.applied_year}"
 
 
 # --- Sales & Commissions Admin (v1.1) ---

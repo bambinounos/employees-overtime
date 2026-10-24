@@ -39,7 +39,8 @@ class PlanillaXlsxTest(TestCase):
         self.assertEqual(ws.cell(row=3, column=1).hyperlink.target, 'https://www.hellbam.com')
         # Fila 8 = primera fila de datos (empresa 1-3, título 5, encabezado 7)
         self.assertEqual(ws.cell(row=8, column=1).value, 'Ana Nómina')
-        self.assertEqual(Decimal(str(ws.cell(row=8, column=10).value)), recibo.total)
+        self.assertEqual(Decimal(str(ws.cell(row=8, column=10).value)), Decimal('0'))
+        self.assertEqual(Decimal(str(ws.cell(row=8, column=11).value)), recibo.total)
 
     def test_planilla_mes_pasado_sin_recibos_falla_claro(self):
         with self.assertRaises(PlanillaSinRecibosError):

@@ -54,38 +54,45 @@
 </div>
 
 <h5>{% trans "Issued payslips for" %} {{ month|stringformat:"02d" }}/{{ year }}</h5>
-<table class="table table-sm">
-    <thead class="thead-light">
-        <tr>
-            <th>{% trans "Employee" %}</th>
-            <th>{% trans "Total" %}</th>
-            <th>{% trans "Issued" %}</th>
-            <th>Dolibarr</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for r in recibos %}
-        <tr>
-            <td>{{ r.employee.name }}</td>
-            <td>$ {{ r.total|floatformat:2 }}</td>
-            <td>{{ r.generado_en|date:"Y-m-d H:i" }}</td>
-            <td>
-                {% if r.dolibarr_salary_id %}
-                    <span class="badge badge-success">&#10003; #{{ r.dolibarr_salary_id }}</span>
-                {% elif r.dolibarr_error %}
-                    <span class="badge badge-danger" title="{{ r.dolibarr_error }}">{% trans "Error" %}</span>
-                {% else %}
-                    <span class="badge badge-secondary">{% trans "Pending" %}</span>
-                {% endif %}
-            </td>
-            <td>
-                <a href="{% url 'recibo_pdf' r.employee_id r.year r.month %}" class="btn btn-outline-primary btn-sm">PDF</a>
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-muted">{% trans "No payslips issued for this period yet." %}</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="table-responsive">
+    <table class="table table-sm">
+        <thead class="thead-light">
+            <tr>
+                <th>{% trans "Employee" %}</th>
+                <th>{% trans "Total" %}</th>
+                <th>{% trans "Issued" %}</th>
+                <th>Dolibarr</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in recibos %}
+            <tr>
+                <td>
+                    {{ r.employee.name }}
+                    {% if r.datos.retroactive_bonus_deduction and r.datos.retroactive_bonus_deduction != "0.00" and r.datos.retroactive_bonus_deduction != "0" %}
+                        <span class="badge badge-danger ml-1" title="Descuento retroactivo aplicado">-$ {{ r.datos.retroactive_bonus_deduction }} retro</span>
+                    {% endif %}
+                </td>
+                <td>$ {{ r.total|floatformat:2 }}</td>
+                <td>{{ r.generado_en|date:"Y-m-d H:i" }}</td>
+                <td>
+                    {% if r.dolibarr_salary_id %}
+                        <span class="badge badge-success">&#10003; #{{ r.dolibarr_salary_id }}</span>
+                    {% elif r.dolibarr_error %}
+                        <span class="badge badge-danger" title="{{ r.dolibarr_error }}">{% trans "Error" %}</span>
+                    {% else %}
+                        <span class="badge badge-secondary">{% trans "Pending" %}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'recibo_pdf' r.employee_id r.year r.month %}" class="btn btn-outline-primary btn-sm">PDF</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-muted">{% trans "No payslips issued for this period yet." %}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

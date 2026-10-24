@@ -57,6 +57,7 @@ COLUMNAS_PLANILLA = [
     ('Pago extra', 14),
     ('Bono desempeño', 16),
     ('Comisiones', 14),
+    ('Desc. retroactivo', 16),
     ('Total', 14),
 ]
 
@@ -96,6 +97,7 @@ def _filas_desde_recibos(recibos):
             _dec(datos, 'overtime_pay'),
             _dec(datos, 'performance_bonus'),
             _dec(datos, 'commission_amount'),
+            _dec(datos, 'retroactive_bonus_deduction'),
             recibo.total,
         ]
 
@@ -118,6 +120,7 @@ def _filas_en_vivo(year, month):
             salary['overtime_pay'],
             salary['performance_bonus'],
             salary['commission_amount'],
+            salary.get('retroactive_bonus_deduction', Decimal('0.00')),
             salary['total_salary'],
         ]
 

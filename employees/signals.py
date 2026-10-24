@@ -58,8 +58,12 @@ def handle_recurring_task(sender, instance, created, **kwargs):
 @receiver(post_save, sender=ManualKpiEntry)
 def send_warning_notification(sender, instance, created, **kwargs):
     """
-    Send an email notification if a ManualKpiEntry for a warning KPI is created.
+    Send an email notification if a ManualKpiEntry for a warning KPI is created,
+    and synchronize retroactive bonus deductions if the entry belongs to a past month.
     """
+    if instance.employee_id:
+        instance.employee.sync_retroactive_bonus_deductions()
+
     if created and instance.kpi.is_warning_kpi:
         send_html_mail(
             subject=f"Advertencia disciplinaria - {instance.employee.name}",
@@ -67,6 +71,15 @@ def send_warning_notification(sender, instance, created, **kwargs):
             context={'entry': instance},
             to=instance.employee.email,
         )
+
+
+@receiver(post_delete, sender=ManualKpiEntry)
+def sync_retroactive_on_manual_entry_delete(sender, instance, **kwargs):
+    """
+    Recalculate retroactive bonus deductions when a ManualKpiEntry is deleted.
+    """
+    if instance.employee_id:
+        instance.employee.sync_retroactive_bonus_deductions()
 
 
 # --- CalDAV Integration: auto-create calendar reminders for Tasks ---

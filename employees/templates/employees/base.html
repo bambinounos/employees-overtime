@@ -10,10 +10,111 @@
     <link rel="shortcut icon" href="{{ site_config.favicon.url }}" type="image/x-icon">
     {% endif %}
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        /* Compatibilidad BS4 + utilidades modernas y diseño responsivo móvil */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        body {
+            overflow-x: hidden;
+        }
+        .form-select {
+            display: block;
+            width: 100%;
+            height: calc(1.5em + .75rem + 2px);
+            padding: .375rem 1.75rem .375rem .75rem;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #495057;
+            background-color: #fff;
+            border: 1px solid #ced4da;
+            border-radius: .25rem;
+        }
+        .form-select-sm {
+            height: calc(1.5em + .5rem + 2px);
+            padding-top: .25rem;
+            padding-bottom: .25rem;
+            padding-left: .5rem;
+            font-size: .875rem;
+        }
+        .gap-2 {
+            gap: 0.5rem;
+        }
+        .navbar-toggler {
+            min-width: 44px;
+            min-height: 44px;
+        }
+        .table-responsive {
+            -webkit-overflow-scrolling: touch;
+        }
+        h1, .h1 {
+            font-size: clamp(1.45rem, 3.5vw, 2.25rem);
+        }
+        h2, .h2 {
+            font-size: clamp(1.25rem, 3vw, 1.85rem);
+        }
+        .display-4 {
+            font-size: clamp(1.65rem, 5vw, 3rem);
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        @media (max-width: 991.98px) {
+            .navbar-collapse {
+                padding-top: 0.5rem;
+                border-top: 1px solid rgba(0, 0, 0, 0.08);
+                margin-top: 0.5rem;
+            }
+            .navbar-nav .nav-link {
+                padding: 0.6rem 0.5rem;
+            }
+        }
+        @media (max-width: 767.98px) {
+            .container {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            .d-flex.justify-content-between {
+                flex-wrap: wrap;
+                gap: 0.65rem;
+            }
+            .form-inline {
+                display: flex;
+                flex-wrap: wrap;
+                width: 100%;
+                gap: 0.5rem;
+            }
+            .form-inline .form-control,
+            .form-inline .custom-select,
+            .form-inline .btn {
+                margin-right: 0 !important;
+                margin-bottom: 0 !important;
+            }
+            .form-inline input[type="number"],
+            .form-inline select.form-control {
+                flex: 1 1 110px;
+            }
+            .row > [class*="col-md-"],
+            .row > [class*="col-lg-"] {
+                margin-bottom: 0.75rem;
+            }
+            .jumbotron {
+                padding: 1.5rem 1rem;
+            }
+            .table th, .table td {
+                font-size: 0.875rem;
+                padding: 0.5rem;
+                vertical-align: middle;
+            }
+        }
+    </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <a class="navbar-brand" href="{% url 'index' %}">{% trans "Salary Management" %}</a>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm">
+        <a class="navbar-brand font-weight-bold" href="{% url 'index' %}">{% trans "Salary Management" %}</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Abrir menú de navegación">
+            <span class="navbar-toggler-icon"></span>
+        </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mr-auto">
                 <li class="nav-item">
@@ -52,6 +153,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'company_settings' %}">{% trans "Settings" %}</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link font-weight-bold text-primary" href="{% url 'admin:index' %}">Admin</a>
+                </li>
                 {% endif %}
             </ul>
             <ul class="navbar-nav">
@@ -86,6 +190,18 @@
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('table.table').forEach(function(table) {
+                if (!table.closest('.table-responsive')) {
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'table-responsive';
+                    table.parentNode.insertBefore(wrapper, table);
+                    wrapper.appendChild(table);
+                }
+            });
+        });
+    </script>
     {% block javascript %}{% endblock %}
 </body>
 </html>

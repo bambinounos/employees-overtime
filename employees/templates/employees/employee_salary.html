@@ -199,6 +199,25 @@
                     </li>
                     {% endif %}
                     {% endif %}
+                    {% if salary.retroactive_bonus_deduction and salary.retroactive_bonus_deduction > 0 %}
+                    <li class="list-group-item border-danger">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="text-danger">Descuento retroactivo de bono (meses anteriores)</strong>
+                                <br>
+                                <small class="text-muted">Errores administrativos detectados en meses ya cerrados</small>
+                            </div>
+                            <span class="text-danger font-weight-bold">- ${{ salary.retroactive_bonus_deduction|floatformat:2 }}</span>
+                        </div>
+                        {% if salary.retroactive_deductions %}
+                        <ul class="mt-2 mb-0 pl-3 small text-danger">
+                            {% for d in salary.retroactive_deductions %}
+                            <li>{{ d.reason }} (<strong>-${{ d.amount|floatformat:2 }}</strong>)</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -238,7 +257,29 @@
                             {% endif %}
                         </span>
                     </li>
+                    {% if salary.retroactive_bonus_deduction and salary.retroactive_bonus_deduction > 0 %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Descuento retroactivo aplicado este mes</strong>
+                            <br>
+                            <small class="text-muted">Por errores en meses cerrados donde ya se cobró el bono</small>
+                        </div>
+                        <span class="text-danger font-weight-bold">- ${{ salary.retroactive_bonus_deduction|floatformat:2 }}</span>
+                    </li>
+                    {% endif %}
                 </ul>
+                {% if salary.retroactive_from_this_month %}
+                <div class="card-body border-top bg-warning-light">
+                    <p class="card-text text-dark small mb-1">
+                        <strong>Nota de auditoría:</strong> Posteriormente al cierre de este período se detectaron errores correspondientes a este mes que se descontaron en sueldos futuros:
+                    </p>
+                    <ul class="small mb-0 pl-3">
+                        {% for d in salary.retroactive_from_this_month %}
+                        <li>{{ d.reason }} &rarr; descontado en <strong>{{ d.applied_period }}</strong> (-${{ d.amount|floatformat:2 }})</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
                 <div class="card-body bg-light">
                     <p class="card-text text-danger small">
                         <i class="fas fa-exclamation-triangle"></i>
