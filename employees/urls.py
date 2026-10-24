@@ -24,7 +24,7 @@ urlpatterns = [
     path('nomina/planilla/', views.nomina_planilla, name='nomina_planilla'),
     path('post-login/', views.post_login, name='post_login'),
     path('login/', views.SafeLoginView.as_view(template_name='employees/login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(next_page='index'), name='logout'),
+    path('logout/', views.safe_logout, name='logout'),
     path('accounts/login/', RedirectView.as_view(pattern_name='login', query_string=True)),
     path('accounts/profile/', views.post_login),
     path('api/', include('employees.api_urls')),

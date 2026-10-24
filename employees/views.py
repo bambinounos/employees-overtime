@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.contrib.auth import views as auth_views
+from django.contrib.auth import logout as auth_logout, views as auth_views
 from .models import Employee, WorkLog, TaskBoard, EmployeePerformanceRecord, CompanySettings, KPI, BonusRule
 from .sugerencias import build_sugerencias
 from django.contrib.auth.decorators import login_required
@@ -78,6 +78,12 @@ class SafeLoginView(auth_views.LoginView):
 def index(request):
     """Renders the home page."""
     return render(request, 'employees/index.html')
+
+
+def safe_logout(request):
+    """Cierra la sesión aceptando tanto POST como GET (compatible con Django 5.2+)."""
+    auth_logout(request)
+    return redirect('index')
 
 
 @login_required

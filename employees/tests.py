@@ -918,4 +918,12 @@ class LoginRedirectAndSecurityHardeningTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.list_id, list_a.id)
 
+    def test_logout_works_via_get_and_post(self):
+        self.client.force_login(self.user_a)
+        r_get = self.client.get('/logout/')
+        self.assertRedirects(r_get, '/')
+        self.client.force_login(self.user_a)
+        r_post = self.client.post('/logout/')
+        self.assertRedirects(r_post, '/')
+
 

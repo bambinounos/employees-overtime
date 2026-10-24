@@ -1,6 +1,5 @@
-# Core framework — pinned to the 4.2 LTS line (prod runs 4.2.24).
-# Bounded so a fresh `pip install` on Python 3.10 never pulls Django 5.x/6.x.
-Django>=4.2,<4.3
+# Core framework — pinned to the 5.2 LTS line (supported through April 2028, Python 3.10–3.13+).
+Django>=5.2,<5.3
 djangorestframework>=3.14.0
 # WSGI server for gunicorn.service / caldav.service (prod runs 23.0.0).
 gunicorn>=23.0,<24
