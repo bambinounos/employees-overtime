@@ -70,23 +70,37 @@ def serialize_event_to_ical(event):
 
 
 def parse_ical_event(ical_text):
-    """Parse iCalendar text and extract event fields."""
+    """Parse iCalendar text (VEVENT, VTODO, or VJOURNAL) and extract event fields."""
     cal = vobject.readOne(ical_text)
-    vevent = cal.vevent
+    comp = (
+        getattr(cal, 'vevent', None)
+        or getattr(cal, 'vtodo', None)
+        or getattr(cal, 'vjournal', None)
+    )
+    if comp is None:
+        raise ValueError("Unsupported iCalendar component: expected VEVENT, VTODO, or VJOURNAL")
 
-    uid = getattr(vevent, 'uid', None)
+    uid = getattr(comp, 'uid', None)
     uid = uid.value if uid else None
 
-    title = vevent.summary.value if hasattr(vevent, 'summary') else ''
-    start_date = vevent.dtstart.value if hasattr(vevent, 'dtstart') else None
-    if hasattr(vevent, 'dtend'):
-        end_date = vevent.dtend.value
-    elif hasattr(vevent, 'duration') and start_date:
-        end_date = start_date + vevent.duration.value
-    elif start_date:
-        end_date = start_date + timedelta(minutes=30)
+    title = comp.summary.value if hasattr(comp, 'summary') else ''
+    if hasattr(comp, 'dtstart'):
+        start_date = comp.dtstart.value
+    elif hasattr(comp, 'due'):
+        start_date = comp.due.value
     else:
-        end_date = None
+        start_date = datetime.now(pytz.UTC)
+
+    if hasattr(comp, 'dtend'):
+        end_date = comp.dtend.value
+    elif hasattr(comp, 'due'):
+        end_date = comp.due.value
+    elif hasattr(comp, 'duration') and start_date:
+        end_date = start_date + comp.duration.value
+    elif start_date:
+        end_date = (start_date + timedelta(minutes=30)) if isinstance(start_date, datetime) else start_date
+    else:
+        end_date = start_date
 
     # Handle all-day events (date objects converted to datetime for DateTimeField)
     if isinstance(start_date, date) and not isinstance(start_date, datetime):
@@ -94,12 +108,12 @@ def parse_ical_event(ical_text):
     if isinstance(end_date, date) and not isinstance(end_date, datetime):
         end_date = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=pytz.UTC)
 
-    description = vevent.description.value if hasattr(vevent, 'description') else ''
+    description = comp.description.value if hasattr(comp, 'description') else ''
 
     alarm_minutes = None
-    if hasattr(vevent, 'valarm'):
+    if hasattr(comp, 'valarm'):
         try:
-            trigger = vevent.valarm.trigger.value
+            trigger = comp.valarm.trigger.value
             if isinstance(trigger, timedelta):
                 alarm_minutes = int(abs(trigger.total_seconds()) / 60)
         except Exception:
@@ -113,6 +127,40 @@ def parse_ical_event(ical_text):
         'description': description,
         'alarm_minutes': alarm_minutes,
     }
+
+
+def merge_moz_alarm_props(server_ical, client_ical):
+    """Merge Thunderbird X-MOZ-LASTACK / X-MOZ-SNOOZE* properties from client_ical
+    into server_ical without overwriting server event fields (DTSTART, SUMMARY, etc.)."""
+    moz_lines = []
+    seen = set()
+    for raw_line in client_ical.splitlines():
+        line = raw_line.strip()
+        upper = line.upper()
+        if upper.startswith("X-MOZ-LASTACK") or upper.startswith("X-MOZ-SNOOZE"):
+            key = line.split(":", 1)[0].upper()
+            if key not in seen:
+                seen.add(key)
+                moz_lines.append(line)
+
+    if not moz_lines:
+        return server_ical
+
+    cleaned = _re.sub(r"X-MOZ-(?:LASTACK|SNOOZE[^\r\n:]*):[^\r\n]*\r?\n", "", server_ical, flags=_re.IGNORECASE)
+    eol = "\r\n" if "\r\n" in cleaned else "\n"
+    insert_block = eol.join(moz_lines) + eol
+
+    for marker in (f"{eol}BEGIN:VALARM", f"{eol}END:VEVENT", f"{eol}END:VTODO"):
+        idx = cleaned.find(marker)
+        if idx != -1:
+            pos = idx + len(eol)
+            merged = cleaned[:pos] + insert_block + cleaned[pos:]
+            try:
+                vobject.readOne(merged)
+                return merged
+            except Exception:
+                return server_ical
+    return server_ical
 
 
 def _get_user(username):
@@ -290,9 +338,12 @@ class Collection(BaseCollection):
     def sync(self, old_token=""):
         if self._tag != "VCALENDAR" or not self._user:
             return "", []
+        raw_etag = self.etag.strip('"')
+        token = f"http://radicale.org/ns/sync/{raw_etag}"
+        if old_token and old_token in (token, raw_etag):
+            return token, []
         CalendarEvent = _get_event_model()
         events = CalendarEvent.objects.filter(user=self._user)
-        token = self.etag.strip('"')
         hrefs = [f"{e.uid or f'event-{e.id}@payroll'}.ics" for e in events]
         return token, hrefs
 

@@ -369,4 +369,116 @@ class OptimizeCalDAVTest(TestCase):
         ev2.refresh_from_db()
         self.assertNotIn("METHOD:", ev2.raw_ical)
 
+    def test_upload_vtodo_does_not_raise_vevent_error(self):
+        from radicale import item as radicale_item
+        storage = Mock()
+        col = Collection(storage, "licitaciones/default", user=self.user, tag="VCALENDAR")
+        uid = "vtodo-test-123"
+        raw_vtodo = (
+            "BEGIN:VCALENDAR\r\n"
+            "VERSION:2.0\r\n"
+            "BEGIN:VTODO\r\n"
+            f"UID:{uid}\r\n"
+            "SUMMARY:Tarea Thunderbird\r\n"
+            "DUE:20261030T150000Z\r\n"
+            "END:VTODO\r\n"
+            "END:VCALENDAR\r\n"
+        )
+        item = radicale_item.Item(collection_path="licitaciones/default", href=f"{uid}.ics", text=raw_vtodo)
+        saved = col.upload(f"{uid}.ics", item)
+        self.assertIsNotNone(saved)
+        ev = CalendarEvent.objects.get(uid=uid)
+        self.assertEqual(ev.title, "Tarea Thunderbird")
+
+    def test_sync_returns_rfc6578_uri_token(self):
+        CalendarEvent.objects.create(
+            user=self.user,
+            title='Sync Event',
+            start_date=self.utc.localize(datetime(2026, 10, 30, 10, 0)),
+            end_date=self.utc.localize(datetime(2026, 10, 30, 11, 0)),
+            uid='sync-ev-1',
+        )
+        storage = Mock()
+        col = Collection(storage, "licitaciones/default", user=self.user, tag="VCALENDAR")
+        token, hrefs = col.sync("")
+        self.assertTrue(token.startswith("http://radicale.org/ns/sync/"))
+        self.assertEqual(hrefs, ["sync-ev-1.ics"])
+        token2, hrefs2 = col.sync(token)
+        self.assertEqual(token2, token)
+        self.assertEqual(hrefs2, [])
+
+    def test_moz_alarm_dismiss_with_stale_etag_merges_without_412(self):
+        import base64
+        import io
+        from caldav.wsgi import application
+
+        server_ical = (
+            "BEGIN:VCALENDAR\r\n"
+            "VERSION:2.0\r\n"
+            "PRODID:-//Ushay Intelligence//Agenda SERCOP//ES\r\n"
+            "BEGIN:VEVENT\r\n"
+            "UID:sercop-test-alarm@ushay\r\n"
+            "SUMMARY:Puja Actualizada por Ushay\r\n"
+            "DTSTART:20261030T160000Z\r\n"
+            "DTEND:20261030T163000Z\r\n"
+            "BEGIN:VALARM\r\n"
+            "ACTION:DISPLAY\r\n"
+            "TRIGGER:-PT15M\r\n"
+            "DESCRIPTION:Recordatorio\r\n"
+            "END:VALARM\r\n"
+            "END:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        )
+        CalendarEvent.objects.create(
+            user=self.user,
+            title='Puja Actualizada por Ushay',
+            start_date=self.utc.localize(datetime(2026, 10, 30, 16, 0)),
+            end_date=self.utc.localize(datetime(2026, 10, 30, 16, 30)),
+            uid='sercop-test-alarm@ushay',
+            raw_ical=server_ical,
+        )
+
+        # Client sends stale If-Match and stale SUMMARY, plus X-MOZ-LASTACK
+        client_ical = (
+            "BEGIN:VCALENDAR\r\n"
+            "VERSION:2.0\r\n"
+            "BEGIN:VEVENT\r\n"
+            "UID:sercop-test-alarm@ushay\r\n"
+            "SUMMARY:Puja Vieja en Cache\r\n"
+            "DTSTART:20261030T160000Z\r\n"
+            "DTEND:20261030T163000Z\r\n"
+            "X-MOZ-LASTACK:20261030T155500Z\r\n"
+            "END:VEVENT\r\n"
+            "END:VCALENDAR\r\n"
+        )
+        body_bytes = client_ical.encode('utf-8')
+        auth = base64.b64encode(b"licitaciones:password").decode('ascii')
+        captured_status = {}
+
+        def start_response(status, headers, exc_info=None):
+            captured_status['status'] = status
+
+        environ = {
+            'REQUEST_METHOD': 'PUT',
+            'PATH_INFO': '/licitaciones/default/sercop-test-alarm@ushay.ics',
+            'SERVER_NAME': 'localhost',
+            'SERVER_PORT': '8080',
+            'wsgi.url_scheme': 'http',
+            'CONTENT_TYPE': 'text/calendar; charset=utf-8',
+            'CONTENT_LENGTH': str(len(body_bytes)),
+            'HTTP_IF_MATCH': '"stale-etag-from-yesterday"',
+            'HTTP_AUTHORIZATION': f'Basic {auth}',
+            'wsgi.input': io.BytesIO(body_bytes),
+            'wsgi.errors': io.StringIO(),
+        }
+        list(application(environ, start_response))
+        self.assertTrue(
+            captured_status['status'].startswith(('200', '201', '204')),
+            f"Expected 2xx on alarm dismiss, got {captured_status['status']}",
+        )
+        ev = CalendarEvent.objects.get(uid='sercop-test-alarm@ushay')
+        self.assertEqual(ev.title, 'Puja Actualizada por Ushay')
+        self.assertIn('X-MOZ-LASTACK:20261030T155500Z', ev.raw_ical)
+
+
 
